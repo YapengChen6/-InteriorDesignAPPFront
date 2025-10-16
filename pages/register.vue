@@ -1,0 +1,536 @@
+<template>	
+	<view class="login-container">
+		<view class="login-card">
+			<view class="login-title">手机号登录</view>
+			
+			<view class="login-form">
+				<!-- 手机号输入 -->
+				<view class="form-group">
+					<text class="form-label">手机号</text>
+					<uni-easyinput
+						v-model="form.phoneNumber"
+						type="number"
+						placeholder="请输入11位手机号"
+						maxlength="11"
+						:inputBorder="false"
+						:styles="inputStyles"
+						:class="{ 'error': phoneError }"
+						@blur="validatePhone"
+						@input="clearPhoneError"
+					/>
+					<view v-if="phoneError" class="error-message">{{ phoneError }}</view>
+				</view>
+
+				<!-- 验证码输入 -->
+				<view class="form-group">
+					<text class="form-label">验证码</text>
+					<view class="code-input-group">
+						<uni-easyinput
+							v-model="form.verificationCode"
+							type="number"
+							placeholder="请输入6位验证码"
+							maxlength="6"
+							:inputBorder="false"
+							:styles="inputStyles"
+							:class="{ 'error': codeError }"
+							@input="clearCodeError"
+							class="code-input"
+						/>
+						<button
+							:disabled="countdown > 0 || !isPhoneValid || isGettingCode"
+							@click="getVerificationCode"
+							class="code-btn"
+							:class="{ 'disabled': countdown > 0 || !isPhoneValid }"
+						>
+							<text v-if="isGettingCode && countdown === 0">发送中...</text>
+							<text v-else-if="countdown > 0">{{ countdown }}秒后重新获取</text>
+							<text v-else>获取验证码</text>
+						</button>
+					</view>
+					<view v-if="codeError" class="error-message">{{ codeError }}</view>
+				</view>
+
+				<!-- 登录按钮 -->
+				<button
+					:disabled="!canSubmit || isLogging"
+					@click="handleLogin"
+					class="login-btn"
+					:class="{ 'disabled': !canSubmit || isLogging }"
+				>
+					<text v-if="isLogging">登录中...</text>
+					<text v-else>登录</text>
+				</button>
+				
+				<!-- 用户协议和隐私政策 -->
+				<view class="agreement-container">
+					<text class="agreement-text">登录即表示您同意</text>
+					<text class="agreement-link">《用户协议》</text>
+					<text class="agreement-text">和</text>
+					<text class="agreement-link">《隐私政策》</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script>
+import { login, sendCode, getUserInfo, getRouters } from '@/api/login.js'
+
+export default {
+  data() {
+    return {
+      form: {
+        phoneNumber: '',
+        verificationCode: ''
+      },
+      countdown: 0,
+      phoneError: '',
+      codeError: '',
+      isGettingCode: false,
+      isLogging: false,
+      timer: null,
+      inputStyles: {
+        color: '#333',
+        borderColor: '#007aff',
+        borderWidth: '2rpx',
+        borderStyle: 'solid',
+        borderRadius: '16rpx',
+        backgroundColor: '#f8f9fa',
+        padding: '24rpx 32rpx'
+      }
+    }
+  },
+
+  computed: {
+    isPhoneValid() {
+      const phoneRegex = /^1[3-9]\d{9}$/
+      return phoneRegex.test(this.form.phoneNumber)
+    },
+
+    canSubmit() {
+      return this.isPhoneValid && this.form.verificationCode.length === 6
+    }
+  },
+
+  methods: {
+    validatePhone() {
+      if (!this.form.phoneNumber.trim()) {
+        this.phoneError = '请输入手机号'
+        return false
+      } else if (!this.isPhoneValid) {
+        this.phoneError = '手机号格式不正确'
+        return false
+      } else {
+        this.phoneError = ''
+        return true
+      }
+    },
+
+    clearPhoneError() {
+      if (this.phoneError) {
+        this.phoneError = ''
+      }
+    },
+
+    clearCodeError() {
+      if (this.codeError) {
+        this.codeError = ''
+      }
+    },
+
+    async getVerificationCode() {
+      if (!this.validatePhone() || this.isGettingCode) return
+
+      try {
+        this.isGettingCode = true
+        
+        const response = await sendCode(this.form.phoneNumber)
+        
+        if (response.code === 200) {
+          this.startCountdown()
+          
+          uni.showToast({
+            title: '验证码发送成功',
+            icon: 'success'
+          })
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('验证码接口调用成功，手机号:', this.form.phoneNumber)
+          }
+        } else {
+          throw new Error(response.msg || response.message || '发送失败')
+        }
+
+      } catch (error) {
+        console.error('获取验证码失败:', error)
+        let errorMessage = '获取失败，请重试'
+        
+        if (error.message.includes('网络') || error.message.includes('请求失败')) {
+          errorMessage = '网络异常，请检查网络连接'
+        } else if (error.message) {
+          errorMessage = error.message
+        }
+        
+        uni.showToast({
+          title: errorMessage,
+          icon: 'none'
+        })
+      } finally {
+        this.isGettingCode = false
+      }
+    },
+
+    startCountdown() {
+      this.countdown = 60
+      if (this.timer) {
+        clearInterval(this.timer)
+      }
+      this.timer = setInterval(() => {
+        this.countdown--
+        if (this.countdown <= 0) {
+          clearInterval(this.timer)
+          this.timer = null
+        }
+      }, 1000)
+    },
+
+    // 获取用户信息
+    async fetchUserInfo() {
+      try {
+        const response = await getUserInfo()
+        if (response.code === 200) {
+          const userInfo = response.data
+          uni.setStorageSync('userInfo', userInfo)
+          console.log('用户信息获取成功:', userInfo)
+          return userInfo
+        } else {
+          throw new Error(response.msg || '获取用户信息失败')
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        throw error
+      }
+    },
+
+    // 获取用户路由
+    async fetchUserRouters() {
+      try {
+        const response = await getRouters()
+        if (response.code === 200) {
+          const routers = response.data
+          uni.setStorageSync('userRouters', routers)
+          console.log('路由信息获取成功:', routers)
+          return routers
+        } else {
+          throw new Error(response.msg || '获取路由信息失败')
+        }
+      } catch (error) {
+        console.error('获取路由信息失败:', error)
+        throw error
+      }
+    },
+
+    async handleLogin() {
+      if (!this.canSubmit || this.isLogging) return
+
+      if (!this.validatePhone()) return
+      
+      if (!this.form.verificationCode.trim()) {
+        this.codeError = '请输入验证码'
+        return
+      }
+
+      if (this.form.verificationCode.length !== 6) {
+        this.codeError = '验证码必须是6位数字'
+        return
+      }
+
+      try {
+        this.isLogging = true
+        
+        // 根据API图片中的格式，确保参数格式正确
+        const loginForm = {
+          phone: this.form.phoneNumber.toString(), // 确保是字符串
+          code: this.form.verificationCode.toString() // 确保是字符串
+        }
+        
+        console.log('开始登录，参数:', loginForm)
+        console.log('参数类型 - phone:', typeof loginForm.phone, 'code:', typeof loginForm.code)
+        
+        // 1. 调用登录接口获取token
+        const loginResponse = await login(loginForm)
+        
+        console.log('登录接口响应:', loginResponse)
+        
+        if (loginResponse.code === 200) {
+          const token = loginResponse.data
+          if (!token) {
+            throw new Error('登录失败：未获取到token')
+          }
+          
+          // 存储token
+          uni.setStorageSync('token', token)
+          console.log('token存储成功:', token)
+          
+          try {
+            // 2. 获取用户信息
+            await this.fetchUserInfo()
+          } catch (userInfoError) {
+            console.warn('获取用户信息失败，但继续流程:', userInfoError)
+            // 即使获取用户信息失败，也继续流程
+          }
+          
+          try {
+            // 3. 获取用户路由
+            await this.fetchUserRouters()
+          } catch (routerError) {
+            console.warn('获取路由信息失败，但继续流程:', routerError)
+            // 即使获取路由失败，也继续流程
+          }
+          
+          uni.showToast({
+            title: '登录成功',
+            icon: 'success',
+            duration: 2000
+          })
+          
+          // 跳转到首页
+          setTimeout(() => {
+            uni.reLaunch({
+              url: '/pages/index'
+            })
+          }, 1500)
+          
+        } else {
+          // 更详细的错误信息
+          let errorMsg = loginResponse.msg || loginResponse.message || `登录失败，错误码: ${loginResponse.code}`
+          
+          if (loginResponse.code === 401) {
+            errorMsg = '验证码错误或已过期'
+            this.codeError = errorMsg
+          } else if (loginResponse.code === 400) {
+            errorMsg = '参数错误，请检查手机号和验证码格式'
+            this.codeError = '手机号或验证码格式错误'
+          } else if (loginResponse.code === 500) {
+            errorMsg = '服务器错误，请稍后重试'
+          }
+          
+          console.error('登录接口返回错误:', loginResponse)
+          throw new Error(errorMsg)
+        }
+
+      } catch (error) {
+        console.error('登录失败:', error)
+        let errorMessage = '登录失败，请重试'
+        
+        if (error && error.message) {
+          if (error.message.includes('会话') || error.message.includes('过期')) {
+            errorMessage = '验证码已过期，请重新获取验证码'
+            this.codeError = errorMessage
+            this.form.verificationCode = ''
+          } else if (error.message.includes('验证码') || error.message.includes('密码') || error.message.includes('参数')) {
+            this.codeError = error.message
+            errorMessage = error.message
+          } else if (error.message.includes('网络') || error.message.includes('请求失败')) {
+            errorMessage = '网络异常，请检查网络连接'
+          } else if (error.message.includes('400')) {
+            errorMessage = '手机号或验证码格式错误，请检查后重试'
+            this.codeError = '格式错误'
+          } else {
+            errorMessage = error.message
+          }
+        }
+        
+        uni.showToast({
+          title: errorMessage,
+          icon: 'none',
+          duration: 3000
+        })
+      } finally {
+        this.isLogging = false
+      }
+    }
+  },
+
+  onUnload() {
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+  }
+}
+</script>
+<style scoped>
+.login-container {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #f5f5f5;
+	padding: 40rpx;
+}
+
+.login-card {
+	background: white;
+	padding: 80rpx;
+	border-radius: 24rpx;
+	box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+	width: 100%;
+	max-width: 600rpx;
+}
+
+.login-title {
+	text-align: center;
+	margin-bottom: 60rpx;
+	color: #333;
+	font-size: 48rpx;
+	font-weight: 600;
+}
+
+.form-group {
+	margin-bottom: 48rpx;
+}
+
+.form-label {
+	display: block;
+	margin-bottom: 16rpx;
+	color: #333;
+	font-weight: 500;
+	font-size: 28rpx;
+}
+
+/* uni-easyinput 样式调整 */
+.uni-easyinput__content {
+	border: 2rpx solid #007aff !important;
+	border-radius: 16rpx !important;
+	background-color: #f8f9fa !important;
+}
+
+.uni-easyinput__content.is-input-error {
+	border-color: #ff3b30 !important;
+}
+
+.uni-easyinput__content-input {
+	padding: 24rpx 32rpx !important;
+	font-size: 32rpx !important;
+}
+
+.code-input-group {
+	display: flex;
+	align-items: center;
+	gap: 24rpx;
+}
+
+.code-input {
+	flex: 1;
+}
+
+.code-btn {
+	padding: 24rpx 32rpx;
+	background: #ffffff;
+	color: #007aff;
+	border: 2rpx solid #007aff;
+	border-radius: 16rpx;
+	white-space: nowrap;
+	font-size: 28rpx;
+	font-weight: 500;
+	transition: all 0.3s ease;
+	min-width: 240rpx;
+	height: 96rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.code-btn:not([disabled]):active {
+	background: #007aff;
+	color: #ffffff;
+	transform: translateY(-2rpx);
+}
+
+.code-btn.disabled {
+	background: #f8f9fa;
+	color: #c0c0c0;
+	border-color: #e1e5e9;
+	transform: none;
+}
+
+.login-btn {
+	width: 100%;
+	padding: 28rpx;
+	background: #007aff;
+	color: white;
+	border: none;
+	border-radius: 16rpx;
+	font-size: 32rpx;
+	font-weight: 600;
+	transition: all 0.3s ease;
+	margin-top: 20rpx;
+	margin-bottom: 40rpx;
+}
+
+.login-btn:not([disabled]):active {
+	background: #0056b3;
+	transform: translateY(-2rpx);
+}
+
+.login-btn.disabled {
+	background: #ccc;
+	transform: none;
+}
+
+.error-message {
+	color: #ff3b30;
+	font-size: 24rpx;
+	margin-top: 12rpx;
+	display: flex;
+	align-items: center;
+}
+
+.error-message::before {
+	content: "!";
+	display: inline-block;
+	width: 32rpx;
+	height: 32rpx;
+	background: #ff3b30;
+	color: white;
+	border-radius: 50%;
+	text-align: center;
+	line-height: 32rpx;
+	font-size: 24rpx;
+	margin-right: 8rpx;
+}
+
+.agreement-container {
+	text-align: center;
+	margin-top: 40rpx;
+	padding: 24rpx;
+}
+
+.agreement-text {
+	color: #666;
+	font-size: 26rpx;
+}
+
+.agreement-link {
+	color: #007aff;
+	font-size: 26rpx;
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+	.login-card {
+		padding: 60rpx 40rpx;
+		margin: 20rpx;
+	}
+	
+	.code-input-group {
+		flex-direction: row;
+	}
+	
+	.code-btn {
+		width: auto;
+		min-width: 240rpx;
+	}
+}
+</style>
