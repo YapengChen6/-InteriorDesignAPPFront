@@ -56,23 +56,31 @@
 					</view>
 				</view>
 
+				<!-- 用户协议和隐私政策 -->
+				<view class="agreement-container">
+					<view class="agreement-checkbox" @click="toggleAgreement">
+						<view class="checkbox-icon" :class="{ 'checked': isAgreementChecked }">
+							<text v-if="isAgreementChecked" class="checkmark">✓</text>
+						</view>
+						<text class="agreement-text">我已阅读并同意</text>
+						<text class="agreement-link" @click.stop="showUserAgreement">《用户协议》</text>
+						<text class="agreement-text">和</text>
+						<text class="agreement-link" @click.stop="showPrivacyPolicy">《隐私政策》</text>
+					</view>
+					<view v-if="agreementError" class="error-message agreement-error">
+						{{ agreementError }}
+					</view>
+				</view>
+
 				<!-- 登录按钮 -->
 				<button
 					@click="handleLogin"
 					class="login-btn"
-					:class="{ 'disabled': isLogging }"
+					:class="{ 'disabled': isLogging || !isAgreementChecked }"
 				>
 					<text v-if="isLogging">登录中...</text>
 					<text v-else>登录</text>
 				</button>
-				
-				<!-- 用户协议和隐私政策 -->
-				<view class="agreement-container">
-					<text class="agreement-text">登录即表示您同意</text>
-					<text class="agreement-link">《用户协议》</text>
-					<text class="agreement-text">和</text>
-					<text class="agreement-link">《隐私政策》</text>
-				</view>
 			</view>
 		</view>
 	</view>
@@ -91,8 +99,10 @@ export default {
       countdown: 0,
       phoneError: '',
       codeError: '',
+      agreementError: '', // 添加协议错误提示
       isGettingCode: false,
       isLogging: false,
+      isAgreementChecked: false, // 添加协议勾选状态
       timer: null,
       // 验证码有效期（秒）
       codeExpireTime: 120,
@@ -114,6 +124,14 @@ export default {
     isPhoneValid() {
       const phoneRegex = /^1[3-9]\d{9}$/
       return phoneRegex.test(this.form.phoneNumber)
+    },
+
+    // 计算验证码是否已过期
+    isCodeExpired() {
+      if (!this.codeSentTime) return false
+      const currentTime = Date.now()
+      const elapsedTime = Math.floor((currentTime - this.codeSentTime) / 1000)
+      return elapsedTime >= this.codeExpireTime
     }
   },
 
@@ -157,7 +175,55 @@ export default {
       }
     },
 
+    // 切换协议勾选状态
+    toggleAgreement() {
+      this.isAgreementChecked = !this.isAgreementChecked
+      // 清除错误提示
+      if (this.isAgreementChecked && this.agreementError) {
+        this.agreementError = ''
+      }
+    },
+
+    // 验证协议是否勾选
+    validateAgreement() {
+      if (!this.isAgreementChecked) {
+        this.agreementError = '请先阅读并同意用户协议和隐私政策'
+        return false
+      }
+      this.agreementError = ''
+      return true
+    },
+
+    // 显示用户协议
+    showUserAgreement() {
+      // 这里可以跳转到用户协议页面或显示弹窗
+      uni.showModal({
+        title: '用户协议',
+        content: '请仔细阅读用户协议内容，了解您的权利和义务。',
+        showCancel: false,
+        confirmText: '我知道了',
+        confirmColor: '#007aff'
+      })
+    },
+
+    // 显示隐私政策
+    showPrivacyPolicy() {
+      // 这里可以跳转到隐私政策页面或显示弹窗
+      uni.showModal({
+        title: '隐私政策',
+        content: '请仔细阅读隐私政策，了解我们如何收集、使用和保护您的个人信息。',
+        showCancel: false,
+        confirmText: '我知道了',
+        confirmColor: '#007aff'
+      })
+    },
+
     async getVerificationCode() {
+      // 验证协议是否勾选
+      if (!this.validateAgreement()) {
+        return
+      }
+
       // 验证手机号格式
       if (!this.validatePhone()) {
         this.phoneError = '请输入正确的手机号'
@@ -291,6 +357,11 @@ export default {
     async handleLogin() {
       // 防止重复点击
       if (this.isLogging) {
+        return
+      }
+
+      // 验证协议是否勾选
+      if (!this.validateAgreement()) {
         return
       }
 
@@ -462,21 +533,6 @@ export default {
       } finally {
         this.isLogging = false
       }
-    }
-  },
-
-  computed: {
-    isPhoneValid() {
-      const phoneRegex = /^1[3-9]\d{9}$/
-      return phoneRegex.test(this.form.phoneNumber)
-    },
-
-    // 计算验证码是否已过期
-    isCodeExpired() {
-      if (!this.codeSentTime) return false
-      const currentTime = Date.now()
-      const elapsedTime = Math.floor((currentTime - this.codeSentTime) / 1000)
-      return elapsedTime >= this.codeExpireTime
     }
   },
 
@@ -666,20 +722,60 @@ export default {
 	flex: 1;
 }
 
+/* 用户协议样式 */
 .agreement-container {
-	text-align: center;
-	margin-top: 40rpx;
-	padding: 24rpx;
+	margin: 40rpx 0;
+	padding: 0;
+}
+
+.agreement-checkbox {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	padding: 20rpx 0;
+	cursor: pointer;
+}
+
+.checkbox-icon {
+	width: 36rpx;
+	height: 36rpx;
+	border: 2rpx solid #ccc;
+	border-radius: 6rpx;
+	margin-right: 16rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.3s ease;
+}
+
+.checkbox-icon.checked {
+	background: #007aff;
+	border-color: #007aff;
+}
+
+.checkmark {
+	color: white;
+	font-size: 24rpx;
+	font-weight: bold;
 }
 
 .agreement-text {
 	color: #666;
 	font-size: 26rpx;
+	margin-right: 8rpx;
 }
 
 .agreement-link {
 	color: #007aff;
 	font-size: 26rpx;
+}
+
+.agreement-link:active {
+	color: #0056b3;
+}
+
+.agreement-error {
+	margin-top: 16rpx;
 }
 
 /* 响应式设计 */
@@ -696,6 +792,15 @@ export default {
 	.code-btn {
 		width: auto;
 		min-width: 240rpx;
+	}
+	
+	.agreement-checkbox {
+		flex-direction: row;
+		align-items: flex-start;
+	}
+	
+	.checkbox-icon {
+		margin-top: 4rpx;
 	}
 }
 </style>
