@@ -48,6 +48,11 @@
 						</button>
 					</view>
 					<view v-if="codeError" class="error-message">{{ codeError }}</view>
+					<!-- 添加验证码失效提示 -->
+					<view v-if="countdown > 0 && countdown <= 30" class="code-expire-warning">
+						<text class="warning-icon">⚠️</text>
+						<text class="warning-text">验证码即将在{{ countdown }}秒后失效</text>
+					</view>
 				</view>
 
 				<!-- 登录按钮 -->
@@ -74,6 +79,7 @@
 </template>
 
 <script>
+	
 import { login, sendCode, getUserInfo, getRouters } from '@/api/login.js'
 
 export default {
@@ -89,6 +95,10 @@ export default {
       isGettingCode: false,
       isLogging: false,
       timer: null,
+      // 验证码有效期（秒）
+      codeExpireTime: 120,
+      // 验证码发送时间戳
+      codeSentTime: null,
       inputStyles: {
         color: '#333',
         borderColor: '#007aff',
@@ -109,6 +119,14 @@ export default {
 
     canSubmit() {
       return this.isPhoneValid && this.form.verificationCode.length === 6
+    },
+
+    // 计算验证码是否已过期
+    isCodeExpired() {
+      if (!this.codeSentTime) return false
+      const currentTime = Date.now()
+      const elapsedTime = Math.floor((currentTime - this.codeSentTime) / 1000)
+      return elapsedTime >= this.codeExpireTime
     }
   },
 
@@ -147,15 +165,20 @@ export default {
         const response = await sendCode(this.form.phoneNumber)
         
         if (response.code === 200) {
+          // 记录验证码发送时间
+          this.codeSentTime = Date.now()
           this.startCountdown()
           
           uni.showToast({
-            title: '验证码发送成功',
-            icon: 'success'
+            title: '验证码发送成功，有效期2分钟',
+            icon: 'success',
+            duration: 3000
           })
           
           if (process.env.NODE_ENV === 'development') {
             console.log('验证码接口调用成功，手机号:', this.form.phoneNumber)
+            console.log('验证码发送时间:', new Date(this.codeSentTime).toLocaleString())
+            console.log('验证码有效期至:', new Date(this.codeSentTime + this.codeExpireTime * 1000).toLocaleString())
           }
         } else {
           throw new Error(response.msg || response.message || '发送失败')
@@ -181,17 +204,36 @@ export default {
     },
 
     startCountdown() {
-      this.countdown = 60
+      this.countdown = this.codeExpireTime
       if (this.timer) {
         clearInterval(this.timer)
       }
       this.timer = setInterval(() => {
         this.countdown--
+        
+        // 验证码过期时的处理
         if (this.countdown <= 0) {
           clearInterval(this.timer)
           this.timer = null
+          // 可以在这里添加过期提示
+          if (this.form.verificationCode) {
+            uni.showToast({
+              title: '验证码已过期，请重新获取',
+              icon: 'none',
+              duration: 2000
+            })
+          }
         }
       }, 1000)
+    },
+
+    // 检查验证码是否过期
+    checkCodeExpiry() {
+      if (this.isCodeExpired && this.form.verificationCode) {
+        this.codeError = '验证码已过期，请重新获取'
+        return false
+      }
+      return true
     },
 
     // 获取用户信息
@@ -245,6 +287,11 @@ export default {
         return
       }
 
+      // 检查验证码是否过期
+      if (!this.checkCodeExpiry()) {
+        return
+      }
+
       try {
         this.isLogging = true
         
@@ -255,7 +302,9 @@ export default {
         }
         
         console.log('开始登录，参数:', loginForm)
-        console.log('参数类型 - phone:', typeof loginForm.phone, 'code:', typeof loginForm.code)
+        console.log('验证码发送时间:', this.codeSentTime ? new Date(this.codeSentTime).toLocaleString() : '未记录')
+        console.log('当前时间:', new Date().toLocaleString())
+        console.log('是否过期:', this.isCodeExpired)
         
         // 1. 调用登录接口获取token
         const loginResponse = await login(loginForm)
@@ -324,10 +373,16 @@ export default {
         let errorMessage = '登录失败，请重试'
         
         if (error && error.message) {
-          if (error.message.includes('会话') || error.message.includes('过期')) {
+          if (error.message.includes('会话') || error.message.includes('过期') || error.message.includes('验证码已过期')) {
             errorMessage = '验证码已过期，请重新获取验证码'
             this.codeError = errorMessage
             this.form.verificationCode = ''
+            // 重置倒计时
+            this.countdown = 0
+            if (this.timer) {
+              clearInterval(this.timer)
+              this.timer = null
+            }
           } else if (error.message.includes('验证码') || error.message.includes('密码') || error.message.includes('参数')) {
             this.codeError = error.message
             errorMessage = error.message
@@ -357,9 +412,24 @@ export default {
       clearInterval(this.timer)
       this.timer = null
     }
+  },
+
+  onShow() {
+    // 页面显示时检查验证码是否过期
+    if (this.codeSentTime && this.isCodeExpired && this.countdown > 0) {
+      this.countdown = 0
+      if (this.timer) {
+        clearInterval(this.timer)
+        this.timer = null
+      }
+      if (this.form.verificationCode) {
+        this.codeError = '验证码已过期，请重新获取'
+      }
+    }
   }
 }
 </script>
+
 <style scoped>
 .login-container {
 	min-height: 100vh;
@@ -499,6 +569,28 @@ export default {
 	line-height: 32rpx;
 	font-size: 24rpx;
 	margin-right: 8rpx;
+}
+
+/* 验证码失效警告样式 */
+.code-expire-warning {
+	display: flex;
+	align-items: center;
+	margin-top: 12rpx;
+	padding: 16rpx 20rpx;
+	background: #fff8e6;
+	border: 1rpx solid #ffd666;
+	border-radius: 12rpx;
+	color: #d48806;
+	font-size: 24rpx;
+}
+
+.warning-icon {
+	margin-right: 12rpx;
+	font-size: 28rpx;
+}
+
+.warning-text {
+	flex: 1;
 }
 
 .agreement-container {
