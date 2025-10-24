@@ -10,6 +10,7 @@
 				</button>
 				
 				<view class="profile-header" @tap="goToPersonalCenter">
+
 					<view class="avatar-container">
 						<image class="avatar" :src="userInfo.avatar || defaultAvatar" mode="aspectFill"></image>
 					</view>
