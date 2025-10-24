@@ -73,8 +73,6 @@
             const userInfo = userInfoResponse.data
             uni.setStorageSync('userInfo', userInfo)
             console.log('用户信息:', userInfo)
-			
-			// 可以通过getApp().globalData.userInfo调用用户信息
             
             // 获取用户路由
             const routersResponse = await getRouters()
