@@ -8,12 +8,8 @@
         <uni-forms-item label="手机号码" name="phonenumber">
           <uni-easyinput v-model="user.phonenumber" placeholder="请输入手机号码" />
         </uni-forms-item>
-        <uni-forms-item label="邮箱" name="email">
-          <uni-easyinput v-model="user.email" placeholder="请输入邮箱" />
-        </uni-forms-item>
-        <uni-forms-item label="性别" name="sex" required>
-          <uni-data-checkbox v-model="user.sex" :localdata="sexs" />
-        </uni-forms-item>
+        
+        
       </uni-forms>
       <button type="primary" @click="submit">提交</button>
     </view>
@@ -33,13 +29,7 @@
           email: "",
           sex: ""
         },
-        sexs: [{
-          text: '男',
-          value: "0"
-        }, {
-          text: '女',
-          value: "1"
-        }],
+        
         rules: {
           nickName: {
             rules: [{
@@ -56,15 +46,7 @@
               errorMessage: '请输入正确的手机号码'
             }]
           },
-          email: {
-            rules: [{
-              required: true,
-              errorMessage: '邮箱地址不能为空'
-            }, {
-              format: 'email',
-              errorMessage: '请输入正确的邮箱地址'
-            }]
-          }
+          
         }
       }
     },
