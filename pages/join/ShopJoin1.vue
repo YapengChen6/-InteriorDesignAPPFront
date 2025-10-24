@@ -225,74 +225,6 @@
           <text class="upload-tips">请上传清晰的图片，确保信息完整可见</text>
         </view>
       </uni-forms>
-
-      <!-- 测试按钮区域 -->
-      <view class="test-buttons">
-        <button type="primary" @click="testFormValidation" class="test-btn">
-          表单验证测试
-        </button>
-        
-        <button type="warn" @click="testRealSubmitAPI" :disabled="isTesting" class="test-btn">
-          {{ isTesting ? '提交中...' : '提交入驻申请' }}
-        </button>
-        
-        <button type="default" @click="testGetApplicationStatus" :disabled="isTesting" class="test-btn">
-          查询申请状态
-        </button>
-        
-        <button type="default" @click="testGetApplicationDetail" :disabled="isTesting" class="test-btn">
-          查询申请详情
-        </button>
-        
-        <button type="default" @click="clearForm" class="test-btn">
-          清空表单
-        </button>
-        
-        <button type="default" @click="fillMockData" class="test-btn">
-          填充测试数据
-        </button>
-      </view>
-
-      <!-- 测试结果展示 -->
-      <view class="test-results" v-if="testResults.length > 0">
-        <text class="results-title">测试结果</text>
-        <scroll-view class="results-container" scroll-y>
-          <view 
-            v-for="(result, index) in testResults" 
-            :key="index" 
-            class="result-item"
-            :class="result.type"
-          >
-            <text class="result-time">{{ result.time }}</text>
-            <text class="result-message">{{ result.message }}</text>
-            <text class="result-data" v-if="result.data">{{ result.data }}</text>
-          </view>
-        </scroll-view>
-        
-        <button type="default" @click="clearResults" size="mini" class="clear-results-btn">
-          清空结果
-        </button>
-      </view>
-
-      <!-- 调试信息 -->
-      <view class="debug-info">
-        <text class="debug-title">调试信息</text>
-        <view class="debug-content">
-          <text>表单数据: {{ JSON.stringify(formData) }}</text>
-          <text>验证状态: {{ validationStatus }}</text>
-          <text>测试次数: {{ testCount }}</text>
-          <text>最后测试: {{ lastTestTime || '暂无' }}</text>
-          <text>应用ID: {{ applicationId || '未设置' }}</text>
-          <text style="color: #28a745;">✅ 前端字段名完全匹配后端DTO: identity, shopName, shopAddress, phone, remark, handheldIdPhoto, idCardFrontPhoto, idCardBackPhoto, businessLicense</text>
-        </view>
-      </view>
-
-      <!-- 调试按钮区域（开发环境显示） -->
-      <view class="debug-buttons" v-if="isDevelopment">
-        <button type="warn" @click="testUploadConnection" size="mini" class="debug-btn">测试上传连接</button>
-        <button type="warn" @click="checkNetwork" size="mini" class="debug-btn">检查网络</button>
-        <button type="warn" @click="clearAllImages" size="mini" class="debug-btn">清空所有图片</button>
-      </view>
       
       <button type="primary" @click="submit" :disabled="isSubmitting">
         {{ isSubmitting ? '提交中...' : '下一步' }}
@@ -305,12 +237,7 @@
 import { 
   submitApplication, 
   uploadImage, 
-  batchUploadImages,
-  getImagesByRelatedInfo,
   deleteImage,
-  testUpload,
-  getApplicationStatus, 
-  getApplicationDetail,
   RELATED_TYPES,
   UPLOAD_STAGES,
   getFileDescription,
@@ -324,14 +251,6 @@ export default {
       currentStep: 1,
       isSubmitting: false,
       applicationId: null,
-      isDevelopment: true,
-      
-      // 测试相关数据
-      isTesting: false,
-      testCount: 0,
-      lastTestTime: null,
-      validationStatus: '未验证',
-      testResults: [],
       
       // 上传进度
       uploadProgress: {
@@ -447,189 +366,13 @@ export default {
   onLoad() {
     console.log('🔄 ShopJoin1 page loaded')
     this.loadApplicationData()
-    this.checkFieldConsistency()
   },
   
   onReady() {
     this.$refs.form.setRules(this.rules)
-    this.addTestResult('info', '页面加载完成，表单验证规则已设置')
-    this.addTestResult('success', '✅ 前端字段名已完全匹配后端DTO')
   },
   
   methods: {
-    // ==================== 测试方法 ====================
-    
-    addTestResult(type, message, data = null) {
-      const result = {
-        type,
-        time: new Date().toLocaleTimeString(),
-        message,
-        data: data ? JSON.stringify(data, null, 2) : null
-      }
-      
-      this.testResults.unshift(result)
-      
-      if (this.testResults.length > 20) {
-        this.testResults = this.testResults.slice(0, 20)
-      }
-    },
-    
-    clearResults() {
-      this.testResults = []
-      this.addTestResult('info', '测试结果已清空')
-    },
-    
-    checkFieldConsistency() {
-      // 后端DTO实际字段
-      const backendFields = ['identity', 'shopName', 'shopAddress', 'phone', 'remark', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto', 'businessLicense']
-      const frontendFields = Object.keys(this.formData)
-      
-      const missingFields = backendFields.filter(field => !frontendFields.includes(field))
-      const extraFields = frontendFields.filter(field => !backendFields.includes(field))
-      
-      if (missingFields.length > 0 || extraFields.length > 0) {
-        console.warn('⚠️ 字段不一致:', { missingFields, extraFields })
-        this.addTestResult('warning', `字段不一致 - 缺失: ${missingFields.join(', ')}, 多余: ${extraFields.join(', ')}`)
-      } else {
-        console.log('✅ 所有字段与后端DTO一致')
-        this.addTestResult('success', '✅ 前端字段名与后端DTO完全匹配')
-      }
-    },
-    
-    async testFormValidation() {
-      try {
-        this.addTestResult('info', '开始表单验证测试...')
-        
-        await this.$refs.form.validate()
-        
-        this.validationStatus = '验证通过'
-        this.addTestResult('success', '✅ 表单验证通过！所有字段符合验证规则')
-        
-      } catch (error) {
-        this.validationStatus = '验证失败'
-        
-        const errorMessages = error.errorMessage || '未知验证错误'
-        this.addTestResult('error', `表单验证失败: ${errorMessages}`)
-        
-        if (typeof errorMessages === 'object') {
-          Object.keys(errorMessages).forEach(field => {
-            this.addTestResult('error', `${field}: ${errorMessages[field]}`)
-          })
-        }
-      }
-    },
-    
-    async testRealSubmitAPI() {
-      if (this.isTesting) return
-      
-      this.isTesting = true
-      this.testCount++
-      
-      try {
-        this.addTestResult('info', `开始第 ${this.testCount} 次入驻申请提交...`)
-        
-        await this.$refs.form.validate()
-        this.addTestResult('info', '✅ 前端验证通过，开始调用后端接口')
-        
-        this.addTestResult('success', '✅ 前端字段名完全匹配后端DTO')
-        
-        const applicationData = this.buildApplicationData()
-        this.addTestResult('info', '提交数据（完全匹配DTO）:', applicationData)
-        
-        const startTime = Date.now()
-        const response = await submitApplication(applicationData)
-        const endTime = Date.now()
-        const duration = endTime - startTime
-        
-        this.lastTestTime = new Date().toLocaleString()
-        
-        if (response.code === 200) {
-          this.addTestResult('success', `✅ 入驻申请提交成功！耗时: ${duration}ms`)
-          this.addTestResult('success', `返回消息: ${response.data}`)
-          this.addTestResult('success', '✅ 前端DTO验证通过，后端处理成功')
-          
-          this.applicationId = response.data.applicationId || response.data.id
-          
-          setTimeout(() => {
-            this.testGetApplicationStatus()
-          }, 1000)
-          
-        } else {
-          this.addTestResult('error', `❌ 申请提交失败: ${response.msg || response.message}`)
-          if (response.msg && response.msg.includes('重复提交')) {
-            this.addTestResult('info', '提示: 您已提交过申请，请勿重复提交')
-          }
-        }
-        
-      } catch (error) {
-        this.addTestResult('error', `❌ 接口调用异常: ${error.message}`)
-      } finally {
-        this.isTesting = false
-      }
-    },
-    
-    async testGetApplicationStatus() {
-      try {
-        this.addTestResult('info', '查询申请状态...')
-        const response = await getApplicationStatus()
-        if (response.code === 200) {
-          this.addTestResult('success', '申请状态查询成功:', response.data)
-        } else {
-          this.addTestResult('error', `状态查询失败: ${response.msg}`)
-        }
-      } catch (error) {
-        this.addTestResult('error', `状态查询异常: ${error.message}`)
-      }
-    },
-    
-    async testGetApplicationDetail() {
-      try {
-        this.addTestResult('info', '查询申请详情...')
-        const response = await getApplicationDetail()
-        if (response.code === 200) {
-          this.addTestResult('success', '申请详情查询成功:', response.data)
-        } else {
-          this.addTestResult('error', `详情查询失败: ${response.msg}`)
-        }
-      } catch (error) {
-        this.addTestResult('error', `详情查询异常: ${error.message}`)
-      }
-    },
-    
-    clearForm() {
-      this.formData = {
-        identity: '',
-        shopName: '',
-        phone: '',
-        shopAddress: '',
-        remark: '',
-        businessLicense: '',
-        handheldIdPhoto: '',
-        idCardFrontPhoto: '',
-        idCardBackPhoto: ''
-      }
-      this.validationStatus = '未验证'
-      this.addTestResult('info', '表单数据已清空')
-    },
-    
-    fillMockData() {
-      this.formData = {
-        identity: '张三',
-        shopName: '测试商户有限公司',
-        phone: '13800138000',
-        shopAddress: '北京市朝阳区测试街道123号测试大厦A座1001室',
-        remark: '这是测试备注信息',
-        businessLicense: 'https://example.com/business_license.jpg',
-        handheldIdPhoto: 'https://example.com/idcard_hand.jpg',
-        idCardFrontPhoto: 'https://example.com/idcard_front.jpg',
-        idCardBackPhoto: 'https://example.com/idcard_back.jpg'
-      }
-      this.addTestResult('info', '已填充测试数据')
-      this.addTestResult('success', '✅ 测试数据包含所有后端DTO字段')
-    },
-    
-    // ==================== 业务方法 ====================
-    
     loadApplicationData() {
       const savedData = uni.getStorageSync('merchant_application_data')
       if (savedData) {
@@ -738,15 +481,12 @@ export default {
             icon: 'success',
             duration: 2000
           })
-          
-          this.addTestResult('success', `✅ ${this.getUploadTypeName(type)}上传成功`)
         } else {
           throw new Error(result.msg || result.message || '上传失败')
         }
         
       } catch (error) {
         console.error('❌ Upload process failed:', error)
-        this.addTestResult('error', `❌ ${this.getUploadTypeName(type)}上传失败: ${error.message}`)
         
         uni.showToast({
           title: error.message || '上传失败',
@@ -851,8 +591,6 @@ export default {
                 icon: 'success',
                 duration: 2000
               })
-              
-              this.addTestResult('info', `🗑️ 已删除${this.getUploadTypeName(type)}`)
             }
           }
         })
@@ -881,23 +619,27 @@ export default {
       }
       
       console.log('📦 Built application data (完全匹配DTO):', applicationData)
-      this.addTestResult('success', '✅ 申请数据完全匹配后端DTO结构')
       return applicationData
     },
     
     async submit() {
       if (this.isSubmitting) return
       
+      // 先隐藏可能存在的loading
+      uni.hideLoading()
+      
+      let isLoadingShown = false
+      
       try {
         this.isSubmitting = true
         
         console.log('🔄 Starting form submission...')
-        this.addTestResult('info', '开始正式提交入驻申请...')
         
+        // 表单验证
         await this.$refs.form.validate()
         console.log('✅ Form validation passed')
-        this.addTestResult('success', '✅ 表单验证通过')
         
+        // 检查必填图片
         const requiredImages = ['businessLicense', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto']
         const missingImages = requiredImages.filter(type => !this.formData[type])
         
@@ -905,21 +647,26 @@ export default {
           throw new Error('请上传所有必需的图片资料')
         }
         
+        // 显示loading
         uni.showLoading({
           title: '提交中...',
           mask: true
         })
+        isLoadingShown = true
         
         const applicationData = this.buildApplicationData()
-        this.addTestResult('info', '提交数据（完全匹配DTO）:', applicationData)
         
         console.log('📨 Sending application data to server...')
         const response = await submitApplication(applicationData)
         console.log('📨 Server response:', response)
         
-        if (response.code === 200) {
+        // 先隐藏loading再处理结果
+        if (isLoadingShown) {
           uni.hideLoading()
-          
+          isLoadingShown = false
+        }
+        
+        if (response.code === 200) {
           uni.showToast({
             title: '提交成功',
             icon: 'success',
@@ -928,7 +675,6 @@ export default {
           
           this.applicationId = response.data.applicationId || response.data.id
           console.log('🎉 Application created successfully, ID:', this.applicationId)
-          this.addTestResult('success', `✅ 入驻申请提交成功！申请ID: ${this.applicationId}`)
           
           uni.removeStorageSync('merchant_application_data')
           
@@ -941,13 +687,29 @@ export default {
           }, 1500)
           
         } else {
-          throw new Error(response.msg || response.message || '提交失败')
+          // 处理400等错误状态
+          let errorMsg = response.msg || response.message || '提交失败'
+          
+          // 如果是400错误，可能是数据验证失败
+          if (response.code === 400) {
+            errorMsg = '数据格式错误，请检查填写的信息'
+            console.error('❌ 400 Bad Request - 可能的原因:', {
+              formData: applicationData,
+              response: response
+            })
+          }
+          
+          throw new Error(errorMsg)
         }
         
       } catch (error) {
-        uni.hideLoading()
+        // 确保隐藏loading
+        if (isLoadingShown) {
+          uni.hideLoading()
+          isLoadingShown = false
+        }
+        
         console.error('❌ Form submission failed:', error)
-        this.addTestResult('error', `❌ 提交失败: ${error.message}`)
         
         let errorMessage = '提交失败'
         if (error.message) {
@@ -963,6 +725,10 @@ export default {
         })
       } finally {
         this.isSubmitting = false
+        // 最终确保loading被隐藏
+        if (isLoadingShown) {
+          uni.hideLoading()
+        }
       }
     },
     
@@ -970,110 +736,11 @@ export default {
       if (!this.applicationId) return
       
       console.log('🔄 Updating temporary images with application ID:', this.applicationId)
-      this.addTestResult('info', `🔄 更新图片关联ID: ${this.applicationId}`)
-    },
-    
-    // ==================== 调试方法 ====================
-    
-    async testUploadConnection() {
-      try {
-        console.log('🧪 Starting upload connection test...')
-        this.addTestResult('info', '🧪 开始上传连接测试...')
-        uni.showLoading({ title: '测试中...', mask: true })
-        
-        const result = await testUpload()
-        
-        uni.hideLoading()
-        console.log('✅ Test upload successful:', result)
-        this.addTestResult('success', '✅ 上传连接测试成功', result)
-        
-        uni.showModal({
-          title: '测试结果 - 成功',
-          content: `上传测试成功！\n\n返回信息: ${result.msg}\n文件URL: ${result.data?.fileUrl || 'N/A'}`,
-          showCancel: false
-        })
-        
-      } catch (error) {
-        uni.hideLoading()
-        console.error('❌ Test upload failed:', error)
-        this.addTestResult('error', '❌ 上传连接测试失败', error.message)
-        
-        uni.showModal({
-          title: '测试结果 - 失败',
-          content: `上传测试失败！\n\n错误信息: ${error.message}\n\n请检查：\n1. 网络连接\n2. 服务器状态\n3. 文件大小限制\n4. 后端服务是否正常`,
-          showCancel: false
-        })
-      }
-    },
-    
-    async checkNetwork() {
-      try {
-        const network = await new Promise((resolve, reject) => {
-          uni.getNetworkType({
-            success: resolve,
-            fail: reject
-          })
-        })
-        
-        console.log('🌐 Network status:', network)
-        this.addTestResult('info', `🌐 网络状态: ${network.networkType}`)
-        
-        uni.showModal({
-          title: '网络状态',
-          content: `网络类型: ${network.networkType}\n连接状态: 正常`,
-          showCancel: false
-        })
-        
-      } catch (error) {
-        this.addTestResult('error', '❌ 网络检查失败')
-        uni.showModal({
-          title: '网络检查失败',
-          content: '无法获取网络状态信息',
-          showCancel: false
-        })
-      }
-    },
-    
-    clearAllImages() {
-      uni.showModal({
-        title: '确认清空',
-        content: '确定要清空所有已上传的图片吗？',
-        success: (res) => {
-          if (res.confirm) {
-            this.formData.businessLicense = ''
-            this.formData.handheldIdPhoto = ''
-            this.formData.idCardFrontPhoto = ''
-            this.formData.idCardBackPhoto = ''
-            
-            this.uploadedFiles.businessLicense = null
-            this.uploadedFiles.handheldIdPhoto = null
-            this.uploadedFiles.idCardFrontPhoto = null
-            this.uploadedFiles.idCardBackPhoto = null
-            
-            this.uploadProgress.businessLicense = 0
-            this.uploadProgress.handheldIdPhoto = 0
-            this.uploadProgress.idCardFrontPhoto = 0
-            this.uploadProgress.idCardBackPhoto = 0
-            
-            this.saveApplicationData()
-            
-            uni.showToast({
-              title: '已清空所有图片',
-              icon: 'success'
-            })
-            
-            console.log('🧹 Cleared all images')
-            this.addTestResult('info', '🧹 已清空所有图片')
-          }
-        }
-      })
     }
   }
 }
 </script>
-
 <style lang="scss" scoped>
-/* 样式保持不变 */
 .container {
   background-color: #f5f5f5;
   min-height: 100vh;
@@ -1351,174 +1018,6 @@ export default {
   background-color: #007AFF;
   border-radius: 3rpx;
   transition: width 0.3s ease;
-}
-
-.test-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-  margin-top: 40rpx;
-  margin-bottom: 40rpx;
-}
-
-.test-btn {
-  width: 100%;
-  border-radius: 12rpx;
-  font-size: 32rpx;
-  padding: 25rpx 0;
-  border: none;
-}
-
-button[type="primary"] {
-  background-color: #007AFF;
-  color: #fff;
-}
-
-button[type="warn"] {
-  background-color: #ff6b6b;
-  color: #fff;
-}
-
-button[type="default"] {
-  background-color: #f8f9fa;
-  color: #333;
-  border: 1rpx solid #dee2e6;
-}
-
-.test-results {
-  margin-top: 40rpx;
-  padding: 30rpx;
-  background: #f8f9fa;
-  border-radius: 12rpx;
-  border: 1rpx solid #e9ecef;
-}
-
-.results-title {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 20rpx;
-  display: block;
-}
-
-.results-container {
-  max-height: 400rpx;
-  margin-bottom: 20rpx;
-}
-
-.result-item {
-  padding: 20rpx;
-  margin-bottom: 15rpx;
-  border-radius: 8rpx;
-  border-left: 6rpx solid #007AFF;
-}
-
-.result-item.success {
-  background: #d4edda;
-  border-left-color: #28a745;
-}
-
-.result-item.error {
-  background: #f8d7da;
-  border-left-color: #dc3545;
-}
-
-.result-item.warning {
-  background: #fff3cd;
-  border-left-color: #ffc107;
-}
-
-.result-item.info {
-  background: #d1ecf1;
-  border-left-color: #17a2b8;
-}
-
-.result-time {
-  display: block;
-  font-size: 22rpx;
-  color: #666;
-  margin-bottom: 8rpx;
-}
-
-.result-message {
-  display: block;
-  font-size: 28rpx;
-  color: #333;
-  margin-bottom: 8rpx;
-  font-weight: 500;
-}
-
-.result-data {
-  display: block;
-  font-size: 24rpx;
-  color: #666;
-  background: rgba(255, 255, 255, 0.7);
-  padding: 15rpx;
-  border-radius: 6rpx;
-  margin-top: 10rpx;
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.clear-results-btn {
-  width: auto;
-  align-self: flex-end;
-  font-size: 24rpx;
-  padding: 12rpx 24rpx;
-}
-
-.debug-info {
-  margin-top: 40rpx;
-  padding: 30rpx;
-  background: #e7f3ff;
-  border-radius: 12rpx;
-  border: 1rpx solid #b3d9ff;
-}
-
-.debug-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #0066cc;
-  margin-bottom: 15rpx;
-  display: block;
-}
-
-.debug-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.debug-content text {
-  font-size: 24rpx;
-  color: #333;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.debug-buttons {
-  display: flex;
-  gap: 20rpx;
-  margin: 30rpx 0 20rpx;
-  padding: 25rpx;
-  background: #fffbe6;
-  border: 1rpx solid #ffe58f;
-  border-radius: 12rpx;
-}
-
-.debug-btn {
-  flex: 1;
-  font-size: 24rpx;
-  padding: 16rpx 8rpx;
-  background: #faad14;
-  color: #fff;
-  border: none;
-  border-radius: 8rpx;
-}
-
-.debug-btn:active {
-  background: #d48806;
 }
 
 button[type="primary"] {

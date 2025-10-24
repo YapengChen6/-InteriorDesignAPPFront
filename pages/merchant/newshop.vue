@@ -625,6 +625,7 @@ export default {
 
 <style scoped>
 /* 基础样式 */
+/* 基础样式 */
 .container {
   padding: 24rpx;
   background: linear-gradient(135deg, #f5f7fa 0%, #e4efe9 100%);
@@ -709,9 +710,9 @@ export default {
   color: #999;
 }
 
-/* 选择器与添加按钮 - 宽度调整为80% */
+/* 选择器与添加按钮 - 宽度调整为100% */
 .picker-with-add-container {
-  width: 80%;
+  width: 100%;
 }
 
 .picker-with-add {
@@ -730,6 +731,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 80rpx;
 }
 
 .picker-text {
@@ -775,19 +777,6 @@ export default {
   z-index: 10;
 }
 
-.close-btn {
-  background: none;
-  border: none;
-  color: #999;
-  font-size: 36rpx;
-  font-weight: bold;
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* 表单卡片 */
 .form-card {
   background: #fafafa;
@@ -804,18 +793,42 @@ export default {
   border-bottom: 1rpx solid #f0f0f0;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  position: relative;
+  min-height: 80rpx;
 }
 
 .card-title {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
+  flex: 1;
+  padding-right: 60rpx;
 }
 
 .card-tips {
   font-size: 24rpx;
   color: #999;
+  position: absolute;
+  right: 80rpx;
+  top: 24rpx;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 36rpx;
+  font-weight: bold;
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  z-index: 10;
 }
 
 .card-content {
@@ -850,6 +863,7 @@ export default {
   font-size: 28rpx;
   background: white;
   transition: all 0.3s;
+  box-sizing: border-box;
 }
 
 .form-input:focus, .form-textarea:focus {
@@ -860,6 +874,7 @@ export default {
 
 .form-textarea {
   height: 200rpx;
+  resize: vertical;
 }
 
 /* 按钮样式 */
@@ -871,11 +886,22 @@ export default {
   padding: 20rpx 32rpx;
   font-size: 28rpx;
   font-weight: 500;
+  transition: all 0.3s;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
 }
 
 .btn-primary.btn-sm {
   padding: 16rpx 24rpx;
   font-size: 24rpx;
+  min-width: 120rpx;
+  white-space: nowrap;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-outline {
@@ -886,6 +912,11 @@ export default {
   padding: 20rpx 32rpx;
   font-size: 28rpx;
   font-weight: 500;
+  transition: all 0.3s;
+}
+
+.btn-outline:active {
+  background: rgba(24, 144, 255, 0.1);
 }
 
 .btn-danger {
@@ -895,11 +926,17 @@ export default {
   border-radius: 8rpx;
   padding: 12rpx 20rpx;
   font-size: 24rpx;
+  transition: all 0.3s;
+}
+
+.btn-danger:active {
+  background: #d9363e;
 }
 
 .add-icon {
   font-size: 32rpx;
   font-weight: bold;
+  margin-right: 8rpx;
 }
 
 /* 规格参数 */
@@ -958,16 +995,23 @@ export default {
   font-size: 24rpx;
   font-weight: bold;
   cursor: pointer;
+  width: 24rpx;
+  height: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .add-spec-value {
   display: flex;
   gap: 16rpx;
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
 }
 
 .spec-value-input {
   flex: 1;
+  min-width: 0;
 }
 
 .add-spec-btn, .add-sku-btn {
@@ -976,6 +1020,7 @@ export default {
   justify-content: center;
   align-items: center;
   gap: 12rpx;
+  margin-top: 16rpx;
 }
 
 /* 图片上传 */
@@ -991,6 +1036,7 @@ export default {
   border-radius: 12rpx;
   overflow: hidden;
   position: relative;
+  flex-shrink: 0;
 }
 
 .image-upload-item {
@@ -1000,6 +1046,12 @@ export default {
   align-items: center;
   justify-content: center;
   flex-direction: column;
+  transition: all 0.3s;
+}
+
+.image-upload-item:active {
+  border-color: #1890ff;
+  background: #f0f8ff;
 }
 
 .upload-placeholder {
@@ -1021,6 +1073,7 @@ export default {
 .preview-image {
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
 .image-overlay {
@@ -1045,17 +1098,20 @@ export default {
   background: rgba(255, 255, 255, 0.9);
   color: #ff4d4f;
   border: none;
+  font-size: 24rpx;
 }
 
 /* 行内表单组 */
 .inline-form-group {
   display: flex;
   gap: 24rpx;
+  width: 100%;
 }
 
 .inline-form-group .form-group {
   flex: 1;
   margin-bottom: 0;
+  min-width: 0;
 }
 
 /* 设置项 */
@@ -1106,6 +1162,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  min-height: 80rpx;
 }
 
 .sku-title {
@@ -1130,6 +1188,8 @@ export default {
   padding: 32rpx;
   margin: 0 -24rpx -24rpx;
   border-top: 1rpx solid #f0f0f0;
+  position: sticky;
+  bottom: 0;
 }
 
 .submit-btn {
@@ -1141,6 +1201,12 @@ export default {
   font-size: 32rpx;
   font-weight: 600;
   box-shadow: 0 8rpx 24rpx rgba(82, 196, 26, 0.3);
+  transition: all 0.3s;
+}
+
+.submit-btn:active {
+  transform: scale(0.98);
+  box-shadow: 0 4rpx 12rpx rgba(82, 196, 26, 0.3);
 }
 
 .submit-text {
@@ -1154,6 +1220,29 @@ export default {
   margin-top: 8rpx;
 }
 
+/* 加载状态 */
+.submit-btn:disabled {
+  background: #ccc !important;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 20rpx;
+  height: 20rpx;
+  border: 2rpx solid #fff;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 1s linear infinite;
+  margin-right: 12rpx;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .container {
@@ -1165,12 +1254,62 @@ export default {
     gap: 0;
   }
   
+  .inline-form-group .form-group {
+    margin-bottom: 24rpx;
+  }
+  
   .image-upload-container {
     justify-content: center;
   }
   
   .picker-with-add-container {
     width: 100%;
+  }
+  
+  .form-card {
+    margin: 16rpx 0;
+  }
+  
+  .card-content {
+    padding: 20rpx;
+  }
+  
+  .add-spec-value {
+    flex-direction: column;
+    gap: 12rpx;
+  }
+  
+  .btn-primary.btn-sm {
+    min-width: 100%;
+    margin-top: 8rpx;
+  }
+}
+
+/* 小屏幕优化 */
+@media (max-width: 480px) {
+  .page-title {
+    font-size: 40rpx;
+  }
+  
+  .section-title {
+    font-size: 32rpx;
+  }
+  
+  .form-section {
+    padding: 24rpx;
+  }
+  
+  .card-header {
+    padding: 20rpx 24rpx;
+  }
+  
+  .card-content {
+    padding: 16rpx;
+  }
+  
+  .image-upload-item, .image-preview-item {
+    width: 160rpx;
+    height: 160rpx;
   }
 }
 </style>
