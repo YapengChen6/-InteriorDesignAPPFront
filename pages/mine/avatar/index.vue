@@ -39,7 +39,7 @@
 <script>
   import config from '@/config'
   import store from "@/store"
-  import { uploadAvatar } from "@/api/system/user"
+  import { uploadAvatar } from "@/api/users.js"
   
   const baseUrl = config.baseUrl
 	let sysInfo = uni.getSystemInfoSync()

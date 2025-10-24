@@ -36,9 +36,9 @@
       "navigationBarTitleText": "个人信息"
     }
   }, {
-    "path": "pages/mine/info/edit",
+    "path": "pages/mine/viewOrder/viewOrder",
     "style": {
-      "navigationBarTitleText": "编辑资料"
+      "navigationBarTitleText": "查看订单"
     }
   }, {
     "path": "pages/mine/pwd/index",
@@ -48,19 +48,14 @@
   }, {
     "path": "pages/mine/setting/index",
     "style": {
-      "navigationBarTitleText": "应用设置"
+      "navigationBarTitleText": "角色入住"
     }
   }, {
     "path": "pages/mine/help/index",
     "style": {
-      "navigationBarTitleText": "常见问题"
+      "navigationBarTitleText": "举报投诉"
     }
-  }, {
-    "path": "pages/mine/about/index",
-    "style": {
-      "navigationBarTitleText": "关于我们"
-    }
-  }, {
+  },{
     "path": "pages/common/webview/index",
     "style": {
       "navigationBarTitleText": "浏览网页"
@@ -69,6 +64,70 @@
     "path": "pages/common/textview/index",
     "style": {
       "navigationBarTitleText": "浏览文本"
+    }
+  },{
+    "path": "pages/message/index",
+    "style": {
+      "navigationBarTitleText": "消息"
+    }
+  },{
+    "path": "pages/mine/personal/index",
+    "style": {
+      "navigationBarTitleText": "个人中心"
+    }
+  },{
+    "path": "pages/mine/personal/nickname/index",
+    "style": {
+      "navigationBarTitleText": "修改昵称"
+    }
+  },{
+    "path": "pages/mine/personal/phone/index",
+    "style": {
+      "navigationBarTitleText": "修改号码1"
+    }
+  },{
+    "path": "pages/mine/personal/phone/verify_phone",
+    "style": {
+      "navigationBarTitleText": "修改号码2"
+    }
+  },{
+    "path": "pages/mine/personal/address/index",
+    "style": {
+      "navigationBarTitleText": "更改地址"
+    }
+  },{
+    "path": "pages/mine/personal/logoff/index",
+    "style": {
+      "navigationBarTitleText": "注销账户"
+    }
+  },{
+    "path": "pages/join/ShopJoin1",
+    "style": {
+      "navigationBarTitleText": "商家入驻1"
+    }
+  },
+  {
+    "path": "pages/join/ShopJoin2",
+    "style": {
+      "navigationBarTitleText": "商家入驻2"
+    }
+  },
+  {
+    "path": "pages/join/ShopJoin3",
+    "style": {
+      "navigationBarTitleText": "商家入驻3"
+    }
+  },
+  {
+    "path": "pages/test",
+    "style": {
+      "navigationBarTitleText": "测试页面"
+    }
+  },
+  {
+    "path": "pages/merchant/newshop",
+    "style": {
+      "navigationBarTitleText": "新产品上架"
     }
   }],
   "tabBar": {
@@ -82,11 +141,23 @@
         "selectedIconPath": "static/images/tabbar/home_.png",
         "text": "首页"
       }, {
+        "pagePath": "pages/message/index",
+        "iconPath": "/static/images/tabbar/message_.png",
+        "selectedIconPath": "/static/images/tabbar/message.png",
+        "text": "消息"
+      },
+      {
+        "pagePath": "pages/publish/index",
+        "iconPath": "/static/images/tabbar/publish.png",
+        "selectedIconPath": "/static/images/tabbar/publish_.png",
+        "text": "发布"
+      },
+      {
         "pagePath": "pages/work/index",
-        "iconPath": "static/images/tabbar/work.png",
-        "selectedIconPath": "static/images/tabbar/work_.png",
-        "text": "工作台"
-      }, {
+        "iconPath": "/static/images/tabbar/design.png",
+        "selectedIconPath": "/static/images/tabbar/design_.png",
+        "text": "订单"
+      },{
         "pagePath": "pages/mine/index",
         "iconPath": "static/images/tabbar/mine.png",
         "selectedIconPath": "static/images/tabbar/mine_.png",
