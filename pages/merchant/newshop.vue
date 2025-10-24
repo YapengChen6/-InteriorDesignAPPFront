@@ -242,6 +242,15 @@
                 <view class="error-message" v-if="errors[`skuStock${index}`]">请输入有效的库存量</view>
               </view>
             </view>
+
+            <!-- 子产品状态滑钮 -->
+            <view class="setting-item">
+              <view class="setting-label">
+                <text class="label-text">子产品状态</text>
+                <text class="label-desc">{{ sku.status ? '上架' : '下架' }}</text>
+              </view>
+              <switch :checked="sku.status" @change="(e) => onSkuStatusChange(index, e)" color="#1890ff" />
+            </view>
           </view>
         </view>
       </view>
@@ -304,7 +313,8 @@ export default {
           description: '',
           price: '',
           cost: '',
-          stock: ''
+          stock: '',
+          status: true
         }
       ],
       uploadedImages: [],
@@ -337,6 +347,10 @@ export default {
       this.spuData.status = this.statusOptions[this.statusIndex].id;
     },
     
+    onSkuStatusChange(index, e) {
+      this.skuData[index].status = e.detail.value;
+    },
+    
     onHasSkuChange(e) {
       this.spuData.hasSku = e.detail.value;
       if (this.spuData.hasSku && this.skuData.length === 0) {
@@ -344,7 +358,8 @@ export default {
           description: '',
           price: '',
           cost: '',
-          stock: ''
+          stock: '',
+          status: true
         });
       }
     },
@@ -391,7 +406,8 @@ export default {
         description: '',
         price: '',
         cost: '',
-        stock: ''
+        stock: '',
+        status: true
       });
     },
     
@@ -422,7 +438,6 @@ export default {
     },
     
     loadExistingProduct(productId) {
-      // 模拟从服务器加载数据
       const products = {
         '1': {
           name: 'iPhone 14 Pro Max',
@@ -509,7 +524,8 @@ export default {
           description: '',
           price: '',
           cost: '',
-          stock: ''
+          stock: '',
+          status: true
         }
       ];
       
@@ -625,7 +641,6 @@ export default {
 
 <style scoped>
 /* 基础样式 */
-/* 基础样式 */
 .container {
   padding: 24rpx;
   background: linear-gradient(135deg, #f5f7fa 0%, #e4efe9 100%);
@@ -710,7 +725,7 @@ export default {
   color: #999;
 }
 
-/* 选择器与添加按钮 - 宽度调整为100% */
+/* 选择器与添加按钮 */
 .picker-with-add-container {
   width: 100%;
 }
@@ -759,7 +774,7 @@ export default {
   flex-shrink: 0;
 }
 
-/* 删除按钮 - 右上角无边框 */
+/* 删除按钮 */
 .remove-btn-top-right {
   background: none;
   border: none;
@@ -1180,6 +1195,34 @@ export default {
 
 .sku-content {
   padding: 32rpx;
+}
+
+/* 子产品状态设置项样式 */
+.sku-content .setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 0;
+  border-top: 1rpx solid #f0f0f0;
+  margin-top: 24rpx;
+}
+
+.sku-content .setting-label {
+  flex: 1;
+}
+
+.sku-content .label-text {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.sku-content .label-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
 }
 
 /* 操作栏 */
