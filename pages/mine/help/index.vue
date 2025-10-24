@@ -20,34 +20,20 @@
     data() {
       return {
         list: [{
-            icon: 'iconfont icon-github',
-            title: '若依问题',
+            icon: 'iconfont icon-report',
+            title: '举报投诉',
             childList: [{
-              title: '若依开源吗？',
-              content: '开源'
+              title: '举报设计师',
+              content: '举报设计师的不当行为或服务问题'
             }, {
-              title: '若依可以商用吗？',
-              content: '可以'
+              title: '举报监工',
+              content: '举报监工的不专业行为或失职问题'
             }, {
-              title: '若依官网地址多少？',
-              content: 'http://ruoyi.vip'
+              title: '举报用户',
+              content: '举报用户的不当言论或行为'
             }, {
-              title: '若依文档地址多少？',
-              content: 'http://doc.ruoyi.vip'
-            }]
-          },
-          {
-            icon: 'iconfont icon-help',
-            title: '其他问题',
-            childList: [{
-              title: '如何退出登录？',
-              content: '请点击[我的] - [应用设置] - [退出登录]即可退出登录',
-            }, {
-              title: '如何修改用户头像？',
-              content: '请点击[我的] - [选择头像] - [点击提交]即可更换用户头像',
-            }, {
-              title: '如何修改登录密码？',
-              content: '请点击[我的] - [应用设置] - [修改密码]即可修改登录密码',
+              title: '举报帖子',
+              content: '举报违规或不良内容帖子'
             }]
           }
         ]
