@@ -9,8 +9,12 @@
 					<text class="iconfont icon-user-cog"></text> 切换角色
 				</button>
 				
+				<!-- 角色入住按钮 -->
+				<button class="role-checkin-btn" @tap="handleRoleCheckin">
+					<text class="iconfont icon-home"></text> 角色入住
+				</button>
+				
 				<view class="profile-header" @tap="goToPersonalCenter">
-
 					<view class="avatar-container">
 						<image class="avatar" :src="userInfo.avatar || defaultAvatar" mode="aspectFill"></image>
 					</view>
@@ -464,6 +468,14 @@
 				});
 			},
 			
+			// 处理角色入住按钮点击
+			handleRoleCheckin() {
+			    // 跳转到角色设置页面
+			    uni.navigateTo({
+			        url: '/pages/mine/setting/index'
+			    });
+			},
+			
 			// 处理统计项点击
 			handleStatClick(statName) {
 				console.log(`点击了统计: ${statName}`);
@@ -614,6 +626,23 @@
 	.switch-role-btn {
 		position: absolute;
 		top: 40rpx;
+		right: 40rpx;
+		background: rgba(255, 255, 255, 0.2);
+		backdrop-filter: blur(20rpx);
+		color: white;
+		border: none;
+		padding: 16rpx 24rpx;
+		border-radius: 40rpx;
+		font-size: 24rpx;
+		display: flex;
+		align-items: center;
+		z-index: 5;
+	}
+	
+	/* 角色入住按钮样式 */
+	.role-checkin-btn {
+		position: absolute;
+		top: 150rpx; /* 放在切换角色按钮下方 */
 		right: 40rpx;
 		background: rgba(255, 255, 255, 0.2);
 		backdrop-filter: blur(20rpx);
@@ -1000,4 +1029,5 @@
 	.icon-store:before { content: "\e60e"; }
 	.icon-flag:before { content: "\e60f"; } /* 新增：举报投诉图标 */
 	.icon-map-marker:before { content: "\e610"; } /* 新增：收货地址图标 */
+	.icon-home:before { content: "\e611"; } /* 新增：角色入住图标 */
 </style>

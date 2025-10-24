@@ -1,7 +1,6 @@
 <template>
   <view class="setting-container" :style="{height: `${windowHeight}px`}">
     
-    
     <!-- 身份提示 -->
     <view class="identity-hint">已选择您的身份：{{selectedIdentity}}</view>
     
@@ -55,20 +54,38 @@
     data() {
       return {
         windowHeight: uni.getSystemInfoSync().windowHeight,
-        selectedIdentity: '业主' // 默认选择业主
+        selectedIdentity: '业主' // 默认选择商家
       }
     },
     methods: {
       // 选择身份
       selectIdentity(identity) {
         this.selectedIdentity = identity;
+        
+        // 如果选择的是商家，直接跳转到商家加入页面
+        if (identity === '商家') {
+          this.navigateToShopJoin();
+        }
       },
       
       // 确认选择
       handleConfirm() {
         this.$modal.showToast(`已选择身份：${this.selectedIdentity}`)
-        // 这里可以添加后续逻辑，比如跳转到对应身份的页面
-        // this.$tab.navigateTo('/pages/home/index')
+        
+        // 根据选择的身份跳转到不同页面
+        if (this.selectedIdentity === '商家') {
+          this.navigateToShopJoin();
+        } else {
+          // 这里可以添加其他身份的跳转逻辑
+          // this.$tab.navigateTo('/pages/home/index')
+        }
+      },
+      
+      // 跳转到商家加入页面
+      navigateToShopJoin() {
+        uni.navigateTo({
+          url: '/pages/join/ShopJoin1'
+        });
       }
     }
   }

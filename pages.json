@@ -21,9 +21,24 @@
       "navigationBarTitleText": "工作台"
     }
   }, {
+    "path": "pages/mine/index1",
+    "style": {
+      "navigationBarTitleText": "个人我的"
+    }
+  },{
     "path": "pages/mine/index",
     "style": {
-      "navigationBarTitleText": "我的"
+      "navigationBarTitleText": "设计师我的"
+    }
+  },{
+    "path": "pages/mine/index2",
+    "style": {
+      "navigationBarTitleText": "商家我的"
+    }
+  },{
+    "path": "pages/mine/index3",
+    "style": {
+      "navigationBarTitleText": "监工我的"
     }
   }, {
     "path": "pages/mine/avatar/index",
@@ -158,7 +173,7 @@
         "selectedIconPath": "/static/images/tabbar/design_.png",
         "text": "订单"
       },{
-        "pagePath": "pages/mine/index",
+        "pagePath": "pages/mine/index1",
         "iconPath": "static/images/tabbar/mine.png",
         "selectedIconPath": "static/images/tabbar/mine_.png",
         "text": "我的"
