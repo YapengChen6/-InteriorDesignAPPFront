@@ -21,7 +21,7 @@
 							<text class="warranty-text">质保还剩{{ userInfo.warrantyDays }}天</text>
 						</view>
 						<view class="current-role">
-							<text class="iconfont icon-user"></text> {{ userInfo.role || '个人用户' }}
+							<text class="iconfont icon-user"></text> {{ userInfo.role || '设计师' }}
 						</view>
 					</view>
 				</view>
