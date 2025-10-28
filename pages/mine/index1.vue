@@ -484,30 +484,30 @@
 			
 			// 处理菜单项点击
 			handleMenuClick(menuName) {
-				console.log(`点击了功能: ${menuName}`);
-				// 在实际应用中，这里可以添加页面跳转逻辑
-				switch(menuName) {
-					case '查看订单':
-						// 跳转到订单页面
-						uni.navigateTo({
-							url: '/pages/order/list'
-						});
-						break;
-					case '举报投诉':
-						// 跳转到举报投诉页面
-						uni.navigateTo({
-							url: '/pages/complaint/index'
-						});
-						break;
-					case '收货地址':
-						// 跳转到收货地址页面
-						uni.navigateTo({
-							url: '/pages/address/list'
-						});
-						break;
-					default:
-						break;
-				}
+			    console.log(`点击了功能: ${menuName}`);
+			    // 在实际应用中，这里可以添加页面跳转逻辑
+			    switch(menuName) {
+			        case '查看订单':
+			            // 跳转到订单页面
+			            uni.navigateTo({
+			                url: '/pages/order/list'
+			            });
+			            break;
+			        case '举报投诉':
+			            // 跳转到举报投诉页面
+			            uni.navigateTo({
+			                url: '/pages/mine/help/index'
+			            });
+			            break;
+			        case '收货地址':
+			            // 跳转到收货地址页面 - 修改为 mine/address
+			            uni.navigateTo({
+			                url: '/pages/mine/address'
+			            });
+			            break;
+			        default:
+			            break;
+			    }
 			},
 			
 			// 处理浮动操作按钮点击

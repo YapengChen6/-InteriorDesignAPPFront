@@ -54,18 +54,13 @@
     data() {
       return {
         windowHeight: uni.getSystemInfoSync().windowHeight,
-        selectedIdentity: '业主' // 默认选择商家
+        selectedIdentity: '商家' // 默认选择商家
       }
     },
     methods: {
       // 选择身份
       selectIdentity(identity) {
         this.selectedIdentity = identity;
-        
-        // 如果选择的是商家，直接跳转到商家加入页面
-        if (identity === '商家') {
-          this.navigateToShopJoin();
-        }
       },
       
       // 确认选择
@@ -75,9 +70,10 @@
         // 根据选择的身份跳转到不同页面
         if (this.selectedIdentity === '商家') {
           this.navigateToShopJoin();
-        } else {
-          // 这里可以添加其他身份的跳转逻辑
-          // this.$tab.navigateTo('/pages/home/index')
+        } else if (this.selectedIdentity === '设计师') {
+          this.navigateToDesignJoin();
+        } else if (this.selectedIdentity === '监工') {
+          this.navigateToSupervisorJoin();
         }
       },
       
@@ -85,6 +81,20 @@
       navigateToShopJoin() {
         uni.navigateTo({
           url: '/pages/join/ShopJoin1'
+        });
+      },
+      
+      // 跳转到设计师加入页面
+      navigateToDesignJoin() {
+        uni.navigateTo({
+          url: '/pages/join/designJoin1'
+        });
+      },
+      
+      // 跳转到监工加入页面
+      navigateToSupervisorJoin() {
+        uni.navigateTo({
+          url: '/pages/join/supervisorJoin1'
         });
       }
     }

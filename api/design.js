@@ -1,67 +1,64 @@
+// 设计师入驻相关API
 import request from '@/utils/request'
 import { getToken } from '@/utils/auth'
 
-// ==================== 物料供应商申请相关API ====================
-
-// 提交入驻申请
-export function submitApplication(applicationDTO) {
+// 提交设计师入驻申请
+export function submitDesignerApplication(applicationDTO) {
   return request({
-    url: '/api/material-supplier/application',
+    url: '/api/designer/application',
     method: 'post',
     data: applicationDTO
   })
 }
 
-// 查询申请状态
-export function getApplicationStatus(applicationId) {
+// 查询设计师申请状态
+export function getDesignerApplicationStatus() {
   return request({
-    url: '/api/material-supplier/status/' + applicationId,
+    url: '/api/designer/status',
     method: 'get'
   })
 }
 
-// 获取申请详情
-export function getApplicationDetail(applicationId) {
+// 获取设计师申请详情
+export function getDesignerApplicationDetail() {
   return request({
-    url: '/api/material-supplier/detail/' + applicationId,
+    url: '/api/designer/detail',
     method: 'get'
   })
 }
 
-// 更新申请信息
-export function updateApplication(applicationId, applicationDTO) {
+// 更新设计师申请信息
+export function updateDesignerApplication(applicationDTO) {
   return request({
-    url: '/api/material-supplier/application/' + applicationId,
+    url: '/api/designer/application',
     method: 'put',
     data: applicationDTO
   })
 }
 
-// 撤销申请
-export function cancelApplication(applicationId) {
+// 取消设计师申请
+export function cancelDesignerApplication() {
   return request({
-    url: '/api/material-supplier/application/' + applicationId,
-    method: 'delete'
+    url: '/api/designer/application/cancel',
+    method: 'put'
   })
 }
 
-// 获取申请列表
-export function getApplicationList(params) {
+// 管理员查询设计师申请列表
+export function getDesignerApplicationList(params) {
   return request({
-    url: '/api/material-supplier/applications',
+    url: '/api/designer/admin/list',
     method: 'get',
     params: params
   })
 }
 
-// 下载申请材料模板
+// 下载模板
 export function downloadTemplate() {
   return request({
-    url: '/api/material-supplier/template',
-    headers: {
-      isToken: false
-    },
-    method: 'get'
+    url: '/api/designer/template',
+    method: 'get',
+    responseType: 'blob'
   })
 }
 
@@ -684,3 +681,4 @@ export default {
   formatFileSize,
   getCurrentTimestamp
 }
+

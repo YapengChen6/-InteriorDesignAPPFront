@@ -25,6 +25,11 @@
     "style": {
       "navigationBarTitleText": "我的"
     }
+  },{
+    "path": "pages/mine/address",
+    "style": {
+      "navigationBarTitleText": "收货地址"
+    }
   }, {
     "path": "pages/mine/avatar/index",
     "style": {
@@ -105,20 +110,47 @@
     "style": {
       "navigationBarTitleText": "商家入驻1"
     }
-  },
-  {
+  },{
     "path": "pages/join/ShopJoin2",
     "style": {
       "navigationBarTitleText": "商家入驻2"
     }
-  },
-  {
+  },{
     "path": "pages/join/ShopJoin3",
     "style": {
       "navigationBarTitleText": "商家入驻3"
     }
-  },
-  {
+  },{
+    "path": "pages/join/designJoin1",
+    "style": {
+      "navigationBarTitleText": "设计师入驻1"
+    }
+  },{
+    "path": "pages/join/designJoin2",
+    "style": {
+      "navigationBarTitleText": "设计师入驻2"
+    }
+  },{
+    "path": "pages/join/designJoin3",
+    "style": {
+      "navigationBarTitleText": "设计师入驻3"
+    }
+  },{
+    "path": "pages/join/supervisorJoin1",
+    "style": {
+      "navigationBarTitleText": "监工入驻1"
+    }
+  },{
+    "path": "pages/join/supervisorJoin2",
+    "style": {
+      "navigationBarTitleText": "监工入驻2"
+    }
+  },{
+    "path": "pages/join/supervisorJoin3",
+    "style": {
+      "navigationBarTitleText": "监工入驻3"
+    }
+  },{
     "path": "pages/test",
     "style": {
       "navigationBarTitleText": "测试页面"

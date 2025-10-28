@@ -209,7 +209,7 @@
 						<text class="iconfont icon-user"></text>
 					</view>
 					<view class="role-info">
-						<text class="role-name">个人用户</text>
+						<text class="role-name">监工</text>
 						<text class="role-desc">浏览内容、发布作品、参与互动</text>
 					</view>
 				</view>
@@ -478,7 +478,7 @@
 					case '产品管理':
 						// 跳转到产品管理页面
 						uni.navigateTo({
-							url: '/pages/business/product/index'
+							url: '/pages/business/merchant/newshop'
 						});
 						break;
 					case '商家页面':
