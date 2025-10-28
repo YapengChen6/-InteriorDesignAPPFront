@@ -322,7 +322,7 @@ export default {
             required: true,
             errorMessage: '店铺地址不能为空'
           }, {
-            minLength: 10,
+            minLength: 5,
             errorMessage: '地址信息过短，请填写完整的店铺地址'
           }, {
             maxLength: 255,
