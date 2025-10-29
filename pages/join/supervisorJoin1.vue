@@ -26,31 +26,30 @@
     <view class="example">
       <uni-forms ref="form" :model="formData" labelWidth="180rpx">
         <!-- 监工信息 -->
-        <uni-forms-item label="监工名称" name="supervisorName" required>
+        <uni-forms-item label="监工名称" name="name" required>
           <uni-easyinput 
-            v-model="formData.supervisorName" 
+            v-model="formData.name" 
             placeholder="请输入监工名称或团队名称" 
             type="text"
-            @input="filterChinese('supervisorName')"
+            @input="filterChinese('name')"
           />
         </uni-forms-item>
         
-        <uni-forms-item label="监工姓名" name="identity" required>
+        <uni-forms-item label="所在城市" name="city" required>
           <uni-easyinput 
-            v-model="formData.identity" 
-            placeholder="请输入监工真实姓名" 
+            v-model="formData.city" 
+            placeholder="请输入所在城市" 
             type="text"
-            @input="filterChinese('identity')"
+            @input="filterChinese('city')"
           />
         </uni-forms-item>
         
-        <uni-forms-item label="手机号" name="phone" required>
+        <uni-forms-item label="备注" name="remark">
           <uni-easyinput 
-            v-model="formData.phone" 
-            placeholder="请填写联系方式" 
-            type="text"
-            @input="filterNumber('phone')"
-            maxlength="11"
+            v-model="formData.remark" 
+            placeholder="请输入备注信息" 
+            type="textarea"
+            maxlength="500"
           />
         </uni-forms-item>
         
@@ -63,23 +62,24 @@
             <!-- 监理资格证书 -->
             <view class="upload-item">
               <view class="upload-item-header">
-                <text class="upload-item-title">监理资格证</text>
-                <text class="upload-item-subtitle">监理工程师证书等</text>
+                <text class="upload-item-title">监理</text>
+                <text class="upload-item-subtitle">资格证</text>
+                
               </view>
               
               <view class="upload-item-content">
                 <!-- 预览区域 -->
-                <view v-if="formData.supervisorCertificate" class="preview-container">
-                  <image :src="formData.supervisorCertificate" class="preview-image" mode="aspectFill" @click="previewImage('supervisorCertificate')"></image>
+                <view v-if="formData.qualificationCertificate" class="preview-container">
+                  <image :src="formData.qualificationCertificate" class="preview-image" mode="aspectFill" @click="previewImage('qualificationCertificate')"></image>
                   <view class="preview-actions">
-                    <text class="preview-action" @click="previewImage('supervisorCertificate')">预览</text>
-                    <text class="preview-action delete" @click="removeImage('supervisorCertificate')">删除</text>
+                    <text class="preview-action" @click="previewImage('qualificationCertificate')">预览</text>
+                    <text class="preview-action delete" @click="removeImage('qualificationCertificate')">删除</text>
                   </view>
                 </view>
                 
                 <!-- 上传按钮 -->
-                <view class="upload-btn-container" v-if="!formData.supervisorCertificate">
-                  <view class="upload-btn" @click="uploadFile('supervisorCertificate')">
+                <view class="upload-btn-container" v-if="!formData.qualificationCertificate">
+                  <view class="upload-btn" @click="uploadFile('qualificationCertificate')">
                     <view class="upload-btn-content">
                       <text class="upload-btn-icon">+</text>
                     </view>
@@ -87,46 +87,10 @@
                 </view>
                 
                 <!-- 上传进度 -->
-                <view v-if="uploadProgress.supervisorCertificate > 0 && uploadProgress.supervisorCertificate < 100" class="upload-progress">
-                  <text class="progress-text">上传中 {{uploadProgress.supervisorCertificate}}%</text>
+                <view v-if="uploadProgress.qualificationCertificate > 0 && uploadProgress.qualificationCertificate < 100" class="upload-progress">
+                  <text class="progress-text">上传中 {{uploadProgress.qualificationCertificate}}%</text>
                   <view class="progress-bar">
-                    <view class="progress-inner" :style="{width: uploadProgress.supervisorCertificate + '%'}"></view>
-                  </view>
-                </view>
-              </view>
-            </view>
-
-            <!-- 工程管理经验证明 -->
-            <view class="upload-item">
-              <view class="upload-item-header">
-                <text class="upload-item-title">经验证明</text>
-                <text class="upload-item-subtitle">项目管理经验证明</text>
-              </view>
-              
-              <view class="upload-item-content">
-                <!-- 预览区域 -->
-                <view v-if="formData.experienceCertificate" class="preview-container">
-                  <image :src="formData.experienceCertificate" class="preview-image" mode="aspectFill" @click="previewImage('experienceCertificate')"></image>
-                  <view class="preview-actions">
-                    <text class="preview-action" @click="previewImage('experienceCertificate')">预览</text>
-                    <text class="preview-action delete" @click="removeImage('experienceCertificate')">删除</text>
-                  </view>
-                </view>
-                
-                <!-- 上传按钮 -->
-                <view class="upload-btn-container" v-if="!formData.experienceCertificate">
-                  <view class="upload-btn" @click="uploadFile('experienceCertificate')">
-                    <view class="upload-btn-content">
-                      <text class="upload-btn-icon">+</text>
-                    </view>
-                  </view>
-                </view>
-                
-                <!-- 上传进度 -->
-                <view v-if="uploadProgress.experienceCertificate > 0 && uploadProgress.experienceCertificate < 100" class="upload-progress">
-                  <text class="progress-text">上传中 {{uploadProgress.experienceCertificate}}%</text>
-                  <view class="progress-bar">
-                    <view class="progress-inner" :style="{width: uploadProgress.experienceCertificate + '%'}"></view>
+                    <view class="progress-inner" :style="{width: uploadProgress.qualificationCertificate + '%'}"></view>
                   </view>
                 </view>
               </view>
@@ -249,15 +213,16 @@
 
 <script>
 import { 
-  submitSupervisorApplication, 
-  uploadImage, 
-  deleteImage,
-  RELATED_TYPES,
-  UPLOAD_STAGES,
-  getFileDescription,
-  getFileSequence,
-  getRelatedTypeByFileType
-} from '@/api/join.js';
+  submitSupervisorApplication,
+  getSupervisorApplicationStatus,
+  getSupervisorApplicationDetail,
+  updateSupervisorApplication,
+  reviewSupervisorApplication,
+  getSupervisorApplicationList,
+  getSupervisorApplicationDetailForAdmin,
+  uploadImage,
+  deleteImage
+} from '@/api/supervisor.js';
 
 export default {
   data() {
@@ -268,35 +233,32 @@ export default {
       
       // 上传进度
       uploadProgress: {
-        supervisorCertificate: 0,
-        experienceCertificate: 0,
+        qualificationCertificate: 0,
         handheldIdPhoto: 0,
         idCardFrontPhoto: 0,
         idCardBackPhoto: 0
       },
       
       formData: {
-        supervisorName: '',           // 监工名称/团队名称
-        identity: '',               // 监工真实姓名
-        phone: '',                  // 联系人手机号
-        supervisorCertificate: '',    // 监工资格证书
-        experienceCertificate: '',    // 工程管理经验证明
-        handheldIdPhoto: '',        // 手持身份证
-        idCardFrontPhoto: '',       // 身份证正面
-        idCardBackPhoto: ''         // 身份证反面
+        name: '',               // 监工名称
+        city: '',               // 监工所在城市
+        qualificationCertificate: '',    // 监工资格证书
+        remark: '',             // 备注
+        handheldIdPhoto: '',    // 手持身份证
+        idCardFrontPhoto: '',   // 身份证正面
+        idCardBackPhoto: ''     // 身份证反面
       },
       
       // 存储上传后的文件ID
       uploadedFiles: {
-        supervisorCertificate: null,
-        experienceCertificate: null,
+        qualificationCertificate: null,
         handheldIdPhoto: null,
         idCardFrontPhoto: null,
         idCardBackPhoto: null
       },
       
       rules: {
-        supervisorName: {
+        name: {
           rules: [{
             required: true,
             errorMessage: '监工名称不能为空'
@@ -304,44 +266,29 @@ export default {
             minLength: 2,
             errorMessage: '监工名称至少2个字符'
           }, {
-            maxLength: 200,
-            errorMessage: '监工名称长度不能超过200个字符'
+            maxLength: 255,
+            errorMessage: '监工名称长度不能超过255个字符'
           }]
         },
-        identity: {
+        city: {
           rules: [{
             required: true,
-            errorMessage: '监工姓名不能为空'
-          }, {
-            minLength: 2,
-            errorMessage: '监工姓名至少2个字符'
+            errorMessage: '所在城市不能为空'
           }, {
             maxLength: 255,
-            errorMessage: '监工姓名长度不能超过255个字符'
+            errorMessage: '所在城市长度不能超过255个字符'
           }]
         },
-        phone: {
+        remark: {
           rules: [{
-            required: true,
-            errorMessage: '手机号码不能为空'
-          }, {
-            pattern: /^1[3-9]\d{9}$/,
-            errorMessage: '请输入正确的11位手机号码'
-          }, {
-            maxLength: 20,
-            errorMessage: '手机号长度不能超过20个字符'
+            maxLength: 500,
+            errorMessage: '备注长度不能超过500个字符'
           }]
         },
-        supervisorCertificate: {
+        qualificationCertificate: {
           rules: [{
             required: true,
             errorMessage: '请上传监工资格证书'
-          }]
-        },
-        experienceCertificate: {
-          rules: [{
-            required: true,
-            errorMessage: '请上传工程管理经验证明'
           }]
         },
         handheldIdPhoto: {
@@ -391,11 +338,6 @@ export default {
     
     filterChinese(fieldName) {
       this.formData[fieldName] = this.formData[fieldName].replace(/[^\u4e00-\u9fa5]/g, '');
-      this.saveApplicationData()
-    },
-    
-    filterNumber(fieldName) {
-      this.formData[fieldName] = this.formData[fieldName].replace(/[^\d]/g, '');
       this.saveApplicationData()
     },
     
@@ -472,8 +414,7 @@ export default {
     
     getUploadTypeName(type) {
       const mapping = {
-        supervisorCertificate: '监工资格证书',
-        experienceCertificate: '工程管理经验证明',
+        qualificationCertificate: '监工资格证书',
         handheldIdPhoto: '手持身份证',
         idCardFrontPhoto: '身份证正面',
         idCardBackPhoto: '身份证反面'
@@ -485,11 +426,11 @@ export default {
       try {
         console.log('🚀 Starting actual file upload...')
         
-        const relatedType = getRelatedTypeByFileType(fileType)
+        const relatedType = this.getRelatedTypeByFileType(fileType)
         const relatedId = this.applicationId ? Number(this.applicationId) : 0
-        const description = getFileDescription(fileType)
-        const stage = UPLOAD_STAGES.APPLICATION
-        const sequence = getFileSequence(fileType)
+        const description = this.getFileDescription(fileType)
+        const stage = 'APPLICATION'
+        const sequence = this.getFileSequence(fileType)
         
         console.log('📋 Upload parameters:', {
           filePath,
@@ -529,6 +470,39 @@ export default {
         console.error('❌ Upload API call failed:', error)
         throw error
       }
+    },
+    
+    // 根据文件类型获取 relatedType
+    getRelatedTypeByFileType(fileType) {
+      const typeMapping = {
+        qualificationCertificate: 5, // ID_CARD
+        handheldIdPhoto: 5,          // ID_CARD
+        idCardFrontPhoto: 5,         // ID_CARD
+        idCardBackPhoto: 5           // ID_CARD
+      }
+      return typeMapping[fileType] || 2 // 默认 MERCHANT_APPLICATION
+    },
+    
+    // 获取文件描述
+    getFileDescription(fileType) {
+      const descriptions = {
+        qualificationCertificate: '监工资格证书',
+        handheldIdPhoto: '手持身份证照片',
+        idCardFrontPhoto: '身份证正面照片',
+        idCardBackPhoto: '身份证反面照片'
+      }
+      return descriptions[fileType] || '申请材料'
+    },
+    
+    // 生成文件序列号
+    getFileSequence(fileType) {
+      const sequences = {
+        qualificationCertificate: 1,
+        idCardFrontPhoto: 2,
+        idCardBackPhoto: 3,
+        handheldIdPhoto: 4
+      }
+      return sequences[fileType] || 0
     },
     
     previewImage(type) {
@@ -580,11 +554,10 @@ export default {
     // 构建申请数据
     buildApplicationData() {
       const applicationData = {
-        supervisorName: this.formData.supervisorName,
-        identity: this.formData.identity,
-        phone: this.formData.phone,
-        supervisorCertificate: this.formData.supervisorCertificate,
-        experienceCertificate: this.formData.experienceCertificate,
+        name: this.formData.name,
+        city: this.formData.city,
+        remark: this.formData.remark,
+        qualificationCertificate: this.formData.qualificationCertificate,
         handheldIdPhoto: this.formData.handheldIdPhoto,
         idCardFrontPhoto: this.formData.idCardFrontPhoto,
         idCardBackPhoto: this.formData.idCardBackPhoto
@@ -612,7 +585,7 @@ export default {
         console.log('✅ Form validation passed')
         
         // 检查必填图片
-        const requiredImages = ['supervisorCertificate', 'experienceCertificate', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto']
+        const requiredImages = ['qualificationCertificate', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto']
         const missingImages = requiredImages.filter(type => !this.formData[type])
         
         if (missingImages.length > 0) {

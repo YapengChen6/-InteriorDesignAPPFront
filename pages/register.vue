@@ -254,7 +254,7 @@ export default {
           uni.showToast({
             title: '验证码发送成功，有效期2分钟',
             icon: 'success',
-            duration: 3000
+            duration: 2000
           })
           
           if (process.env.NODE_ENV === 'development') {

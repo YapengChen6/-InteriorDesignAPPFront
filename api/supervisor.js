@@ -2,57 +2,65 @@
 import request from '@/utils/request'
 import { getToken } from '@/utils/auth'
 
-// 提交设计师入驻申请
-export function submitDesignerApplication(applicationDTO) {
+// 提交监理入驻申请
+export function submitSupervisorApplication(applicationDTO) {
   return request({
-    url: '/api/designer/application',
+    url: '/api/supervisor/application',
     method: 'post',
     data: applicationDTO
   })
 }
 
-// 查询设计师申请状态
-export function getDesignerApplicationStatus() {
+// 查询监理申请状态
+export function getSupervisorApplicationStatus() {
   return request({
-    url: '/api/designer/status',
+    url: '/api/supervisor/status',
     method: 'get'
   })
 }
 
-// 获取设计师申请详情
-export function getDesignerApplicationDetail() {
+// 获取监理申请详情
+export function getSupervisorApplicationDetail() {
   return request({
-    url: '/api/designer/detail',
+    url: '/api/supervisor/detail',
     method: 'get'
   })
 }
 
-// 更新设计师申请信息
-export function updateDesignerApplication(applicationDTO) {
+// 修改监理申请信息
+export function updateSupervisorApplication(applicationDTO) {
   return request({
-    url: '/api/designer/application',
+    url: '/api/supervisor/application',
     method: 'put',
     data: applicationDTO
   })
 }
 
-// 取消设计师申请
-export function cancelDesignerApplication() {
+// 管理员查询监理申请列表
+export function getSupervisorApplicationList(queryDTO) {
   return request({
-    url: '/api/designer/application/cancel',
-    method: 'put'
-  })
-}
-
-// 管理员查询设计师申请列表
-export function getDesignerApplicationList(params) {
-  return request({
-    url: '/api/designer/admin/list',
+    url: '/api/supervisor/admin/list',
     method: 'get',
-    params: params
+    params: queryDTO
   })
 }
 
+// 管理员审核监理申请
+export function reviewSupervisorApplication(reviewDTO) {
+  return request({
+    url: '/api/supervisor/admin/review',
+    method: 'post',
+    data: reviewDTO
+  })
+}
+
+// 管理员查看监理申请详情
+export function getSupervisorApplicationDetailForAdmin(supervisorsId) {
+  return request({
+    url: `/api/supervisor/admin/detail/${supervisorsId}`,
+    method: 'get'
+  })
+}
 // 下载模板
 export function downloadTemplate() {
   return request({
@@ -636,14 +644,14 @@ export function getCurrentTimestamp() {
 // ==================== 默认导出 ====================
 
 export default {
-  // 设计师入驻申请
-  submitDesignerApplication,
-  getDesignerApplicationStatus,
-  getDesignerApplicationDetail,
-  updateDesignerApplication,
-  cancelDesignerApplication,
-  getDesignerApplicationList,
-  downloadTemplate,
+  // 监理入驻申请
+  submitSupervisorApplication,
+  getSupervisorApplicationStatus,
+  getSupervisorApplicationDetail,
+  updateSupervisorApplication,
+  reviewSupervisorApplication,
+  getSupervisorApplicationList,
+  getSupervisorApplicationDetailForAdmin,
   
   // 媒体上传
   uploadImage,

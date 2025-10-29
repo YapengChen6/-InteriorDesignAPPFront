@@ -16,10 +16,7 @@
 					<view class="user-info">
 						<text class="user-name">{{ userInfo.nickName || userInfo.userName || '用户' }}</text>
 						<text class="user-phone">{{ userInfo.phone || '未绑定手机号' }}</text>
-						<view class="badge-container" v-if="userInfo.warrantyDays">
-							<text class="badge">入质保</text>
-							<text class="warranty-text">质保还剩{{ userInfo.warrantyDays }}天</text>
-						</view>
+						
 						<view class="current-role">
 							<text class="iconfont icon-user"></text> {{ userInfo.role || '设计师' }}
 						</view>
