@@ -1,6 +1,7 @@
 <template>
 	<view class="container">
 		<view class="page-body uni-content-info">
+			<!-- 图片裁剪区域 -->
 			<view class='cropper-content'>
 				<view v-if="isShowImg" class="uni-corpper" :style="'width:'+cropperInitW+'px;height:'+cropperInitH+'px;background:#000'">
 					<view class="uni-corpper-content" :style="'width:'+cropperW+'px;height:'+cropperH+'px;left:'+cropperL+'px;top:'+cropperT+'px'">
@@ -27,6 +28,56 @@
 					</view>
 				</view>
 			</view>
+			
+			<!-- 压缩设置区域 -->
+			<view class="compression-settings" v-if="isShowImg">
+				<view class="setting-title">图片压缩设置</view>
+				<view class="setting-item">
+					<text class="setting-label">图片质量</text>
+					<slider 
+						:value="compressionQuality" 
+						min="30" 
+						max="100" 
+						step="5" 
+						@change="onQualityChange"
+						activeColor="#4A90E2"
+						show-value
+					/>
+					<text class="setting-value">{{ compressionQuality }}%</text>
+				</view>
+				<view class="setting-item">
+					<text class="setting-label">目标尺寸</text>
+					<radio-group @change="onSizeChange">
+						<label class="radio-label">
+							<radio value="200" :checked="targetSize === 200" color="#4A90E2" /> 小 (200×200)
+						</label>
+						<label class="radio-label">
+							<radio value="400" :checked="targetSize === 400" color="#4A90E2" /> 中 (400×400)
+						</label>
+						<label class="radio-label">
+							<radio value="600" :checked="targetSize === 600" color="#4A90E2" /> 大 (600×600)
+						</label>
+					</radio-group>
+				</view>
+				<view class="compression-preview">
+					<text class="preview-title">压缩预览</text>
+					<view class="preview-content">
+						<view class="preview-item">
+							<text class="preview-label">原图大小:</text>
+							<text class="preview-value">{{ originalSize }}</text>
+						</view>
+						<view class="preview-item">
+							<text class="preview-label">压缩后:</text>
+							<text class="preview-value">{{ compressedSize }}</text>
+						</view>
+						<view class="preview-item">
+							<text class="preview-label">节省空间:</text>
+							<text class="preview-value save">{{ sizeReduction }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+			
 			<view class='cropper-config'>
 				<button type="primary reverse" @click="getImage" style='margin-top: 30rpx;'> 选择头像 </button>
 				<button type="warn" @click="getImageInfo" style='margin-top: 30rpx;'> 提交 </button>
@@ -97,7 +148,15 @@
 				innerAspectRadio: DRAFG_MOVE_RATIO,
 				
 				// 上传相关
-				uploading: false
+				uploading: false,
+				
+				// 压缩设置
+				compressionQuality: 70, // 默认压缩质量70%
+				targetSize: 400, // 默认目标尺寸400×400
+				originalSize: '0 KB',
+				compressedSize: '0 KB',
+				sizeReduction: '0%',
+				originalFileSize: 0
 			}
 		},
 		/**
@@ -106,6 +165,10 @@
 		onReady: function () {
 			this.loadImage()
 		},
+		onUnload() {
+			// 移除事件监听
+			uni.$off('avatarUpdated')
+		},
 		methods: {
 			setData: function (obj) {
 				let that = this
@@ -113,10 +176,26 @@
 					that.$set(that.$data, key, obj[key])
 				})
 			},
+			
 			getImage: function () {
 				var _this = this
 				uni.chooseImage({
+					count: 1,
+					sizeType: ['compressed', 'original'], // 可以选压缩图或原图
+					sourceType: ['album', 'camera'],
 					success: function (res) {
+						console.log('📸 选择的图片:', res.tempFilePaths[0])
+						
+						// 获取原图文件大小
+						uni.getFileInfo({
+							filePath: res.tempFilePaths[0],
+							success: (fileInfo) => {
+								_this.originalFileSize = fileInfo.size
+								_this.originalSize = _this.formatFileSize(fileInfo.size)
+								_this.updateCompressionPreview()
+							}
+						})
+						
 						_this.setData({
 							imageSrc: res.tempFilePaths[0],
 						})
@@ -124,6 +203,7 @@
 					},
 				})
 			},
+			
 			loadImage: function () {
 				var _this = this
 
@@ -194,6 +274,7 @@
 					}
 				})
 			},
+			
 			// 拖动时候触发的touchStart事件
 			contentStartMove(e) {
 				PAGE_X = e.touches[0].pageX
@@ -255,19 +336,44 @@
 					var canvasL = (_this.cutL / _this.cropperW) * IMG_REAL_W
 					var canvasT = (_this.cutT / _this.cropperH) * IMG_REAL_H
 					
+					console.log('🎨 压缩设置:', {
+						质量: _this.compressionQuality + '%',
+						目标尺寸: _this.targetSize + '×' + _this.targetSize,
+						裁剪区域: { canvasL, canvasT, canvasW, canvasH }
+					})
+					
+					// 计算压缩质量 (0-1)
+					const quality = _this.compressionQuality / 100
+					
 					uni.canvasToTempFilePath({
 						x: canvasL,
 						y: canvasT,
 						width: canvasW,
 						height: canvasH,
-						destWidth: canvasW,
-						destHeight: canvasH,
-						quality: 0.5,
+						destWidth: _this.targetSize,  // 使用设置的压缩尺寸
+						destHeight: _this.targetSize, // 使用设置的压缩尺寸
+						quality: quality,              // 使用设置的压缩质量
 						canvasId: 'myCanvas',
 						success: function (res) {
 							uni.hideLoading()
 							console.log('🎨 生成的临时文件路径:', res.tempFilePath)
-							console.log('🎨 临时文件类型:', typeof res.tempFilePath)
+							
+							// 获取压缩后的文件大小
+							uni.getFileInfo({
+								filePath: res.tempFilePath,
+								success: (fileInfo) => {
+									_this.compressedSize = _this.formatFileSize(fileInfo.size)
+									const reduction = ((_this.originalFileSize - fileInfo.size) / _this.originalFileSize * 100).toFixed(1)
+									_this.sizeReduction = reduction + '%'
+									
+									console.log('📊 压缩效果:', {
+										原图大小: _this.originalSize,
+										压缩后: _this.compressedSize,
+										节省空间: _this.sizeReduction
+									})
+								}
+							})
+							
 							_this.uploadAvatar(res.tempFilePath)
 						},
 						fail: function (error) {
@@ -277,6 +383,40 @@
 						}
 					})
 				})
+			},
+			
+			// 压缩质量变化
+			onQualityChange(e) {
+				this.compressionQuality = e.detail.value
+				this.updateCompressionPreview()
+			},
+			
+			// 目标尺寸变化
+			onSizeChange(e) {
+				this.targetSize = parseInt(e.detail.value)
+				this.updateCompressionPreview()
+			},
+			
+			// 更新压缩预览信息
+			updateCompressionPreview() {
+				// 这里可以添加更精确的压缩大小预估
+				// 简单估算：文件大小与质量成正比，与尺寸的平方成正比
+				const qualityFactor = this.compressionQuality / 100
+				const sizeFactor = Math.pow(this.targetSize / 600, 2) // 以600为基准
+				const estimatedSize = this.originalFileSize * qualityFactor * sizeFactor
+				
+				this.compressedSize = this.formatFileSize(estimatedSize)
+				const reduction = ((this.originalFileSize - estimatedSize) / this.originalFileSize * 100).toFixed(1)
+				this.sizeReduction = reduction + '%'
+			},
+			
+			// 格式化文件大小
+			formatFileSize(bytes) {
+				if (bytes === 0) return '0 Bytes'
+				const k = 1024
+				const sizes = ['Bytes', 'KB', 'MB', 'GB']
+				const i = Math.floor(Math.log(bytes) / Math.log(k))
+				return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 			},
 			
 			// 使用统一的图片上传接口上传头像
@@ -317,7 +457,26 @@
 					if (result.imageUrl) {
 						// 存储完整的头像URL
 						const avatarUrl = result.imageUrl
+						
+						// 1. 更新 Vuex store
 						store.commit('SET_AVATAR', avatarUrl)
+						
+						// 2. 同时更新用户信息中的头像
+						const currentUserInfo = store.getters.userInfo
+						if (currentUserInfo) {
+							const updatedUserInfo = {
+								...currentUserInfo,
+								avatar: avatarUrl
+							}
+							store.commit('SET_USER_INFO', updatedUserInfo)
+						}
+						
+						// 3. 更新本地存储（如果需要）
+						try {
+							uni.setStorageSync('userAvatar', avatarUrl)
+						} catch (e) {
+							console.error('保存头像到本地存储失败:', e)
+						}
 						
 						uni.showToast({ 
 							title: "头像上传成功", 
@@ -327,372 +486,12 @@
 						
 						// 延迟返回上一页，让用户看到成功提示
 						setTimeout(() => {
-							uni.navigateBack()
-						}, 1500)
-					} else {
-						throw new Error('上传成功但未返回图片URL')
-					}
-					
-				} catch (error) {
-					console.error('❌ 头像上传失败:', error)
-					uni.showToast({ 
-						title: "上传失败: " + (error.message || '未知错误'), 
-						icon: 'none',
-						duration: 3000
-					})
-				} finally {
-					this.uploading = false
-					uni.hideLoading()
-				}
-			},
-			
-			// 设置大小的时候触发的touchStart事件
-			dragStart(e) {
-				T_PAGE_X = e.touches[0].pageX
-				T_PAGE_Y = e.touches[0].pageY
-				CUT_L = this.cutL
-				CUT_R = this.cutR
-				CUT_B = this.cutB
-				CUT_T = this.cutT
-			},
-
-			// 设置大小的时候触发的touchMove事件
-			dragMove(e) {
-				var _this = this
-				var dragType = e.target.dataset.drag
-				switch (dragType) {
-					case 'right':
-						var dragLength = (T_PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-						if (CUT_R + dragLength < 0) dragLength = -CUT_R
-						this.setData({
-							cutR: CUT_R + dragLength
-						})
-						break
-					case 'left':
-						var dragLength = (T_PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-						if (CUT_L - dragLength < 0) dragLength = CUT_L
-						if ((CUT_L - dragLength) > (this.cropperW - this.cutR)) dragLength = CUT_L - (this.cropperW - this.cutR)
-						this.setData({
-							cutL: CUT_L - dragLength
-						})
-						break
-					case 'top':
-						var dragLength = (T_PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-						if (CUT_T - dragLength < 0) dragLength = CUT_T
-						if ((CUT_T - dragLength) > (this.cropperH - this.cutB)) dragLength = CUT_T - (this.cropperH - this.cutB)
-						this.setData({
-							cutT: CUT_T - dragLength
-						})
-						break
-					case 'bottom':
-						var dragLength = (T_PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-						if (CUT_B + dragLength < 0) dragLength = -CUT_B
-						this.setData({
-							cutB: CUT_B + dragLength
-						})
-						break
-					case 'rightBottom':
-						var dragLengthX = (T_PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-						var dragLengthY = (T_PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-
-						if (CUT_B + dragLengthY < 0) dragLengthY = -CUT_B
-						if (CUT_R + dragLengthX < 0) dragLengthX = -CUT_R
-						let cutB = CUT_B + dragLengthY
-						let cutR = CUT_R + dragLengthX
-
-						this.setData({
-							cutB: cutB,
-							cutR: cutR
-						})
-						break
-					default:
-						break
-				}
-			}
-		}
-	}
-</script>
-  import config from '@/config'
-  import store from "@/store"
-  import { uploadImage, RELATED_TYPES, UPLOAD_STAGES } from "@/api/join.js"
-  
-  const baseUrl = config.baseUrl
-	let sysInfo = uni.getSystemInfoSync()
-	let SCREEN_WIDTH = sysInfo.screenWidth
-	let PAGE_X, // 手按下的x位置
-		PAGE_Y, // 手按下y的位置 
-		PR = sysInfo.pixelRatio, // dpi
-		T_PAGE_X, // 手移动的时候x的位置
-		T_PAGE_Y, // 手移动的时候Y的位置
-		CUT_L, // 初始化拖拽元素的left值
-		CUT_T, // 初始化拖拽元素的top值
-		CUT_R, // 初始化拖拽元素的
-		CUT_B, // 初始化拖拽元素的
-		CUT_W, // 初始化拖拽元素的宽度
-		CUT_H, //  初始化拖拽元素的高度
-		IMG_RATIO, // 图片比例
-		IMG_REAL_W, // 图片实际的宽度
-		IMG_REAL_H, // 图片实际的高度
-		DRAFG_MOVE_RATIO = 1, //移动时候的比例,
-		INIT_DRAG_POSITION = 100, // 初始化屏幕宽度和裁剪区域的宽度之差，用于设置初始化裁剪的宽度
-		DRAW_IMAGE_W = sysInfo.screenWidth // 设置生成的图片宽度
-
-	export default {
-		/**
-		 * 页面的初始数据
-		 */
-		data() {
-			return {
-				imageSrc: store.getters.avatar,
-				isShowImg: false,
-				// 初始化的宽高
-				cropperInitW: SCREEN_WIDTH,
-				cropperInitH: SCREEN_WIDTH,
-				// 动态的宽高
-				cropperW: SCREEN_WIDTH,
-				cropperH: SCREEN_WIDTH,
-				// 动态的left top值
-				cropperL: 0,
-				cropperT: 0,
-
-				transL: 0,
-				transT: 0,
-
-				// 图片缩放值
-				scaleP: 0,
-				imageW: 0,
-				imageH: 0,
-
-				// 裁剪框 宽高
-				cutL: 0,
-				cutT: 0,
-				cutB: SCREEN_WIDTH,
-				cutR: '100%',
-				qualityWidth: DRAW_IMAGE_W,
-				innerAspectRadio: DRAFG_MOVE_RATIO,
-				
-				// 上传相关
-				uploading: false
-			}
-		},
-		/**
-		 * 生命周期函数--监听页面初次渲染完成
-		 */
-		onReady: function () {
-			this.loadImage()
-		},
-		methods: {
-			setData: function (obj) {
-				let that = this
-				Object.keys(obj).forEach(function (key) {
-					that.$set(that.$data, key, obj[key])
-				})
-			},
-			getImage: function () {
-				var _this = this
-				uni.chooseImage({
-					success: function (res) {
-						_this.setData({
-							imageSrc: res.tempFilePaths[0],
-						})
-						_this.loadImage()
-					},
-				})
-			},
-			loadImage: function () {
-				var _this = this
-
-				uni.getImageInfo({
-					src: _this.imageSrc,
-					success: function success(res) {
-						IMG_RATIO = 1 / 1
-						if (IMG_RATIO >= 1) {
-							IMG_REAL_W = SCREEN_WIDTH
-							IMG_REAL_H = SCREEN_WIDTH / IMG_RATIO
-						} else {
-							IMG_REAL_W = SCREEN_WIDTH * IMG_RATIO
-							IMG_REAL_H = SCREEN_WIDTH
-						}
-						let minRange = IMG_REAL_W > IMG_REAL_H ? IMG_REAL_W : IMG_REAL_H
-						INIT_DRAG_POSITION = minRange > INIT_DRAG_POSITION ? INIT_DRAG_POSITION : minRange
-						// 根据图片的宽高显示不同的效果   保证图片可以正常显示
-						if (IMG_RATIO >= 1) {
-							let cutT = Math.ceil((SCREEN_WIDTH / IMG_RATIO - (SCREEN_WIDTH / IMG_RATIO - INIT_DRAG_POSITION)) / 2)
-							let cutB = cutT
-							let cutL = Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH + INIT_DRAG_POSITION) / 2)
-							let cutR = cutL
-							_this.setData({
-								cropperW: SCREEN_WIDTH,
-								cropperH: SCREEN_WIDTH / IMG_RATIO,
-								// 初始化left right
-								cropperL: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH) / 2),
-								cropperT: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH / IMG_RATIO) / 2),
-								cutL: cutL,
-								cutT: cutT,
-								cutR: cutR,
-								cutB: cutB,
-								// 图片缩放值
-								imageW: IMG_REAL_W,
-								imageH: IMG_REAL_H,
-								scaleP: IMG_REAL_W / SCREEN_WIDTH,
-								qualityWidth: DRAW_IMAGE_W,
-								innerAspectRadio: IMG_RATIO
+							uni.navigateBack({
+								success: () => {
+									// 发送全局事件通知其他页面更新头像
+									uni.$emit('avatarUpdated', avatarUrl)
+								}
 							})
-						} else {
-							let cutL = Math.ceil((SCREEN_WIDTH * IMG_RATIO - (SCREEN_WIDTH * IMG_RATIO)) / 2)
-							let cutR = cutL
-							let cutT = Math.ceil((SCREEN_WIDTH - INIT_DRAG_POSITION) / 2)
-							let cutB = cutT
-							_this.setData({
-								cropperW: SCREEN_WIDTH * IMG_RATIO,
-								cropperH: SCREEN_WIDTH,
-								// 初始化left right
-								cropperL: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH * IMG_RATIO) / 2),
-								cropperT: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH) / 2),
-
-								cutL: cutL,
-								cutT: cutT,
-								cutR: cutR,
-								cutB: cutB,
-								// 图片缩放值
-								imageW: IMG_REAL_W,
-								imageH: IMG_REAL_H,
-								scaleP: IMG_REAL_W / SCREEN_WIDTH,
-								qualityWidth: DRAW_IMAGE_W,
-								innerAspectRadio: IMG_RATIO
-							})
-						}
-						_this.setData({
-							isShowImg: true
-						})
-						uni.hideLoading()
-					}
-				})
-			},
-			// 拖动时候触发的touchStart事件
-			contentStartMove(e) {
-				PAGE_X = e.touches[0].pageX
-				PAGE_Y = e.touches[0].pageY
-			},
-
-			// 拖动时候触发的touchMove事件
-			contentMoveing(e) {
-				var _this = this
-				var dragLengthX = (PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-				var dragLengthY = (PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-				// 左移
-				if (dragLengthX > 0) {
-					if (this.cutL - dragLengthX < 0) dragLengthX = this.cutL
-				} else {
-					if (this.cutR + dragLengthX < 0) dragLengthX = -this.cutR
-				}
-
-				if (dragLengthY > 0) {
-					if (this.cutT - dragLengthY < 0) dragLengthY = this.cutT
-				} else {
-					if (this.cutB + dragLengthY < 0) dragLengthY = -this.cutB
-				}
-				this.setData({
-					cutL: this.cutL - dragLengthX,
-					cutT: this.cutT - dragLengthY,
-					cutR: this.cutR + dragLengthX,
-					cutB: this.cutB + dragLengthY
-				})
-
-				PAGE_X = e.touches[0].pageX
-				PAGE_Y = e.touches[0].pageY
-			},
-
-			contentTouchEnd() {
-
-			},
-
-			// 获取图片
-			getImageInfo() {
-				var _this = this
-				
-				if (this.uploading) {
-					uni.showToast({ title: "正在上传中...", icon: 'none' })
-					return
-				}
-				
-				uni.showLoading({
-					title: '图片生成中...',
-				})
-				
-				// 将图片写入画布
-				const ctx = uni.createCanvasContext('myCanvas')
-				ctx.drawImage(_this.imageSrc, 0, 0, IMG_REAL_W, IMG_REAL_H)
-				ctx.draw(true, () => {
-					// 获取画布要裁剪的位置和宽度   均为百分比 * 画布中图片的宽度    保证了在微信小程序中裁剪的图片模糊  位置不对的问题 canvasT = (_this.cutT / _this.cropperH) * (_this.imageH / pixelRatio)
-					var canvasW = ((_this.cropperW - _this.cutL - _this.cutR) / _this.cropperW) * IMG_REAL_W
-					var canvasH = ((_this.cropperH - _this.cutT - _this.cutB) / _this.cropperH) * IMG_REAL_H
-					var canvasL = (_this.cutL / _this.cropperW) * IMG_REAL_W
-					var canvasT = (_this.cutT / _this.cropperH) * IMG_REAL_H
-					
-					uni.canvasToTempFilePath({
-						x: canvasL,
-						y: canvasT,
-						width: canvasW,
-						height: canvasH,
-						destWidth: canvasW,
-						destHeight: canvasH,
-						quality: 0.5,
-						canvasId: 'myCanvas',
-						success: function (res) {
-							uni.hideLoading()
-							_this.uploadAvatar(res.tempFilePath)
-						},
-						fail: function (error) {
-							uni.hideLoading()
-							console.error('❌ 生成图片失败:', error)
-							uni.showToast({ title: "生成图片失败", icon: 'none' })
-						}
-					})
-				})
-			},
-			
-			// 使用统一的图片上传接口上传头像
-			async uploadAvatar(filePath) {
-				try {
-					this.uploading = true
-					uni.showLoading({
-						title: '上传中...',
-					})
-					
-					console.log('🚀 开始上传头像，文件路径:', filePath)
-					
-					// 获取用户ID，如果没有则使用0
-					const userInfo = store.getters.userInfo
-					const userId = userInfo?.userId || 0
-					
-					// 使用统一的图片上传接口
-					const result = await uploadImage(
-						filePath,                    // 文件路径
-						RELATED_TYPES.USER_AVATAR,   // 关联类型：用户头像
-						userId,                      // 关联ID：用户ID
-						'用户头像',                   // 描述
-						UPLOAD_STAGES.APPLICATION,   // 阶段：申请阶段
-						0                            // 序列号
-					)
-					
-					console.log('✅ 头像上传成功:', result)
-					
-					// 更新用户头像
-					if (result.imageUrl) {
-						// 存储完整的头像URL
-						const avatarUrl = result.imageUrl
-						store.commit('SET_AVATAR', avatarUrl)
-						
-						uni.showToast({ 
-							title: "头像上传成功", 
-							icon: 'success',
-							duration: 2000
-						})
-						
-						// 延迟返回上一页，让用户看到成功提示
-						setTimeout(() => {
-							uni.navigateBack()
 						}, 1500)
 					} else {
 						throw new Error('上传成功但未返回图片URL')
@@ -786,6 +585,92 @@
 	.cropper-content {
 		min-height: 750rpx;
 		width: 100%;
+	}
+	
+	/* 压缩设置区域 */
+	.compression-settings {
+		background: white;
+		margin: 20rpx;
+		padding: 30rpx;
+		border-radius: 16rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
+	}
+	
+	.setting-title {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #333;
+		margin-bottom: 30rpx;
+		text-align: center;
+	}
+	
+	.setting-item {
+		margin-bottom: 40rpx;
+	}
+	
+	.setting-label {
+		display: block;
+		font-size: 28rpx;
+		color: #666;
+		margin-bottom: 20rpx;
+		font-weight: 500;
+	}
+	
+	.setting-value {
+		font-size: 24rpx;
+		color: #4A90E2;
+		font-weight: 500;
+		margin-left: 20rpx;
+	}
+	
+	.radio-label {
+		display: block;
+		margin: 15rpx 0;
+		font-size: 26rpx;
+		color: #333;
+	}
+	
+	.compression-preview {
+		background: #f8f9fa;
+		padding: 25rpx;
+		border-radius: 12rpx;
+		margin-top: 20rpx;
+	}
+	
+	.preview-title {
+		font-size: 28rpx;
+		font-weight: 600;
+		color: #333;
+		margin-bottom: 20rpx;
+		display: block;
+	}
+	
+	.preview-content {
+		display: flex;
+		flex-direction: column;
+		gap: 12rpx;
+	}
+	
+	.preview-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	
+	.preview-label {
+		font-size: 26rpx;
+		color: #666;
+	}
+	
+	.preview-value {
+		font-size: 26rpx;
+		color: #333;
+		font-weight: 500;
+	}
+	
+	.preview-value.save {
+		color: #52c41a;
+		font-weight: 600;
 	}
 
 	.uni-corpper {

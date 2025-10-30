@@ -23,7 +23,22 @@
   }, {
     "path": "pages/mine/index",
     "style": {
-      "navigationBarTitleText": "我的"
+      "navigationBarTitleText": "设计师我的"
+    }
+  },{
+    "path": "pages/mine/index1",
+    "style": {
+      "navigationBarTitleText": "个人我的"
+    }
+  },{
+    "path": "pages/mine/index2",
+    "style": {
+      "navigationBarTitleText": "商家我的"
+    }
+  },{
+    "path": "pages/mine/index3",
+    "style": {
+      "navigationBarTitleText": "监工我的"
     }
   },{
     "path": "pages/mine/address",
@@ -167,14 +182,17 @@
     "style": {
       "navigationBarTitleText": "产品修改"
     }
-  },
-  {
+  },{
     "path": "pages/merchant/product",
     "style": {
       "navigationBarTitleText": "产品页面"
     }
-  }
-  ],
+  },{
+    "path": "pages/mine/switch/index",
+    "style": {
+      "navigationBarTitleText": "角色切换"
+    }
+  }],
   "tabBar": {
     "color": "#000000",
     "selectedColor": "#000000",
@@ -203,7 +221,7 @@
         "selectedIconPath": "/static/images/tabbar/design_.png",
         "text": "订单"
       },{
-        "pagePath": "pages/mine/index",
+        "pagePath": "pages/mine/index1",
         "iconPath": "static/images/tabbar/mine.png",
         "selectedIconPath": "static/images/tabbar/mine_.png",
         "text": "我的"

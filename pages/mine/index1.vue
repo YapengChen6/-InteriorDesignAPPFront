@@ -4,8 +4,8 @@
 		<view v-if="currentPage === 'profile'">
 			<!-- 顶部个人信息卡片 -->
 			<view class="profile-card">
-				<!-- 切换角色按钮 -->
-				<button class="switch-role-btn" @tap="showRoleSelector">
+				<!-- 切换角色按钮 - 修改为跳转页面 -->
+				<button class="switch-role-btn" @tap="goToRoleSwitch">
 					<text class="iconfont icon-user-cog"></text> 切换角色
 				</button>
 				
@@ -198,60 +198,6 @@
 				</button>
 			</view>
 		</view>
-		
-		<!-- 角色选择面板 -->
-		<view v-if="showRolePanel" class="role-selector">
-			<view class="role-panel">
-				<text class="role-title">选择角色</text>
-				
-				<view 
-					class="role-option" 
-					:class="{active: selectedRole === 'personal'}" 
-					@tap="selectRole('personal')"
-				>
-					<view class="role-icon blue">
-						<text class="iconfont icon-user"></text>
-					</view>
-					<view class="role-info">
-						<text class="role-name">监工</text>
-						<text class="role-desc">浏览内容、发布作品、参与互动</text>
-					</view>
-				</view>
-				
-				<view 
-					class="role-option" 
-					:class="{active: selectedRole === 'creator'}" 
-					@tap="selectRole('creator')"
-				>
-					<view class="role-icon purple">
-						<text class="iconfont icon-paint-brush"></text>
-					</view>
-					<view class="role-info">
-						<text class="role-name">设计师</text>
-						<text class="role-desc">发布作品、管理内容、数据分析</text>
-					</view>
-				</view>
-				
-				<view 
-					class="role-option" 
-					:class="{active: selectedRole === 'business'}" 
-					@tap="selectRole('business')"
-				>
-					<view class="role-icon green">
-						<text class="iconfont icon-store"></text>
-					</view>
-					<view class="role-info">
-						<text class="role-name">商家</text>
-						<text class="role-desc">管理店铺、处理订单、查看销售数据</text>
-					</view>
-				</view>
-				
-				<view class="role-actions">
-					<button class="cancel-btn" @tap="hideRoleSelector">取消</button>
-					<button class="confirm-btn" @tap="confirmRoleChange">确认切换</button>
-				</view>
-			</view>
-		</view>
 	</view>
 </template>
 
@@ -262,8 +208,6 @@
 		data() {
 			return {
 				currentPage: 'profile',
-				showRolePanel: false,
-				selectedRole: 'personal',
 				saving: false,
 				defaultAvatar: 'https://design.gemcoder.com/staticResource/echoAiSystemImages/378da9ddd57051faab2f02fd247494da.png',
 				userInfo: {
@@ -279,23 +223,6 @@
 					phonenumber: '',
 					city: '',
 					avatar: ''
-				},
-				roleMap: {
-					personal: {
-						name: '个人用户',
-						icon: 'icon-user',
-						desc: '浏览内容、发布作品、参与互动'
-					},
-					creator: {
-						name: '创作者',
-						icon: 'icon-paint-brush',
-						desc: '发布作品、管理内容、数据分析'
-					},
-					business: {
-						name: '商家',
-						icon: 'icon-store',
-						desc: '管理店铺、处理订单、查看销售数据'
-					}
 				}
 			}
 		},
@@ -339,6 +266,13 @@
 			goToPersonalCenter() {
 				uni.navigateTo({
 					url: '/pages/mine/personal/index'
+				});
+			},
+			
+			// 跳转到角色切换页面
+			goToRoleSwitch() {
+				uni.navigateTo({
+					url: '/pages/mine/switch/index'
 				});
 			},
 			
@@ -420,51 +354,6 @@
 						// 可以在这里调用上传头像的API
 						// this.uploadAvatar(res.tempFilePaths[0]);
 					}
-				});
-			},
-			
-			// 上传头像到服务器
-			async uploadAvatar(filePath) {
-				try {
-					// 这里需要实现文件上传逻辑
-					// 假设有一个上传接口
-					// const res = await uploadAvatar(filePath);
-					// if (res.code === 200) {
-					//   this.editForm.avatar = res.data.url;
-					//   this.userInfo.avatar = res.data.url;
-					// }
-				} catch (error) {
-					console.error('上传头像失败:', error);
-				}
-			},
-			
-			// 显示角色选择面板
-			showRoleSelector() {
-				this.showRolePanel = true;
-			},
-			
-			// 隐藏角色选择面板
-			hideRoleSelector() {
-				this.showRolePanel = false;
-			},
-			
-			// 选择角色
-			selectRole(role) {
-				this.selectedRole = role;
-			},
-			
-			// 确认角色切换
-			confirmRoleChange() {
-				const roleInfo = this.roleMap[this.selectedRole];
-				this.userInfo.role = roleInfo.name;
-				
-				// 隐藏角色选择面板
-				this.hideRoleSelector();
-				
-				// 显示切换成功提示
-				uni.showToast({
-					title: '角色切换成功',
-					icon: 'success'
 				});
 			},
 			
@@ -895,116 +784,7 @@
 		opacity: 0.6;
 	}
 	
-	/* 角色选择面板样式 */
-	.role-selector {
-		position: fixed;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 200;
-	}
-	
-	.role-panel {
-		background: white;
-		border-radius: 32rpx;
-		padding: 48rpx;
-		width: 90%;
-		max-width: 800rpx;
-		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
-	}
-	
-	.role-title {
-		font-size: 36rpx;
-		font-weight: bold;
-		margin-bottom: 48rpx;
-		display: block;
-	}
-	
-	.role-option {
-		display: flex;
-		align-items: center;
-		padding: 32rpx;
-		border-radius: 24rpx;
-		margin-bottom: 24rpx;
-		transition: all 0.3s;
-	}
-	
-	.role-option.active {
-		background: #E6F0FF;
-		border: 2rpx solid #4A90E2;
-	}
-	
-	.role-icon {
-		width: 80rpx;
-		height: 80rpx;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-right: 32rpx;
-		font-size: 36rpx;
-		color: white;
-	}
-	
-	.role-icon.blue {
-		background: #4A90E2;
-	}
-	
-	.role-icon.purple {
-		background: #805AD5;
-	}
-	
-	.role-icon.green {
-		background: #38A169;
-	}
-	
-	.role-info {
-		flex: 1;
-	}
-	
-	.role-name {
-		display: block;
-		font-weight: 600;
-		margin-bottom: 8rpx;
-		font-size: 32rpx;
-	}
-	
-	.role-desc {
-		display: block;
-		font-size: 24rpx;
-		color: #666;
-	}
-	
-	.role-actions {
-		display: flex;
-		justify-content: space-between;
-		margin-top: 48rpx;
-	}
-	
-	.cancel-btn {
-		padding: 24rpx 48rpx;
-		border: 2rpx solid #D1D5DB;
-		border-radius: 16rpx;
-		color: #4B5563;
-		background: white;
-		font-size: 28rpx;
-	}
-	
-	.confirm-btn {
-		padding: 24rpx 48rpx;
-		background: #4A90E2;
-		color: white;
-		border-radius: 16rpx;
-		border: none;
-		font-size: 28rpx;
-	}
-	
-	/* 图标字体样式 - 新增图标 */
+	/* 图标字体样式 */
 	.iconfont {
 		font-family: "iconfont" !important;
 		font-size: inherit;
@@ -1015,7 +795,6 @@
 	
 	.icon-user-cog:before { content: "\e619"; }
 	.icon-user:before { content: "\e602"; }
-	.icon-palette:before { content: "\e603"; }
 	.icon-shopping-cart:before { content: "\e604"; }
 	.icon-cog:before { content: "\e605"; }
 	.icon-shield-alt:before { content: "\e606"; }
@@ -1025,9 +804,7 @@
 	.icon-arrow-left:before { content: "\e60a"; }
 	.icon-camera:before { content: "\e60b"; }
 	.icon-plus:before { content: "\e60c"; }
-	.icon-paint-brush:before { content: "\e60d"; }
-	.icon-store:before { content: "\e60e"; }
-	.icon-flag:before { content: "\e60f"; } /* 新增：举报投诉图标 */
-	.icon-map-marker:before { content: "\e610"; } /* 新增：收货地址图标 */
-	.icon-home:before { content: "\e611"; } /* 新增：角色入住图标 */
+	.icon-flag:before { content: "\e60f"; }
+	.icon-map-marker:before { content: "\e610"; }
+	.icon-home:before { content: "\e611"; }
 </style>

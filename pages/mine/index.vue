@@ -11,11 +11,16 @@
 				
 				<view class="profile-header" @tap="goToPersonalCenter">
 					<view class="avatar-container">
-						<image class="avatar" :src="userInfo.avatar || defaultAvatar" mode="aspectFill"></image>
+						<image 
+							class="avatar" 
+							:src="userInfo.avatar || defaultAvatar" 
+							mode="aspectFill"
+							@error="onAvatarError"
+						></image>
 					</view>
 					<view class="user-info">
 						<text class="user-name">{{ userInfo.nickName || userInfo.userName || '用户' }}</text>
-						<text class="user-phone">{{ userInfo.phone || '未绑定手机号' }}</text>
+						<text class="user-phone">{{ userInfo.phone || userInfo.phonenumber || '未绑定手机号' }}</text>
 						
 						<view class="current-role">
 							<text class="iconfont icon-user"></text> {{ userInfo.role || '设计师' }}
@@ -149,7 +154,12 @@
 			<view class="edit-form">
 				<view class="avatar-upload">
 					<view class="avatar-preview">
-						<image class="avatar" :src="editForm.avatar || defaultAvatar" mode="aspectFill"></image>
+						<image 
+							class="avatar" 
+							:src="editForm.avatar || defaultAvatar" 
+							mode="aspectFill"
+							@error="onAvatarError"
+						></image>
 					</view>
 					<button class="change-avatar-btn" @tap="changeAvatar">
 						<text class="iconfont icon-camera"></text> 更换头像
@@ -235,7 +245,8 @@
 </template>
 
 <script>
-	import { getUserInfo, updateUserInfo } from '@/api/login.js'
+	import { getUserProfile, updateUserProfile } from '@/api/users.js'
+	import store from "@/store"
 	
 	export default {
 		data() {
@@ -280,16 +291,22 @@
 		},
 		onLoad() {
 			this.loadUserInfo();
+			// 监听头像更新事件
+			this.listenAvatarUpdate()
 		},
 		onShow() {
 			// 当从其他页面返回时重新加载用户信息
 			this.loadUserInfo();
 		},
+		onUnload() {
+			// 移除事件监听
+			uni.$off('avatarUpdated')
+		},
 		methods: {
 			// 加载用户信息
 			async loadUserInfo() {
 				try {
-					const res = await getUserInfo();
+					const res = await getUserProfile();
 					if (res.code === 200) {
 						this.userInfo = res.data;
 						// 初始化编辑表单
@@ -299,19 +316,66 @@
 							city: res.data.city || '',
 							avatar: res.data.avatar || this.defaultAvatar
 						};
+						
+						console.log('👤 我的页面用户信息:', this.userInfo)
+						console.log('🔄 当前头像状态:')
+						console.log('Store avatar:', store.getters.avatar)
+						console.log('User info avatar:', this.userInfo.avatar)
+						console.log('Local storage avatar:', uni.getStorageSync('userAvatar'))
 					} else {
-						uni.showToast({
-							title: '获取用户信息失败',
-							icon: 'none'
-						});
+						console.error('获取用户信息失败:', res.msg)
+						this.getAvatarFromStore()
 					}
 				} catch (error) {
 					console.error('获取用户信息失败:', error);
+					this.getAvatarFromStore()
 					uni.showToast({
 						title: '获取用户信息失败',
 						icon: 'none'
 					});
 				}
+			},
+			
+			// 从store获取头像
+			getAvatarFromStore() {
+				const storeAvatar = store.getters.avatar
+				if (storeAvatar) {
+					this.userInfo.avatar = storeAvatar
+					this.editForm.avatar = storeAvatar
+				} else {
+					this.userInfo.avatar = this.defaultAvatar
+					this.editForm.avatar = this.defaultAvatar
+				}
+			},
+			
+			// 监听头像更新事件
+			listenAvatarUpdate() {
+				uni.$on('avatarUpdated', (avatarUrl) => {
+					console.log('🔄 我的页面收到头像更新事件:', avatarUrl)
+					this.userInfo.avatar = avatarUrl
+					this.editForm.avatar = avatarUrl
+					// 强制更新视图
+					this.$forceUpdate()
+					
+					// 同时更新store中的用户信息
+					const currentUserInfo = store.getters.userInfo
+					if (currentUserInfo) {
+						const updatedUserInfo = {
+							...currentUserInfo,
+							avatar: avatarUrl
+						}
+						store.commit('SET_USER_INFO', updatedUserProfile)
+					}
+				})
+			},
+			
+			// 头像加载失败处理
+			onAvatarError(e) {
+				console.error('头像加载失败:', e)
+				// 使用默认头像
+				this.userInfo.avatar = this.defaultAvatar
+				this.editForm.avatar = this.defaultAvatar
+				this.$forceUpdate()
 			},
 			
 			// 跳转到个人中心页面
@@ -352,7 +416,7 @@
 				
 				this.saving = true;
 				try {
-					const res = await updateUserInfo(this.editForm);
+					const res = await updateUserProfile(this.editForm);
 					if (res.code === 200) {
 						// 更新本地用户信息
 						this.userInfo = { ...this.userInfo, ...this.editForm };
@@ -386,35 +450,9 @@
 			
 			// 更换头像
 			changeAvatar() {
-				uni.chooseImage({
-					count: 1,
-					sizeType: ['compressed'],
-					sourceType: ['album', 'camera'],
-					success: (res) => {
-						// 在实际应用中，这里应该上传图片到服务器
-						// 这里我们直接使用选择的图片
-						this.editForm.avatar = res.tempFilePaths[0];
-						this.userInfo.avatar = res.tempFilePaths[0];
-						
-						// 可以在这里调用上传头像的API
-						// this.uploadAvatar(res.tempFilePaths[0]);
-					}
+				uni.navigateTo({
+					url: '/pages/mine/avatar/index'
 				});
-			},
-			
-			// 上传头像到服务器
-			async uploadAvatar(filePath) {
-				try {
-					// 这里需要实现文件上传逻辑
-					// 假设有一个上传接口
-					// const res = await uploadAvatar(filePath);
-					// if (res.code === 200) {
-					//   this.editForm.avatar = res.data.url;
-					//   this.userInfo.avatar = res.data.url;
-					// }
-				} catch (error) {
-					console.error('上传头像失败:', error);
-				}
 			},
 			
 			// 显示角色选择面板
