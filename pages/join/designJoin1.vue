@@ -26,30 +26,31 @@
     <view class="form-container">
       <uni-forms ref="form" :model="formData" :rules="rules" labelWidth="180rpx">
         <!-- 设计师信息 -->
-        <uni-forms-item label="设计师名称" name="merchantName" required>
+        <uni-forms-item label="设计师名称" name="designerName" required>
           <uni-easyinput 
-            v-model="formData.merchantName" 
+            v-model="formData.designerName" 
             placeholder="请输入设计师名称或工作室名称" 
             type="text"
-            @input="onInput('merchantName')"
+            @input="onInput('designerName')"
           />
         </uni-forms-item>
         
-        <uni-forms-item label="所在城市" name="city">
+        <uni-forms-item label="设计师姓名" name="identity" required>
           <uni-easyinput 
-            v-model="formData.city" 
-            placeholder="请输入所在城市(必填)" 
+            v-model="formData.identity" 
+            placeholder="请输入设计师真实姓名" 
             type="text"
-            @input="onInput('city')"
+            @input="onInput('identity')"
           />
         </uni-forms-item>
         
-        <uni-forms-item label="备注信息" name="remark">
+        <uni-forms-item label="手机号" name="phone" required>
           <uni-easyinput 
-            v-model="formData.remark" 
-            placeholder="可填写备注信息（选填）" 
-            type="textarea"
-            @input="onInput('remark')"
+            v-model="formData.phone" 
+            placeholder="请填写联系方式" 
+            type="text"
+            @input="onInput('phone')"
+            maxlength="11"
           />
         </uni-forms-item>
         
@@ -63,7 +64,7 @@
             <view class="upload-item">
               <view class="upload-item-header">
                 <text class="upload-item-title">资格证书</text>
-               
+                <text class="upload-item-subtitle">设计师资格证等</text>
               </view>
               
               <view class="upload-item-content">
@@ -96,7 +97,7 @@
             <view class="upload-item">
               <view class="upload-item-header">
                 <text class="upload-item-title">手持身份证</text>
-                
+                <text class="upload-item-subtitle">本人手持身份证照片</text>
               </view>
               
               <view class="upload-item-content">
@@ -129,7 +130,7 @@
             <view class="upload-item">
               <view class="upload-item-header">
                 <text class="upload-item-title">身份证正反面</text>
-                
+                <text class="upload-item-subtitle">身份证正面和反面照片</text>
               </view>
               
               <view class="upload-item-content">
@@ -225,9 +226,9 @@ export default {
       },
       
       formData: {
-        merchantName: '',  // 将 designerName 改为 merchantName
-        city: '',          // 添加城市字段
-        remark: '',        // 添加备注字段
+        designerName: '',
+        identity: '',
+        phone: '',
         qualificationCertificate: '',
         handheldIdPhoto: '',
         idCardFrontPhoto: '',
@@ -243,7 +244,7 @@ export default {
       },
       
       rules: {
-        merchantName: {  // 将 designerName 改为 merchantName
+        designerName: {
           rules: [{
             required: true,
             errorMessage: '设计师名称不能为空'
@@ -255,16 +256,25 @@ export default {
             errorMessage: '设计师名称长度不能超过200个字符'
           }]
         },
-        city: {
+        identity: {
           rules: [{
-            required: false,
-            errorMessage: '请输入所在城市'
+            required: true,
+            errorMessage: '设计师姓名不能为空'
+          }, {
+            minLength: 2,
+            errorMessage: '设计师姓名至少2个字符'
+          }, {
+            maxLength: 255,
+            errorMessage: '设计师姓名长度不能超过255个字符'
           }]
         },
-        remark: {
+        phone: {
           rules: [{
-            required: false,
-            errorMessage: '请输入备注信息'
+            required: true,
+            errorMessage: '手机号码不能为空'
+          }, {
+            pattern: /^1[3-9]\d{9}$/,
+            errorMessage: '请输入正确的11位手机号码'
           }]
         },
         qualificationCertificate: {
@@ -307,6 +317,10 @@ export default {
   methods: {
     // 输入处理
     onInput(fieldName) {
+      if (fieldName === 'phone') {
+        // 手机号只允许数字
+        this.formData[fieldName] = this.formData[fieldName].replace(/[^\d]/g, '');
+      }
       this.saveApplicationData()
     },
     
@@ -315,15 +329,6 @@ export default {
       try {
         const savedData = uni.getStorageSync('designer_application_data')
         if (savedData) {
-          // 兼容旧数据：如果存在 designerName，将其赋值给 merchantName
-          if (savedData.designerName && !savedData.merchantName) {
-            savedData.merchantName = savedData.designerName
-            delete savedData.designerName
-          }
-          // 移除旧数据中的 phone 字段
-          if (savedData.phone) {
-            delete savedData.phone
-          }
           this.formData = { ...this.formData, ...savedData }
           console.log('📥 Loaded saved designer application data')
         }
@@ -520,9 +525,9 @@ export default {
     // 构建申请数据
     buildApplicationData() {
       const applicationData = {
-        merchantName: this.formData.merchantName,  // 改为 merchantName
-        city: this.formData.city || '',           // 添加城市字段
-        remark: this.formData.remark || '',       // 添加备注字段
+        designerName: this.formData.designerName,
+        identity: this.formData.identity,
+        phone: this.formData.phone,
         qualificationCertificate: this.formData.qualificationCertificate,
         handheldIdPhoto: this.formData.handheldIdPhoto,
         idCardFrontPhoto: this.formData.idCardFrontPhoto,
@@ -533,7 +538,7 @@ export default {
       return applicationData
     },
     
-    // 提交表单 - 修复版本
+    // 提交表单
     async submit() {
       if (this.isSubmitting) return
       
@@ -565,12 +570,11 @@ export default {
         
         const applicationData = this.buildApplicationData()
         
-        console.log('📨 Sending application data to server...', JSON.stringify(applicationData, null, 2))
-        
+        console.log('📨 Sending application data to server...')
         const response = await submitDesignerApplication(applicationData)
         console.log('📨 Server response:', response)
         
-        // 隐藏loading - 确保配对使用
+        // 隐藏loading
         if (isLoadingShown) {
           uni.hideLoading()
           isLoadingShown = false
@@ -600,30 +604,26 @@ export default {
           }, 1500)
           
         } else {
-          // 更详细的错误处理
           let errorMsg = response.msg || response.message || '提交失败'
           
           if (response.code === 400) {
-            errorMsg = '数据格式错误，请检查填写的信息：' + (response.data || '未知错误')
-            console.error('❌ 400 Bad Request Details:', {
-              requestData: applicationData,
+            errorMsg = '数据格式错误，请检查填写的信息'
+            console.error('❌ 400 Bad Request:', {
+              formData: applicationData,
               response: response
             })
-          } else if (response.code === 500) {
-            errorMsg = '服务器内部错误，请稍后重试或联系客服'
           }
           
           throw new Error(errorMsg)
         }
         
       } catch (error) {
-        console.error('❌ Form submission failed:', error)
-        
-        // 确保隐藏loading
+        // 隐藏loading
         if (isLoadingShown) {
           uni.hideLoading()
-          isLoadingShown = false
         }
+        
+        console.error('❌ Form submission failed:', error)
         
         let errorMessage = '提交失败'
         if (error.message) {
@@ -632,12 +632,10 @@ export default {
           errorMessage = error.errorMessage
         }
         
-        // 使用更明显的错误提示
-        uni.showModal({
-          title: '提交失败',
-          content: errorMessage,
-          showCancel: false,
-          confirmText: '确定'
+        uni.showToast({
+          title: errorMessage,
+          icon: 'none',
+          duration: 3000
         })
       } finally {
         this.isSubmitting = false
@@ -769,10 +767,9 @@ export default {
 .upload-item-header {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  min-width: 200rpx; /* 增加最小宽度确保标题区域对齐 */
-  text-align: left;
-  flex-shrink: 0; /* 防止标题区域被压缩 */
+  align-items: center;
+  min-width: 120rpx;
+  text-align: center;
 }
 
 .upload-item-title {
@@ -781,48 +778,43 @@ export default {
   color: #333;
   font-weight: 500;
   line-height: 1.4;
-  margin-bottom: 8rpx;
 }
 
-
+.upload-item-subtitle {
+  display: block;
+  font-size: 24rpx;
+  color: #666;
+  line-height: 1.4;
+}
 
 .upload-item-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  width: 100%;
-  min-height: 160rpx; /* 设置最小高度确保内容区域对齐 */
 }
 
 .id-card-preview {
   display: flex;
   gap: 40rpx;
   align-items: flex-start;
-  justify-content: flex-start;
-  width: 100%;
 }
 
 .id-card-side {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 15rpx;
-  flex: 1; /* 使身份证正反面等宽 */
 }
 
 .id-card-label {
   font-size: 24rpx;
   color: #666;
-  text-align: left;
-  width: 100%;
+  text-align: center;
 }
 
 .upload-btn-container {
   margin-top: 0;
-  display: flex;
-  justify-content: flex-start;
-  width: 100%;
 }
 
 .upload-btn {
@@ -867,8 +859,7 @@ export default {
 .preview-container {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
+  align-items: center;
 }
 
 .preview-image {
@@ -882,8 +873,6 @@ export default {
   display: flex;
   gap: 15rpx;
   margin-top: 10rpx;
-  justify-content: flex-start;
-  width: 100%;
 }
 
 .preview-action {
@@ -902,8 +891,7 @@ export default {
 .upload-status {
   font-size: 20rpx;
   margin-top: 8rpx;
-  text-align: left;
-  width: 100%;
+  text-align: center;
 }
 
 .upload-status.uploading {

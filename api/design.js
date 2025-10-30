@@ -636,13 +636,13 @@ export function getCurrentTimestamp() {
 // ==================== 默认导出 ====================
 
 export default {
-  // 设计师入驻申请
-  submitDesignerApplication,
-  getDesignerApplicationStatus,
-  getDesignerApplicationDetail,
-  updateDesignerApplication,
-  cancelDesignerApplication,
-  getDesignerApplicationList,
+  // 物料供应商申请
+  submitApplication,
+  getApplicationStatus,
+  getApplicationDetail,
+  updateApplication,
+  cancelApplication,
+  getApplicationList,
   downloadTemplate,
   
   // 媒体上传
