@@ -115,15 +115,19 @@
         </view>
       </view>
       
+      <!-- 富文本编辑器 -->
       <view class="form-group">
         <view class="form-label">帖子正文</view>
-        <textarea 
-          class="form-input textarea" 
-          v-model="content" 
-          placeholder="请输入帖子正文内容..."
-          placeholder-style="color: #c0c4cc"
-          maxlength="5000"
-        />
+        <view class="editor-container">
+          <editor
+            id="editor"
+            class="editor"
+            :placeholder="'请输入帖子正文内容...'"
+            @ready="onEditorReady"
+            @input="onEditorInput"
+          ></editor>
+        </view>
+        
         <view class="word-count">{{ content.length }}/5000</view>
       </view>
     </view>
@@ -157,6 +161,9 @@ export default {
       isSubmitting: false, // 防止重复提交
       uploadProgress: 0, // 上传进度
       roleType: null, // 用户角色类型（仅用于前端逻辑，不发送到后端）
+      
+      // 富文本编辑器相关
+      editor: null
     }
   },
   
@@ -169,6 +176,11 @@ export default {
       this.editingPostId = options.postId
       this.loadPostData(options.postId)
     }
+  },
+  
+  onUnload() {
+    // 清理编辑器实例
+    this.editor = null
   },
   
   methods: {
@@ -239,6 +251,15 @@ export default {
         
         uni.hideLoading()
         
+        // 延迟设置编辑器内容，确保编辑器已初始化
+        setTimeout(() => {
+          if (this.editor && postData.content) {
+            this.editor.setContents({
+              html: postData.content
+            })
+          }
+        }, 500)
+        
       } catch (error) {
         console.error('加载帖子数据失败:', error)
         uni.hideLoading()
@@ -247,6 +268,39 @@ export default {
           icon: 'none'
         })
       }
+    },
+    
+    // 富文本编辑器准备就绪
+    onEditorReady() {
+      // 注意：编辑器组件需要延时才能获取到实例
+      setTimeout(() => {
+        uni.createSelectorQuery()
+          .in(this)
+          .select('#editor')
+          .context((res) => {
+            this.editor = res.context
+            console.log('编辑器实例:', this.editor)
+            
+            // 如果是在编辑模式且有内容，设置编辑器内容
+            if (this.editingPostId && this.content) {
+              this.editor.setContents({
+                html: this.content
+              })
+            }
+          })
+          .exec()
+      }, 200)
+    },
+    
+    // 编辑器输入事件
+    onEditorInput(e) {
+      // 获取HTML内容
+      this.editor.getContents({
+        success: (res) => {
+          this.content = res.html
+          console.log('编辑器内容:', this.content)
+        }
+      })
     },
     
     // 处理媒体上传（仅选择，不上传）
@@ -482,7 +536,9 @@ export default {
         return false
       }
       
-      if (!this.content.trim()) {
+      // 移除HTML标签后检查纯文本内容
+      const textContent = this.content.replace(/<[^>]*>/g, '').trim()
+      if (!textContent) {
         uni.showToast({
           title: '请输入帖子内容',
           icon: 'none'
@@ -789,6 +845,20 @@ export default {
   transition: width 0.3s ease;
 }
 
+/* 富文本编辑器样式 - 移除了工具栏 */
+.editor-container {
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.editor {
+  min-height: 300px;
+  padding: 12px 15px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
 .bottom-actions {
   position: fixed;
   bottom: 0;
@@ -840,6 +910,10 @@ export default {
   .type-item {
     min-width: calc(50% - 6px);
     padding: 12px 5px;
+  }
+  
+  .editor {
+    min-height: 250px;
   }
 }
 </style>
