@@ -1,28 +1,6 @@
 <template>
   <view class="container">
-    <!-- 第一部分：顶部切换 -->
-    <view class="card">
-      <view class="section-title">
-        <uni-icons type="compose" size="18" color="#3498db"></uni-icons>
-        <text>发布类型</text>
-      </view>
-      <view class="segmented-control">
-        <view 
-          class="segmented-control-item" 
-          :class="{ active: postMode === 'new' }"
-          @click="handleModeChange('new')">
-          新增帖子
-        </view>
-        <view 
-          class="segmented-control-item" 
-          :class="{ active: postMode === 'draft' }"
-          @click="handleModeChange('draft')">
-          我的草稿
-        </view>
-      </view>
-    </view>
-    
-    <!-- 第二部分：选择帖子类型 -->
+    <!-- 第一部分：选择帖子类型 -->
     <view class="card">
       <view class="section-title">
         <uni-icons type="tags" size="18" color="#3498db"></uni-icons>
@@ -31,40 +9,40 @@
       <view class="type-selector">
         <view 
           class="type-item" 
-          :class="{ active: postType === 1 }"
+          :class="{ active: threadType === 1 }"
           @click="handleTypeChange(1)">
           <view class="type-icon">
-            <uni-icons type="contact" size="24" :color="postType === 1 ? '#3498db' : '#666'"></uni-icons>
+            <uni-icons type="contact" size="24" :color="threadType === 1 ? '#3498db' : '#666'"></uni-icons>
           </view>
           <view class="type-name">作品集</view>
           <view class="type-desc">展示个人作品</view>
         </view>
         <view 
           class="type-item" 
-          :class="{ active: postType === 2 }"
+          :class="{ active: threadType === 2 }"
           @click="handleTypeChange(2)">
           <view class="type-icon">
-            <uni-icons type="folder" size="24" :color="postType === 2 ? '#3498db' : '#666'"></uni-icons>
+            <uni-icons type="list" size="24" :color="threadType === 2 ? '#3498db' : '#666'"></uni-icons>
           </view>
           <view class="type-name">案例集</view>
           <view class="type-desc">项目案例分析</view>
         </view>
         <view 
           class="type-item" 
-          :class="{ active: postType === 3 }"
+          :class="{ active: threadType === 3 }"
           @click="handleTypeChange(3)">
           <view class="type-icon">
-            <uni-icons type="paperclip" size="24" :color="postType === 3 ? '#3498db' : '#666'"></uni-icons>
+            <uni-icons type="paperclip" size="24" :color="threadType === 3 ? '#3498db' : '#666'"></uni-icons>
           </view>
           <view class="type-name">普通帖</view>
           <view class="type-desc">日常交流分享</view>
         </view>
         <view 
           class="type-item" 
-          :class="{ active: postType === 4 }"
+          :class="{ active: threadType === 4 }"
           @click="handleTypeChange(4)">
           <view class="type-icon">
-            <uni-icons type="shop" size="24" :color="postType === 4 ? '#3498db' : '#666'"></uni-icons>
+            <uni-icons type="shop" size="24" :color="threadType === 4 ? '#3498db' : '#666'"></uni-icons>
           </view>
           <view class="type-name">材料展示</view>
           <view class="type-desc">素材资源分享</view>
@@ -72,24 +50,24 @@
       </view>
     </view>
     
-    <!-- 第三部分：帖子表单 -->
+    <!-- 第二部分：帖子表单 -->
     <view class="card">
       <view class="section-title">
         <uni-icons type="list" size="18" color="#3498db"></uni-icons>
         <text>帖子内容</text>
       </view>
       
-   <view class="form-group">
-     <view class="form-label">帖子标题</view>
-     <uni-easyinput 
-       type="text" 
-       class="form-input" 
-       v-model="postTitle" 
-       placeholder="请输入帖子标题"
-       placeholder-style="color: #c0c4cc"
-       maxlength="100"
-     />
-   </view>
+      <view class="form-group">
+        <view class="form-label">帖子标题</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="title" 
+          placeholder="请输入帖子标题"
+          placeholder-style="color: #c0c4cc"
+          maxlength="100"
+        />
+      </view>
       
       <view class="form-group">
         <view class="form-label">插入图片或视频</view>
@@ -102,26 +80,37 @@
         </view>
         
         <!-- 媒体预览 -->
-        <view class="media-preview" v-if="mediaFiles.length > 0">
+        <view class="media-preview" v-if="previewMediaFiles.length > 0">
           <view class="media-list">
-            <view class="media-item" v-for="(media, index) in mediaFiles" :key="index">
+            <view class="media-item" v-for="(media, index) in previewMediaFiles" :key="index">
               <image 
                 v-if="media.type === 'image'" 
-                :src="media.path" 
+                :src="media.tempFilePath" 
                 class="media-image"
                 mode="aspectFill"
                 @click="previewImage(index)"
               />
               <video 
                 v-else 
-                :src="media.path" 
+                :src="media.tempFilePath" 
                 class="media-video"
                 controls
               />
-              <view class="media-remove" @click="removeMedia(index)">
+              <view class="media-remove" @click="removePreviewMedia(index)">
                 <uni-icons type="close" size="16" color="#fff"></uni-icons>
               </view>
+              <view class="media-status" v-if="media.uploadStatus === 'uploading'">
+                <text class="status-text">上传中...</text>
+              </view>
             </view>
+          </view>
+        </view>
+        
+        <!-- 上传进度 -->
+        <view v-if="uploadProgress > 0 && uploadProgress < 100" class="upload-progress">
+          <text class="progress-text">批量上传中 {{uploadProgress}}%</text>
+          <view class="progress-bar">
+            <view class="progress-inner" :style="{width: uploadProgress + '%'}"></view>
           </view>
         </view>
       </view>
@@ -130,53 +119,17 @@
         <view class="form-label">帖子正文</view>
         <textarea 
           class="form-input textarea" 
-          v-model="postContent" 
+          v-model="content" 
           placeholder="请输入帖子正文内容..."
           placeholder-style="color: #c0c4cc"
           maxlength="5000"
         />
-        <view class="word-count">{{ postContent.length }}/5000</view>
-      </view>
-      
-      <!-- 动态表单字段（根据帖子类型显示不同字段） -->
-      <view class="form-group" v-if="postType === 1">
-        <view class="form-label">项目类型</view>
-        <input 
-          type="text" 
-          class="form-input" 
-          v-model="portfolioFields.projectType" 
-          placeholder="请输入项目类型"
-          placeholder-style="color: #c0c4cc"
-        />
-      </view>
-      
-      <view class="form-group" v-if="postType === 2">
-        <view class="form-label">案例背景</view>
-        <textarea 
-          class="form-input textarea" 
-          v-model="caseStudyFields.caseBackground" 
-          placeholder="请输入案例背景..."
-          placeholder-style="color: #c0c4cc"
-        />
-      </view>
-      
-      <view class="form-group" v-if="postType === 4">
-        <view class="form-label">材料类型</view>
-        <input 
-          type="text" 
-          class="form-input" 
-          v-model="materialShowFields.materialType" 
-          placeholder="请输入材料类型"
-          placeholder-style="color: #c0c4cc"
-        />
+        <view class="word-count">{{ content.length }}/5000</view>
       </view>
     </view>
     
-    <!-- 第四部分：底部按钮 -->
+    <!-- 第三部分：底部按钮 -->
     <view class="bottom-actions">
-      <button class="btn btn-save" @click="saveDraft" :disabled="isSubmitting">
-        {{ isSubmitting ? '保存中...' : '保存草稿' }}
-      </button>
       <button class="btn btn-publish" @click="publishPost" :disabled="isSubmitting">
         {{ isSubmitting ? '发布中...' : '发布帖子' }}
       </button>
@@ -185,42 +138,32 @@
 </template>
 
 <script>
+import { createPost, updatePost, getPostDetail } from '@/api/community'
+import { uploadImage, deleteImage } from '@/api/join.js'
+import { getUserProfile } from '@/api/users.js'
+
 export default {
   data() {
     return {
       postMode: 'new', // 'new' 或 'draft'
-      postType: 3, // 对应 threadType: 1-作品集, 2-案例集, 3-普通帖, 4-材料展示
-      postTitle: '',
-      postContent: '',
-      roleType: 1, // 角色类型，根据用户信息设置
-      mediaFiles: [], // 存储上传的媒体文件
+      threadType: 3, // 帖子类型：1-作品集, 2-案例集, 3-普通帖, 4-材料展示
+      title: '',
+      content: '',
+      categoryId: null, // 分类ID
+      status: 1, // 帖子状态：0-草稿，1-发布
+      previewMediaFiles: [], // 预览媒体文件（临时路径）
+      uploadedMediaFiles: [], // 已上传的媒体文件（服务器返回的信息）
       editingPostId: null, // 编辑时的帖子ID
       isSubmitting: false, // 防止重复提交
-      
-      // 不同类型帖子的特有字段
-      portfolioFields: {
-        projectType: '',
-        completionDate: '',
-        techStack: ''
-      },
-      caseStudyFields: {
-        caseBackground: '',
-        solution: '',
-        result: ''
-      },
-      materialShowFields: {
-        materialType: '',
-        specifications: '',
-        priceRange: ''
-      },
-      normalPostFields: {
-        tags: [],
-        isPublic: true
-      }
+      uploadProgress: 0, // 上传进度
+      roleType: null, // 用户角色类型（仅用于前端逻辑，不发送到后端）
     }
   },
   
   onLoad(options) {
+    // 初始化时获取用户信息
+    this.getUserRoleInfo()
+    
     // 如果是编辑模式，从参数获取帖子ID并加载数据
     if (options.postId) {
       this.editingPostId = options.postId
@@ -229,23 +172,84 @@ export default {
   },
   
   methods: {
-    // 处理模式切换
-    handleModeChange(mode) {
-      this.postMode = mode
+    // 获取用户角色信息
+    async getUserRoleInfo() {
+      try {
+        const response = await getUserProfile()
+        if (response.code === 200 && response.data) {
+          const userData = response.data
+          // 转换角色类型为数字（仅用于前端逻辑）
+          this.roleType = this.convertRoleType(userData.role_type)
+          console.log('用户角色信息:', {
+            originalRole: userData.role_type,
+            convertedRoleType: this.roleType
+          })
+        }
+      } catch (error) {
+        console.error('获取用户角色信息失败:', error)
+        // 如果获取失败，默认设为普通用户
+        this.roleType = 1
+      }
+    },
+    
+    // 转换角色类型为数字
+    convertRoleType(roleString) {
+      const roleMap = {
+        'user': 1,
+        'designer': 2,
+        'supervisor': 3,
+        'material_supplier': 4
+      }
+      return roleMap[roleString] || 1 // 默认为普通用户
     },
     
     // 处理类型切换
     handleTypeChange(type) {
-      this.postType = type
+      this.threadType = type
     },
     
     // 加载帖子数据（编辑模式）
-    loadPostData(postId) {
-      // 这里可以调用API加载帖子数据
-      console.log('加载帖子数据:', postId)
+    async loadPostData(postId) {
+      try {
+        uni.showLoading({
+          title: '加载中...'
+        })
+        
+        const response = await getPostDetail(postId)
+        const postData = response.data
+        
+        // 填充表单数据
+        this.title = postData.title
+        this.content = postData.content
+        this.threadType = postData.threadType
+        this.categoryId = postData.categoryId
+        this.status = postData.status
+        
+        // 处理媒体文件（如果有的话，用于前端展示）
+        if (postData.mediaUrls && postData.mediaUrls.length > 0) {
+          this.uploadedMediaFiles = postData.mediaUrls.map(media => ({
+            type: media.type || 'image',
+            fileUrl: media.fileUrl,
+            mediaId: media.mediaId,
+            fileName: media.fileName,
+            fileSize: media.fileSize,
+            uploadStatus: 'completed'
+          }))
+        }
+        
+        uni.hideLoading()
+        
+      } catch (error) {
+        console.error('加载帖子数据失败:', error)
+        uni.hideLoading()
+        uni.showToast({
+          title: '加载帖子失败',
+          icon: 'none'
+        })
+      }
     },
     
-    // 处理媒体上传
+    // 处理媒体上传（仅选择，不上传）
     handleMediaUpload() {
       uni.showActionSheet({
         itemList: ['选择图片', '选择视频'],
@@ -259,56 +263,75 @@ export default {
       })
     },
     
-    // 选择图片
+    // 选择图片（仅预览）
     chooseImage() {
       uni.chooseImage({
-        count: 9 - this.mediaFiles.length, // 最多9个
+        count: 9 - this.previewMediaFiles.length, // 最多9个
         sizeType: ['original', 'compressed'],
         sourceType: ['album', 'camera'],
         success: (res) => {
-          const newImages = res.tempFilePaths.map(path => ({
-            type: 'image',
-            path: path,
-            uploadStatus: 'pending'
-          }))
-          this.mediaFiles = [...this.mediaFiles, ...newImages]
-          uni.showToast({
-            title: `已选择${res.tempFilePaths.length}张图片`,
-            icon: 'success'
-          })
+          for (let i = 0; i < res.tempFilePaths.length; i++) {
+            this.addPreviewMedia({
+              type: 'image',
+              tempFilePath: res.tempFilePaths[i],
+              fileInfo: res.tempFiles[i],
+              uploadStatus: 'pending' // 等待上传
+            })
+          }
         }
       })
     },
     
-    // 选择视频
+    // 选择视频（仅预览）
     chooseVideo() {
       uni.chooseVideo({
         sourceType: ['album', 'camera'],
         maxDuration: 60,
         camera: 'back',
         success: (res) => {
-          this.mediaFiles.push({
+          this.addPreviewMedia({
             type: 'video',
-            path: res.tempFilePath,
-            duration: res.duration,
-            size: res.size,
-            uploadStatus: 'pending'
+            tempFilePath: res.tempFilePath,
+            fileInfo: {
+              size: res.size,
+              type: 'video/mp4'
+            },
+            uploadStatus: 'pending' // 等待上传
           })
-          uni.showToast({
-            title: '视频选择成功',
-            icon: 'success'
-          })
+        }
+      })
+    },
+    
+    // 添加预览媒体
+    addPreviewMedia(media) {
+      this.previewMediaFiles.push(media)
+    },
+    
+    // 删除预览媒体
+    removePreviewMedia(index) {
+      uni.showModal({
+        title: '提示',
+        content: '确定要删除这个文件吗？',
+        success: (res) => {
+          if (res.confirm) {
+            this.previewMediaFiles.splice(index, 1)
+            uni.showToast({
+              title: '删除成功',
+              icon: 'success',
+              duration: 2000
+            })
+          }
         }
       })
     },
     
     // 预览图片
     previewImage(index) {
-      const imageUrls = this.mediaFiles
+      const imageUrls = this.previewMediaFiles
         .filter(media => media.type === 'image')
-        .map(media => media.path)
+        .map(media => media.tempFilePath)
       
-      const currentIndex = this.mediaFiles
+      const currentIndex = this.previewMediaFiles
         .slice(0, index)
         .filter(media => media.type === 'image')
         .length
@@ -319,69 +342,131 @@ export default {
       })
     },
     
-    // 删除媒体文件
-    removeMedia(index) {
-      uni.showModal({
-        title: '提示',
-        content: '确定要删除这个文件吗？',
-        success: (res) => {
-          if (res.confirm) {
-            this.mediaFiles.splice(index, 1)
-            uni.showToast({
-              title: '删除成功',
-              icon: 'success'
-            })
+    // 批量上传媒体文件
+    async uploadAllMediaFiles(postId) {
+      const pendingMedia = this.previewMediaFiles.filter(media => media.uploadStatus === 'pending')
+      
+      if (pendingMedia.length === 0) {
+        return this.uploadedMediaFiles
+      }
+      
+      this.uploadProgress = 0
+      const totalFiles = pendingMedia.length
+      let completedFiles = 0
+      
+      for (let i = 0; i < pendingMedia.length; i++) {
+        const media = pendingMedia[i]
+        const index = this.previewMediaFiles.findIndex(m => m.tempFilePath === media.tempFilePath)
+        
+        if (index !== -1) {
+          // 更新状态为上传中
+          this.previewMediaFiles[index].uploadStatus = 'uploading'
+          
+          try {
+            // 使用传入的帖子ID进行上传，related_type固定为3
+            const result = await this.uploadSingleMediaFile(
+              media.tempFilePath, 
+              media.type, 
+              media.fileInfo, 
+              postId
+            )
+            
+            if (result.code === 200) {
+              // 上传成功，添加到已上传列表
+              const uploadedMedia = {
+                type: media.type,
+                fileUrl: result.data.fileUrl,
+                mediaId: result.data.mediaId,
+                fileName: result.data.fileName,
+                fileSize: result.data.fileSize,
+                uploadStatus: 'completed'
+              }
+              this.uploadedMediaFiles.push(uploadedMedia)
+              
+              // 更新预览文件状态
+              this.previewMediaFiles[index].uploadStatus = 'completed'
+            } else {
+              throw new Error(result.msg || result.message || '上传失败')
+            }
+          } catch (error) {
+            console.error(`上传文件失败: ${media.tempFilePath}`, error)
+            this.previewMediaFiles[index].uploadStatus = 'failed'
+            throw error
           }
+          
+          // 更新进度
+          completedFiles++
+          this.uploadProgress = Math.round((completedFiles / totalFiles) * 100)
         }
-      })
+      }
+      
+      return this.uploadedMediaFiles
     },
     
-    // 构建帖子数据
+    // 上传单个媒体文件
+    async uploadSingleMediaFile(filePath, fileType, fileInfo, postId) {
+      try {
+        if (fileInfo.size > 50 * 1024 * 1024) {
+          throw new Error('文件大小不能超过50MB')
+        }
+        
+        const relatedType = 3 // 固定为3，根据你的要求
+        const relatedId = postId ? Number(postId) : 0 // 使用传入的帖子ID
+        const description = `帖子${fileType === 'image' ? '图片' : '视频'}`
+        const stage = 'post'
+        const sequence = this.uploadedMediaFiles.length + 1
+        
+        console.log('📤 上传文件参数:', {
+          filePath,
+          relatedType, // 固定为3
+          relatedId,   // 帖子ID
+          description,
+          stage,
+          sequence
+        })
+        
+        const response = await uploadImage(
+          filePath,
+          relatedType,
+          relatedId,
+          description,
+          stage,
+          sequence
+        )
+        
+        console.log('✅ 上传成功:', response)
+        return response
+        
+      } catch (error) {
+        console.error('❌ 上传失败:', error)
+        throw error
+      }
+    },
+    
+    // 构建帖子数据（移除roleType字段）
     buildPostData() {
       const baseData = {
-        title: this.postTitle.trim(),
-        content: this.postContent.trim(),
-        roleType: this.roleType,
-        threadType: this.postType
+        title: this.title.trim(),
+        content: this.content.trim(),
+        threadType: this.threadType
       }
       
-      // 根据帖子类型设置对应的模板字段
-      switch (this.postType) {
-        case 1: // 作品集
-          baseData.portfolio = {
-            projectType: this.portfolioFields.projectType,
-            completionDate: this.portfolioFields.completionDate,
-            techStack: this.portfolioFields.techStack
-          }
-          break
-        case 2: // 案例集
-          baseData.caseStudy = {
-            caseBackground: this.caseStudyFields.caseBackground,
-            solution: this.caseStudyFields.solution,
-            result: this.caseStudyFields.result
-          }
-          break
-        case 3: // 普通帖
-          baseData.normalPost = {
-            tags: this.normalPostFields.tags,
-            isPublic: this.normalPostFields.isPublic
-          }
-          break
-        case 4: // 材料展示
-          baseData.materialShow = {
-            materialType: this.materialShowFields.materialType,
-            specifications: this.materialShowFields.specifications,
-            priceRange: this.materialShowFields.priceRange
-          }
-          break
+      // 添加可选字段
+      if (this.categoryId) {
+        baseData.categoryId = this.categoryId
       }
       
+      if (this.status !== undefined) {
+        baseData.status = this.status
+      }
+      
+      console.log('📦 构建的帖子数据:', baseData)
       return baseData
     },
     
     // 表单验证
     validateForm() {
-      if (!this.postTitle.trim()) {
+      if (!this.title.trim()) {
         uni.showToast({
           title: '请输入帖子标题',
           icon: 'none'
@@ -389,7 +474,7 @@ export default {
         return false
       }
       
-      if (this.postTitle.trim().length < 2) {
+      if (this.title.trim().length < 2) {
         uni.showToast({
           title: '标题至少需要2个字符',
           icon: 'none'
@@ -397,7 +482,7 @@ export default {
         return false
       }
       
-      if (!this.postContent.trim()) {
+      if (!this.content.trim()) {
         uni.showToast({
           title: '请输入帖子内容',
           icon: 'none'
@@ -406,39 +491,6 @@ export default {
       }
       
       return true
-    },
-    
-    // 保存草稿
-    async saveDraft() {
-      if (this.isSubmitting) return
-      
-      if (!this.validateForm()) return
-      
-      this.isSubmitting = true
-      
-      try {
-        const postData = this.buildPostData()
-        
-        // 这里调用保存草稿的API
-        console.log('保存草稿数据:', postData)
-        
-        uni.showToast({
-          title: '草稿保存成功',
-          icon: 'success'
-        })
-        
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-      } catch (error) {
-        console.error('保存草稿失败:', error)
-        uni.showToast({
-          title: '保存草稿失败',
-          icon: 'none'
-        })
-      } finally {
-        this.isSubmitting = false
-      }
     },
     
     // 发布帖子
@@ -450,18 +502,46 @@ export default {
       this.isSubmitting = true
       
       try {
-        const postData = this.buildPostData()
+        let postId = this.editingPostId
         
-        // 这里调用发布帖子的API
-        console.log('发布帖子数据:', postData)
+        // 第一步：创建帖子（发布状态）
+        const postData = this.buildPostData()
+        postData.status = 1 // 发布状态
+        
+        let result
+        if (this.editingPostId) {
+          // 如果是编辑模式，使用updatePost
+          result = await updatePost(this.editingPostId, postData)
+        } else {
+          // 如果是新建模式，使用createPost
+          result = await createPost(postData)
+          console.log('📝 创建帖子返回:', result)
+          if (result.code === 200 && result.data) {
+            // 提取帖子ID，注意：result.data可能是字符串 "5"
+            postId = String(result.data) // 确保是字符串类型
+            this.editingPostId = postId // 更新编辑帖子ID
+            console.log('✅ 获取到帖子ID:', postId)
+          } else {
+            throw new Error('创建帖子失败: ' + (result.message || '未知错误'))
+          }
+        }
+        
+        // 第二步：如果有预览文件，使用帖子ID上传文件
+        if (this.previewMediaFiles.length > 0 && postId) {
+          uni.showLoading({
+            title: '上传文件中...'
+          })
+          await this.uploadAllMediaFiles(postId)
+          uni.hideLoading()
+        }
         
         uni.showToast({
           title: '帖子发布成功',
           icon: 'success'
         })
         
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // 清空预览文件
+        this.previewMediaFiles = []
         
         // 发布成功后返回上一页
         setTimeout(() => {
@@ -471,11 +551,12 @@ export default {
       } catch (error) {
         console.error('发布帖子失败:', error)
         uni.showToast({
-          title: '发布帖子失败',
+          title: '发布帖子失败: ' + error.message,
           icon: 'none'
         })
       } finally {
         this.isSubmitting = false
+        this.uploadProgress = 0
       }
     }
   }
@@ -498,7 +579,6 @@ export default {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
-/* 第一部分：顶部切换 */
 .section-title {
   font-size: 16px;
   font-weight: 600;
@@ -512,32 +592,6 @@ export default {
   margin-left: 8px;
 }
 
-.segmented-control {
-  display: flex;
-  background: #f1f5f9;
-  border-radius: 8px;
-  padding: 4px;
-  margin-bottom: 5px;
-}
-
-.segmented-control-item {
-  flex: 1;
-  text-align: center;
-  padding: 10px 0;
-  border-radius: 6px;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.3s;
-  cursor: pointer;
-}
-
-.segmented-control-item.active {
-  background: white;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  color: #3498db;
-}
-
-/* 第二部分：帖子类型选择 */
 .type-selector {
   display: flex;
   flex-wrap: wrap;
@@ -577,7 +631,6 @@ export default {
   color: #7f8c8d;
 }
 
-/* 第三部分：表单 */
 .form-group {
   margin-bottom: 20px;
   position: relative;
@@ -606,6 +659,7 @@ export default {
 
 .textarea {
   min-height: 150px;
+  font-family: inherit;
 }
 
 .word-count {
@@ -616,7 +670,6 @@ export default {
   color: #95a5a6;
 }
 
-/* 媒体上传区域 */
 .media-upload {
   border: 2px dashed #e1e8ed;
   border-radius: 8px;
@@ -647,7 +700,6 @@ export default {
   font-size: 12px;
 }
 
-/* 媒体预览 */
 .media-preview {
   margin-top: 15px;
 }
@@ -690,7 +742,53 @@ export default {
   cursor: pointer;
 }
 
-/* 第四部分：底部按钮 */
+/* 新增状态样式 */
+.media-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-text {
+  color: white;
+  font-size: 12px;
+  text-align: center;
+}
+
+.upload-progress {
+  margin-top: 15rpx;
+  width: 100%;
+}
+
+.progress-text {
+  font-size: 24rpx;
+  color: #3498db;
+  text-align: center;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6rpx;
+  background-color: #e0e0e0;
+  border-radius: 3rpx;
+  overflow: hidden;
+}
+
+.progress-inner {
+  height: 100%;
+  background-color: #3498db;
+  border-radius: 3rpx;
+  transition: width 0.3s ease;
+}
+
 .bottom-actions {
   position: fixed;
   bottom: 0;
@@ -729,17 +827,6 @@ export default {
   background: #2980b9;
 }
 
-.btn-save {
-  background: #f8f9fa;
-  color: #7f8c8d;
-  border: 1px solid #e1e8ed;
-}
-
-.btn-save:active:not(:disabled) {
-  background: #e9ecef;
-}
-
-/* 响应式调整 */
 @media (max-width: 480px) {
   .container {
     padding: 10px;

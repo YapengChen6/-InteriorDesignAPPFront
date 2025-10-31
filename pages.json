@@ -179,6 +179,24 @@
     "style": {
       "navigationBarTitleText": "发布帖子页面"
     }
+  },
+  {
+    "path": "pages/publish/index",
+    "style": {
+      "navigationBarTitleText": "发布页面"
+    }
+  },
+  {
+    "path": "pages/post/order",
+    "style": {
+      "navigationBarTitleText": "发布订单页面"
+    }
+  },
+  {
+    "path": "pages/mine/posted/posted",
+    "style": {
+      "navigationBarTitleText": "已发布页面"
+    }
   }
   ],
   "tabBar": {
