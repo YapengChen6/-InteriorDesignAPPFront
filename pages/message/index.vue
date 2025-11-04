@@ -1,63 +1,120 @@
 <template>
   <view class="message-center">
-    <!-- 页面头部 -->
-    <view class="header">
-      <view class="header-content">
-        <view class="header-title">
-          <text class="header-icon">💬</text>
-          <text class="header-text">消息中心</text>
+    <!-- 固定顶部导航栏 -->
+    <view class="navbar-fixed">
+      <view class="navbar">
+        <view class="navbar-content">
+          <view class="navbar-title">
+            <text class="title-text">消息中心</text>
+            <button @click="markAllAsRead" class="mark-all-read-btn" :disabled="!hasUnreadMessages">
+              <text class="btn-text">全部已读</text>
+            </button>
+          </view>
         </view>
-        <button @click="markAllAsRead" class="mark-all-read-btn">
-          <text class="btn-text">全部标记为已读</text>
-        </button>
+      </view>
+
+      <!-- 标签页 - 占满页面宽度 -->
+      <view class="tabs-container">
+        <view class="tabs-fullwidth">
+          <view 
+            v-for="tab in tabs" 
+            :key="tab.id"
+            :class="['tab', { active: activeTab === tab.id }]"
+            @click="switchTab(tab.id)"
+          >
+            <text class="tab-text">{{ tab.name }}</text>
+            <text v-if="tab.unreadCount > 0" class="badge">{{ tab.unreadCount }}</text>
+          </view>
+        </view>
       </view>
     </view>
 
-    <!-- 消息标签页 -->
-    <view class="tabs">
-      <button 
-        v-for="tab in tabs" 
-        :key="tab.id"
-        :class="['tab', { active: activeTab === tab.id }]"
-        @click="activeTab = tab.id"
-      >
-        <text class="tab-text">{{ tab.name }}</text>
-        <text v-if="tab.unreadCount > 0" class="badge">{{ tab.unreadCount }}</text>
-      </button>
-    </view>
+    <!-- 消息列表 - 添加顶部内边距避免被导航栏遮挡 -->
+    <scroll-view class="message-list" scroll-y="true" refresher-enabled="true" :refresher-triggered="refreshing" @refresherrefresh="onRefresh" :style="{ paddingTop: navHeight + 'px' }">
+      <!-- 下拉刷新 -->
+      <view class="refresher" v-if="refreshing">
+        <view class="refresher-loading">
+          <view class="loading-spinner"></view>
+          <text class="refresher-text">刷新中...</text>
+        </view>
+      </view>
 
-    <!-- 消息列表 -->
-    <view class="message-list">
-      <view v-if="filteredMessages.length === 0" class="empty-state">
-        <text class="empty-icon">📭</text>
+      <!-- 空状态 -->
+      <view v-if="filteredMessages.length === 0 && !loading" class="empty-state">
+        <image class="empty-image" src="/static/images/empty-message.png" mode="aspectFit"></image>
         <text class="empty-text">暂无消息</text>
+        <text class="empty-desc">当有新消息时，会在这里显示</text>
       </view>
 
+      <!-- 消息项 - 去掉内容预览区域 -->
       <view 
         v-for="message in filteredMessages" 
         :key="message.id"
         :class="['message-item', { unread: !message.read }]"
-        @click="markAsRead(message)"
+        @click="openMessage(message)"
       >
-        <view class="message-avatar" :class="message.type">
-          <text class="avatar-icon">{{ getAvatarIcon(message.type) }}</text>
+        <!-- 左侧图标区域 -->
+        <view class="message-left">
+          <view class="message-avatar" :class="message.type">
+            <text class="avatar-icon">{{ getAvatarIcon(message.type) }}</text>
+          </view>
         </view>
+        
+        <!-- 中间内容区域 - 只显示标题和时间 -->
         <view class="message-content">
           <view class="message-header">
             <text class="message-title">{{ message.title }}</text>
             <text class="message-time">{{ formatTime(message.time) }}</text>
           </view>
-          <text class="message-preview">{{ message.content }}</text>
-          <view class="message-footer">
-            <text class="message-sender">{{ message.sender }}</text>
-            <view class="message-actions">
-              <button @click.stop="deleteMessage(message)" class="btn-icon">
-                <text class="delete-icon">🗑️</text>
-              </button>
-            </view>
+        </view>
+        
+        <!-- 右侧操作区域 -->
+        <view class="message-right">
+          <view class="message-actions">
+            <button @click.stop="deleteMessage(message)" class="action-btn delete-btn">
+              <text class="btn-text">删除</text>
+            </button>
           </view>
         </view>
       </view>
+
+      <!-- 加载更多 -->
+      <view v-if="hasMore && filteredMessages.length > 0" class="load-more">
+        <view class="load-more-content" @click="loadMore">
+          <text class="load-more-text">加载更多</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 消息详情弹窗 -->
+    <uni-popup ref="messagePopup" type="center" background-color="#fff" :is-mask-click="false">
+      <view class="popup-content" v-if="selectedMessage">
+        <view class="popup-header">
+          <text class="popup-title">{{ selectedMessage.title }}</text>
+          <button class="close-btn" @click="closePopup">
+            <text class="close-icon">×</text>
+          </button>
+        </view>
+        <view class="popup-body">
+          <view class="message-meta">
+            <text class="sender">发件人：{{ selectedMessage.sender }}</text>
+            <text class="time">{{ formatFullTime(selectedMessage.time) }}</text>
+          </view>
+          <view class="message-detail">
+            <text>{{ selectedMessage.content }}</text>
+          </view>
+        </view>
+        <view class="popup-footer">
+          <button class="popup-btn cancel-btn" @click="closePopup">关闭</button>
+          <button v-if="!selectedMessage.read" class="popup-btn confirm-btn" @click="markAsRead(selectedMessage)">标记已读</button>
+        </view>
+      </view>
+    </uni-popup>
+
+    <!-- 操作反馈 Toast -->
+    <view v-if="toast.show" class="toast-message" :class="toast.type">
+      <text class="toast-icon">{{ toast.icon }}</text>
+      <text class="toast-text">{{ toast.message }}</text>
     </view>
   </view>
 </template>
@@ -68,11 +125,22 @@ export default {
   data() {
     return {
       activeTab: 'all',
+      loading: false,
+      refreshing: false,
+      hasMore: true,
+      selectedMessage: null,
+      navHeight: 120, // 默认导航栏高度
+      toast: {
+        show: false,
+        message: '',
+        icon: '',
+        type: 'success'
+      },
       tabs: [
-        { id: 'all', name: '全部消息', unreadCount: 0 },
-        { id: 'unread', name: '未读消息', unreadCount: 0 },
-        { id: 'project', name: '项目消息', unreadCount: 0 },
-        { id: 'system', name: '系统通知', unreadCount: 0 }
+        { id: 'all', name: '全部', unreadCount: 2 },
+        { id: 'unread', name: '未读', unreadCount: 2 },
+        { id: 'project', name: '项目', unreadCount: 2 },
+        { id: 'system', name: '系统', unreadCount: 0 }
       ],
       messages: [
         {
@@ -92,42 +160,6 @@ export default {
           time: new Date('2023-10-14 09:15'),
           read: true,
           sender: '系统管理员'
-        },
-        {
-          id: 3,
-          type: 'project',
-          title: '材料采购提醒',
-          content: '您选择的瓷砖品牌库存紧张，建议尽快确认或选择替代方案。',
-          time: new Date('2023-10-13 16:45'),
-          read: false,
-          sender: '材料管家'
-        },
-        {
-          id: 4,
-          type: 'system',
-          title: '安全提醒',
-          content: '检测到您的账户有异常登录，如非本人操作请立即修改密码。',
-          time: new Date('2023-10-12 11:20'),
-          read: true,
-          sender: '安全中心'
-        },
-        {
-          id: 5,
-          type: 'project',
-          title: '施工进度更新',
-          content: '水电改造工程已完成验收，下一步将进行泥瓦工施工。',
-          time: new Date('2023-10-11 17:30'),
-          read: true,
-          sender: '工程监理'
-        },
-        {
-          id: 6,
-          type: 'system',
-          title: '新功能上线',
-          content: '3D效果图预览功能已上线，现在可以更直观地查看设计方案。',
-          time: new Date('2023-10-10 10:05'),
-          read: false,
-          sender: '产品团队'
         }
       ]
     }
@@ -144,6 +176,9 @@ export default {
         default:
           return this.messages
       }
+    },
+    hasUnreadMessages() {
+      return this.messages.some(msg => !msg.read)
     }
   },
   methods: {
@@ -154,297 +189,596 @@ export default {
       }
       return icons[type] || '✉️'
     },
+    
     formatTime(time) {
-      const now = new Date()
-      const diff = now - time
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      
-      if (days === 0) {
-        return time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      } else if (days === 1) {
-        return '昨天'
-      } else if (days < 7) {
-        return `${days}天前`
-      } else {
-        return time.toLocaleDateString('zh-CN')
+      // 根据截图显示格式，只显示月/日
+      return `${time.getMonth() + 1}/${time.getDate()}`
+    },
+    
+    formatFullTime(time) {
+      return time.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    },
+    
+    openMessage(message) {
+      this.selectedMessage = message
+      this.$refs.messagePopup.open()
+      if (!message.read) {
+        this.markAsRead(message)
       }
     },
+    
+    closePopup() {
+      this.$refs.messagePopup.close()
+      this.selectedMessage = null
+    },
+    
     markAsRead(message) {
       if (!message.read) {
         message.read = true
         this.updateUnreadCounts()
+        this.showToast('标记为已读', '✓', 'success')
       }
     },
+    
     markAllAsRead() {
+      if (!this.hasUnreadMessages) {
+        this.showToast('没有未读消息', 'ℹ️', 'info')
+        return
+      }
+      
       this.messages.forEach(msg => {
         msg.read = true
       })
       this.updateUnreadCounts()
+      this.showToast('全部标记为已读', '✓', 'success')
     },
+    
     deleteMessage(message) {
-      this.messages = this.messages.filter(msg => msg.id !== message.id)
-      this.updateUnreadCounts()
-    },
-    updateUnreadCounts() {
-      this.tabs.forEach(tab => {
-        if (tab.id === 'all') {
-          tab.unreadCount = this.messages.filter(msg => !msg.read).length
-        } else if (tab.id === 'unread') {
-          tab.unreadCount = this.messages.filter(msg => !msg.read).length
-        } else {
-          tab.unreadCount = this.messages.filter(msg => msg.type === tab.id && !msg.read).length
+      uni.showModal({
+        title: '删除确认',
+        content: '确定要删除这条消息吗？',
+        confirmColor: '#FF4757',
+        success: (res) => {
+          if (res.confirm) {
+            const index = this.messages.findIndex(msg => msg.id === message.id)
+            if (index !== -1) {
+              this.messages.splice(index, 1)
+              this.updateUnreadCounts()
+              this.showToast('删除成功', '🗑️', 'success')
+            }
+          }
         }
       })
+    },
+    
+    switchTab(tabId) {
+      this.activeTab = tabId
+    },
+    
+    onRefresh() {
+      this.refreshing = true
+      // 模拟刷新数据
+      setTimeout(() => {
+        this.refreshing = false
+        this.updateUnreadCounts()
+        uni.showToast({
+          title: '刷新成功',
+          icon: 'success'
+        })
+      }, 1000)
+    },
+    
+    loadMore() {
+      this.loading = true
+      // 模拟加载更多
+      setTimeout(() => {
+        this.loading = false
+        this.hasMore = false
+      }, 800)
+    },
+    
+    updateUnreadCounts() {
+      const unreadCount = this.messages.filter(msg => !msg.read).length
+      const projectUnread = this.messages.filter(msg => msg.type === 'project' && !msg.read).length
+      const systemUnread = this.messages.filter(msg => msg.type === 'system' && !msg.read).length
+      
+      this.tabs[0].unreadCount = unreadCount
+      this.tabs[1].unreadCount = unreadCount
+      this.tabs[2].unreadCount = projectUnread
+      this.tabs[3].unreadCount = systemUnread
+    },
+    
+    showToast(message, icon, type = 'success') {
+      this.toast.message = message
+      this.toast.icon = icon
+      this.toast.type = type
+      this.toast.show = true
+      
+      setTimeout(() => {
+        this.toast.show = false
+      }, 2000)
+    },
+    
+    // 计算导航栏高度
+    calculateNavHeight() {
+      const query = uni.createSelectorQuery().in(this);
+      query.select('.navbar-fixed').boundingClientRect(data => {
+        if (data) {
+          this.navHeight = data.height;
+        }
+      }).exec();
     }
   },
-  mounted() {
-    this.updateUnreadCounts()
+  
+  onLoad() {
+    this.loading = true
+    setTimeout(() => {
+      this.loading = false
+      this.updateUnreadCounts()
+      // 计算导航栏高度
+      this.$nextTick(() => {
+        setTimeout(() => {
+          this.calculateNavHeight();
+        }, 100);
+      });
+    }, 500)
+  },
+  
+  onReady() {
+    // 页面渲染完成后计算导航栏高度
+    this.calculateNavHeight();
   }
 }
 </script>
 
 <style scoped>
 .message-center {
-  background: white;
+  background: #f5f5f5;
   min-height: 100vh;
+  position: relative;
 }
 
-/* 头部样式 - 高度降低 */
-.header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20rpx 0;
+/* 固定导航栏容器 */
+.navbar-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: #fff;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
-.header-content {
+/* 导航栏 */
+.navbar {
+  background: #fff;
+  padding-top: var(--status-bar-height);
+}
+
+.navbar-content {
+  padding: 20rpx 30rpx;
+}
+
+.navbar-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 32rpx;
+  width: 100%;
 }
 
-.header-title {
-  display: flex;
-  align-items: center;
-}
-
-.header-icon {
-  font-size: 32rpx;
-  margin-right: 16rpx;
-}
-
-.header-text {
-  font-size: 32rpx;
+.title-text {
+  font-size: 36rpx;
   font-weight: 600;
+  color: #333;
+  flex: 1;
 }
 
+/* 全部已读按钮 - 移到最右边 */
 .mark-all-read-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: #007AFF;
   color: white;
-  border: 2rpx solid rgba(255, 255, 255, 0.3);
-  padding: 12rpx 20rpx;
-  border-radius: 8rpx;
+  border: none;
+  padding: 12rpx 24rpx;
+  border-radius: 20rpx;
+  font-size: 24rpx;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.mark-all-read-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-text {
   font-size: 24rpx;
 }
 
-/* 标签页样式 */
-.tabs {
+/* 标签页 - 占满页面宽度 */
+.tabs-container {
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.tabs-fullwidth {
   display: flex;
-  background: #f9fafb;
-  border-bottom: 2rpx solid #eee;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
 }
 
 .tab {
   flex: 1;
   padding: 24rpx 0;
   text-align: center;
-  background: none;
-  border: none;
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #666;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 28rpx;
+  color: #666;
+  transition: all 0.2s ease;
 }
 
 .tab.active {
-  color: #667eea;
-  font-weight: 600;
-}
-
-.tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 20%;
-  width: 60%;
-  height: 6rpx;
-  background: #667eea;
-  border-radius: 6rpx 6rpx 0 0;
+  color: #007AFF;
+  font-weight: 500;
 }
 
 .badge {
-  background: #ff4757;
+  background: #FF3B30;
   color: white;
   border-radius: 20rpx;
   padding: 4rpx 12rpx;
-  font-size: 24rpx;
+  font-size: 20rpx;
   margin-left: 8rpx;
-  min-width: 32rpx;
+  min-width: 10rpx;
   text-align: center;
+  line-height: 1;
 }
 
-/* 消息列表样式 */
+/* 消息列表 */
 .message-list {
-  padding-bottom: 40rpx;
+  height: 100vh;
+  background: #f5f5f5;
 }
 
-.message-item {
-  padding: 36rpx 48rpx;
-  border-bottom: 2rpx solid #f0f0f0;
-  display: flex;
-  align-items: flex-start;
+.refresher {
+  background: #f5f5f5;
+  padding: 20rpx 0;
 }
 
-.message-item.unread {
-  background: #f0f7ff;
-  border-left: 8rpx solid #667eea;
-}
-
-.message-avatar {
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 50%;
-  margin-right: 28rpx;
+.refresher-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-size: 36rpx;
+  gap: 16rpx;
+}
+
+.refresher-text {
+  font-size: 26rpx;
+  color: #999;
+}
+
+/* 消息项 - 去掉内容预览区域 */
+.message-item {
+  background: #fff;
+  margin: 20rpx 30rpx;
+  padding: 30rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  position: relative;
+  min-height: 100rpx;
+}
+
+/* 移除未读消息的特殊背景色，只保留左侧标识 */
+.message-item.unread {
+  background: #fff;
+  border-left: 6rpx solid #007AFF;
+  padding-left: 24rpx;
+}
+
+/* 左侧图标区域 */
+.message-left {
+  margin-right: 24rpx;
   flex-shrink: 0;
 }
 
+.message-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+}
+
 .message-avatar.project {
-  background: #10c582;
+  background: linear-gradient(135deg, #34C759, #30A14E);
 }
 
 .message-avatar.system {
-  background: #4a6cf7;
+  background: linear-gradient(135deg, #007AFF, #0056CC);
 }
 
-.avatar-icon {
-  font-size: 40rpx;
-}
-
+/* 中间内容区域 - 只显示标题和时间 */
 .message-content {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .message-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16rpx;
+  align-items: center;
+  width: 100%;
 }
 
 .message-title {
-  font-weight: 600;
-  font-size: 32rpx;
-  color: #1a1a1a;
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #333;
   flex: 1;
+  margin-right: 20rpx;
 }
 
 .message-item.unread .message-title {
-  color: #667eea;
+  color: #007AFF;
+  font-weight: 600;
 }
 
 .message-time {
-  color: #999;
   font-size: 24rpx;
+  color: #999;
+  flex-shrink: 0;
   white-space: nowrap;
-  margin-left: 16rpx;
 }
 
-.message-preview {
-  color: #666;
-  font-size: 28rpx;
-  line-height: 1.5;
-  margin-bottom: 16rpx;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+/* 右侧操作区域 */
+.message-right {
+  margin-left: 24rpx;
+  flex-shrink: 0;
 }
 
-.message-footer {
+.message-actions {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 16rpx;
 }
 
-.message-sender {
-  color: #999;
-  font-size: 26rpx;
-}
-
-.btn-icon {
+.action-btn {
   background: none;
-  border: none;
-  color: #999;
-  padding: 8rpx;
-  border-radius: 8rpx;
+  border: 1rpx solid #ddd;
+  padding: 8rpx 20rpx;
+  border-radius: 16rpx;
+  font-size: 24rpx;
+  color: #666;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.delete-icon {
-  font-size: 32rpx;
+.delete-btn {
+  border-color: #FF3B30;
+  color: #FF3B30;
 }
 
+/* 空状态 */
 .empty-state {
-  padding: 120rpx 40rpx;
   text-align: center;
-  color: #999;
+  padding: 120rpx 60rpx;
+  background: #f5f5f5;
 }
 
-.empty-icon {
-  font-size: 96rpx;
+.empty-image {
+  width: 200rpx;
+  height: 200rpx;
   margin-bottom: 32rpx;
-  display: block;
+  opacity: 0.5;
 }
 
 .empty-text {
   font-size: 32rpx;
+  color: #999;
+  display: block;
+  margin-bottom: 16rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx;
+  color: #ccc;
+}
+
+/* 加载更多 */
+.load-more {
+  padding: 40rpx;
+  text-align: center;
+  background: #f5f5f5;
+}
+
+.load-more-content {
+  padding: 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  cursor: pointer;
+}
+
+.load-more-text {
+  font-size: 26rpx;
+  color: #007AFF;
+}
+
+/* 弹窗 */
+.popup-content {
+  background: #fff;
+  border-radius: 24rpx;
+  margin: 100rpx 40rpx;
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+.popup-header {
+  padding: 40rpx 40rpx 20rpx;
+  border-bottom: 1rpx solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.popup-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+  margin-right: 20rpx;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 40rpx;
+  color: #999;
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.popup-body {
+  padding: 30rpx 40rpx;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.message-meta {
+  margin-bottom: 30rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.sender, .time {
+  display: block;
+  font-size: 26rpx;
+  color: #999;
+  margin-bottom: 8rpx;
+}
+
+.message-detail {
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: #333;
+}
+
+.popup-footer {
+  padding: 30rpx 40rpx;
+  border-top: 1rpx solid #eee;
+  display: flex;
+  gap: 20rpx;
+}
+
+.popup-btn {
+  flex: 1;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  cursor: pointer;
+  border: none;
+}
+
+.cancel-btn {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.confirm-btn {
+  background: #007AFF;
+  color: white;
+}
+
+/* Toast */
+.toast-message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 24rpx 40rpx;
+  border-radius: 16rpx;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  font-size: 28rpx;
+}
+
+.toast-message.success {
+  background: rgba(52, 199, 89, 0.9);
+}
+
+.toast-message.info {
+  background: rgba(0, 122, 255, 0.9);
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 32rpx;
+  height: 32rpx;
+  border: 3rpx solid #f3f3f3;
+  border-top: 3rpx solid #007AFF;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* 响应式设计 */
 @media (max-width: 750px) {
-  .header-content {
-    padding: 0 24rpx;
-  }
-  
-  .tabs {
-    flex-wrap: wrap;
+  .navbar-content {
+    padding: 20rpx 24rpx;
   }
   
   .tab {
-    flex: 1 0 50%;
     padding: 20rpx 0;
     font-size: 26rpx;
   }
   
   .message-item {
-    padding: 24rpx 32rpx;
+    margin: 16rpx 24rpx;
+    padding: 24rpx;
   }
   
-  .message-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8rpx;
+  .message-item.unread {
+    padding-left: 18rpx;
   }
   
-  .message-time {
-    align-self: flex-end;
+  .popup-content {
+    margin: 60rpx 24rpx;
+  }
+  
+  .mark-all-read-btn {
+    padding: 10rpx 20rpx;
+    font-size: 22rpx;
   }
 }
 </style>

@@ -3,8 +3,8 @@ import request from '@/utils/request.js';
 
 export default {
   /**
-   * 新增商品
-   * @param {Object} productUpsertDTO 商品数据DTO
+   * 新增商品SPU
+   * @param {Object} productUpsertDTO 商品SPU数据
    * @returns {Promise}
    */
   save(productUpsertDTO) {
@@ -19,37 +19,46 @@ export default {
   },
 
   /**
-   * 获取商品列表
-   * @param {Object} params 查询参数 {productName, category, product_status}
+   * 获取商品SPU列表
+   * @param {Object} params 查询参数
    * @returns {Promise}
    */
   getList(params) {
     return request({
       url: '/product/spu/list',
       method: 'get',
-      params: {
-        productName: params.productName || '',
-        category: params.category || '',
-        product_status: params.productStatus || ''
-      }
+      params: params
     });
   },
 
   /**
-   * 获取商品详情
-   * @param {String|Number} id 商品ID
+   * 获取商品SPU列表（附带媒体信息）
+   * @param {Object} params 查询参数
    * @returns {Promise}
    */
-  getDetail(id) {
+  getListWithMedia(params) {
     return request({
-      url: `/product/spu/${id}`,
+      url: '/product/spu/listWithMedia',
+      method: 'get',
+      params: params
+    });
+  },
+
+  /**
+   * 获取商品SPU详情
+   * @param {String|Number} productSpuId 商品SPU ID
+   * @returns {Promise}
+   */
+  getDetail(productSpuId) {
+    return request({
+      url: `/product/spu/${productSpuId}`,
       method: 'get'
     });
   },
 
   /**
-   * 修改商品
-   * @param {Object} productUpsertDTO 商品数据DTO
+   * 修改商品SPU
+   * @param {Object} productUpsertDTO 商品SPU数据
    * @returns {Promise}
    */
   update(productUpsertDTO) {
@@ -64,24 +73,26 @@ export default {
   },
 
   /**
-   * 删除商品 - 传递单个ID数字
-   * @param {Number} productSpuId 商品ID
+   * 删除商品SPU
+   * @param {Array|Number} productSpuIds 商品SPU ID数组或单个ID
    * @returns {Promise}
    */
-  delete(productSpuId) {
+  delete(productSpuIds) {
+    // 如果传入的是单个ID，转换为数组
+    const ids = Array.isArray(productSpuIds) ? productSpuIds : [productSpuIds];
     return request({
       url: '/product/spu',
       method: 'delete',
       params: {
-        productSpuIds: productSpuId // 直接传递单个ID数字
+        productSpuIds: ids
       }
     });
   },
 
   /**
-   * 更新商品状态 - 使用查询参数
-   * @param {String|Number} productSpuId 商品ID
-   * @param {String} status 状态 ('0':上架, '2':下架)
+   * 更新商品状态
+   * @param {Number} productSpuId 商品SPU ID
+   * @param {String} status 状态值
    * @returns {Promise}
    */
   updateStatus(productSpuId, status) {
@@ -93,23 +104,8 @@ export default {
         status: status
       }
     });
-  },
-
-  /**
-   * 商品上架
-   * @param {String|Number} productSpuId 商品ID
-   * @returns {Promise}
-   */
-  putOnSale(productSpuId) {
-    return this.updateStatus(productSpuId, '0'); // '0'表示上架
-  },
-
-  /**
-   * 商品下架
-   * @param {String|Number} productSpuId 商品ID
-   * @returns {Promise}
-   */
-  putOffSale(productSpuId) {
-    return this.updateStatus(productSpuId, '2'); // '2'表示下架
   }
+
+  // 注意：移除了原来的export方法，因为后端控制器中没有对应的导出接口
+  // 如果需要导出功能，需要在后端添加相应的接口
 }

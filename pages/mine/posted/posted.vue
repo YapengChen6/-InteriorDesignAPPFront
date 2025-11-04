@@ -103,10 +103,9 @@
                 <text class="excerpt">{{ post.excerpt || post.content }}</text>
               </view>
               
-              <!-- 帖子信息 -->
+              <!-- 帖子信息 - 只保留发布时间 -->
               <view class="post-footer">
                 <text class="post-time">{{ formatTime(post.createTime) }}</text>
-                <text class="post-author">用户ID: {{ post.userId }}</text>
               </view>
             </view>
           </view>
@@ -150,14 +149,16 @@
 
 <script>
 import { getPostList, getPostDetail } from '@/api/community'
+import { getUserProfile } from '@/api/users.js'
 
 export default {
   data() {
     return {
       currentTab: 'posts',
-      currentNav: 3, // 默认选中普通帖
+      currentNav: 3,
       currentImage: '',
       showModal: false,
+      userId: '',
       navList: [
         { value: 1, label: '作品集' },
         { value: 2, label: '案例集' },
@@ -177,14 +178,66 @@ export default {
   },
   
   onLoad() {
-    this.loadPosts()
+    this.initData()
   },
   
   methods: {
+    // 初始化数据
+    async initData() {
+      try {
+        uni.showLoading({
+          title: '加载中...',
+          mask: true
+        })
+        
+        // 1. 先获取用户信息
+        await this.getUserInfo()
+        
+        // 2. 再加载帖子列表
+        await this.loadPosts()
+        
+      } catch (error) {
+        console.error('初始化数据失败:', error)
+        uni.showToast({
+          title: '加载失败',
+          icon: 'none'
+        })
+      } finally {
+        uni.hideLoading()
+      }
+    },
+    
+    // 获取用户信息
+    async getUserInfo() {
+      try {
+        const res = await getUserProfile()
+        if (res.code === 200) {
+          this.userId = res.data.userId
+          uni.setStorageSync('userId', this.userId)
+          console.log('获取到用户ID:', this.userId)
+        } else {
+          throw new Error(res.msg || '获取用户信息失败')
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        throw error
+      }
+    },
+    
     // 加载帖子列表
     async loadPosts() {
       try {
-        const res = await getPostList()
+        if (!this.userId) {
+          await this.getUserInfo()
+        }
+        
+        // 根据你的getPostList接口实际情况调整参数
+        const params = {
+          userId: this.userId
+          // 如果getPostList接口也需要参数的话
+        }
+        
+        const res = await getPostList(params)
         if (res.code === 200) {
           this.posts = res.data.rows.map(post => ({
             ...post,
@@ -210,7 +263,7 @@ export default {
       }
     },
     
-    // 点击箭头时调用详情接口
+    // 修复：正确调用getPostDetail接口
     async togglePostWithDetail(postId) {
       const post = this.posts.find(p => p.id === postId)
       if (post) {
@@ -225,7 +278,9 @@ export default {
             mask: true
           })
           
+          // 直接传递帖子ID，不需要对象
           const res = await getPostDetail(postId)
+          
           if (res.code === 200) {
             const detailData = res.data
             Object.assign(post, {
@@ -255,13 +310,13 @@ export default {
       }
     },
     
+    // 其他方法保持不变...
     switchTab(tab) {
       this.currentTab = tab
     },
     
     switchNav(nav) {
       this.currentNav = nav
-      // 收起所有展开的帖子
       this.posts.forEach(post => {
         post.expanded = false
       })
@@ -270,7 +325,6 @@ export default {
     togglePost(postId) {
       const post = this.posts.find(p => p.id === postId)
       if (post) {
-        // 收起其他帖子
         this.posts.forEach(p => {
           if (p.id !== postId) {
             p.expanded = false
@@ -294,17 +348,14 @@ export default {
       this.showModal = false
     },
     
-    // 去除HTML标签（用于摘要显示）
     stripHtmlTags(html) {
       if (!html) return ''
       return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
     },
     
-    // 解析富文本内容（适配uni-app的rich-text组件）
     parseRichContent(html) {
       if (!html) return ''
       
-      // 基础HTML清理和适配
       let content = html
         .replace(/<img/gi, '<img style="max-width:100%;height:auto;"')
         .replace(/<table/gi, '<table style="width:100%;"')
@@ -589,9 +640,10 @@ export default {
   line-height: 1.6;
 }
 
+/* 修改帖子底部样式，只保留发布时间 */
 .post-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   padding-top: 20rpx;
   border-top: 1rpx solid #f0f0f0;
@@ -599,8 +651,9 @@ export default {
   color: #999;
 }
 
-.post-time, .post-author {
+.post-time {
   font-size: 24rpx;
+  color: #999;
 }
 
 .empty-state {
