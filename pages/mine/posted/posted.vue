@@ -70,11 +70,11 @@
               </view>
             </view>
             
-            <!-- 帖子内容 - 无动画版本 -->
+            <!-- 帖子内容 - 展开时显示 -->
             <view class="post-content" v-if="post.expanded">
               <!-- 图片展示 -->
               <view class="media-container" v-if="post.mediaUrls && post.mediaUrls.length > 0">
-                <view class="media-grid" :class="`grid-${post.mediaUrls.length}`">
+                <view class="media-grid" :class="`grid-${Math.min(post.mediaUrls.length, 4)}`">
                   <view 
                     v-for="(mediaUrl, index) in post.mediaUrls" 
                     :key="index"
@@ -90,8 +90,16 @@
                 </view>
               </view>
               
-              <!-- 正文内容 -->
-              <view class="content-text">
+              <!-- 富文本内容展示 -->
+              <view class="rich-content-container" v-if="post.richContent">
+                <rich-text 
+                  :nodes="post.parsedRichContent" 
+                  class="rich-text-content"
+                />
+              </view>
+              
+              <!-- 普通文本内容 -->
+              <view class="content-text" v-else-if="post.content">
                 <text class="excerpt">{{ post.excerpt || post.content }}</text>
               </view>
               
@@ -141,7 +149,7 @@
 </template>
 
 <script>
-import { getPostList, getPostDetail } from '@/api/community' // 根据实际API调整
+import { getPostList, getPostDetail } from '@/api/community'
 
 export default {
   data() {
@@ -156,7 +164,7 @@ export default {
         { value: 3, label: '普通帖' },
         { value: 4, label: '材料展示' }
       ],
-      posts: [] // 初始化为空数组，从接口获取数据
+      posts: []
     }
   },
   
@@ -176,13 +184,16 @@ export default {
     // 加载帖子列表
     async loadPosts() {
       try {
-        const res = await getPostList() // 调用实际的API接口
+        const res = await getPostList()
         if (res.code === 200) {
-          // 为每个帖子添加 expanded 属性用于控制展开状态
           this.posts = res.data.rows.map(post => ({
             ...post,
             expanded: false,
-            mediaUrls: post.mediaUrls || [] // 初始化mediaUrls
+            mediaUrls: post.mediaUrls || [],
+            content: post.content || '',
+            richContent: post.richContent || '',
+            excerpt: this.stripHtmlTags(post.excerpt || post.content || ''),
+            parsedRichContent: this.parseRichContent(post.richContent || post.content || '')
           }))
         } else {
           uni.showToast({
@@ -203,13 +214,11 @@ export default {
     async togglePostWithDetail(postId) {
       const post = this.posts.find(p => p.id === postId)
       if (post) {
-        // 如果帖子已经展开，直接收起
         if (post.expanded) {
           this.togglePost(postId)
           return
         }
         
-        // 如果帖子未展开，先调用详情接口
         try {
           uni.showLoading({
             title: '加载中...',
@@ -218,16 +227,15 @@ export default {
           
           const res = await getPostDetail(postId)
           if (res.code === 200) {
-            // 更新帖子详情数据
             const detailData = res.data
             Object.assign(post, {
-              content: detailData.content,
+              content: detailData.content || '',
+              richContent: detailData.richContent || detailData.content || '',
               mediaUrls: detailData.mediaUrls || [],
-              excerpt: detailData.excerpt || post.excerpt,
-              // 可以更新其他需要的字段
+              excerpt: this.stripHtmlTags(detailData.excerpt || detailData.content || ''),
+              parsedRichContent: this.parseRichContent(detailData.richContent || detailData.content || '')
             })
             
-            // 然后展开帖子
             this.togglePost(postId)
           } else {
             uni.showToast({
@@ -286,6 +294,25 @@ export default {
       this.showModal = false
     },
     
+    // 去除HTML标签（用于摘要显示）
+    stripHtmlTags(html) {
+      if (!html) return ''
+      return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
+    },
+    
+    // 解析富文本内容（适配uni-app的rich-text组件）
+    parseRichContent(html) {
+      if (!html) return ''
+      
+      // 基础HTML清理和适配
+      let content = html
+        .replace(/<img/gi, '<img style="max-width:100%;height:auto;"')
+        .replace(/<table/gi, '<table style="width:100%;"')
+        .replace(/<video/gi, '<video style="max-width:100%;"')
+      
+      return content
+    },
+    
     formatTime(timestamp) {
       if (!timestamp) return ''
       const date = new Date(timestamp)
@@ -301,7 +328,6 @@ export default {
 </script>
 
 <style scoped>
-/* 样式保持不变，与之前相同 */
 .container {
   display: flex;
   flex-direction: column;
@@ -474,6 +500,7 @@ export default {
 
 .icon {
   font-size: 24rpx;
+  transition: transform 0.3s ease;
 }
 
 .icon.rotated {
@@ -509,7 +536,7 @@ export default {
 }
 
 .grid-4 {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 .media-item {
@@ -522,6 +549,32 @@ export default {
 .media-image {
   width: 100%;
   height: 100%;
+}
+
+/* 富文本内容样式 */
+.rich-content-container {
+  margin-bottom: 24rpx;
+}
+
+.rich-text-content {
+  font-size: 30rpx;
+  line-height: 1.6;
+  color: #333;
+}
+
+.rich-text-content >>> img {
+  border-radius: 12rpx;
+  margin: 16rpx 0;
+}
+
+.rich-text-content >>> p {
+  margin: 16rpx 0;
+  text-align: justify;
+}
+
+.rich-text-content >>> video {
+  border-radius: 12rpx;
+  margin: 16rpx 0;
 }
 
 .content-text {
