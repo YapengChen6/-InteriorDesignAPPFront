@@ -168,7 +168,7 @@
 			
 			<text class="menu-title">系统设置</text>
 			
-				<view class="menu-list">
+			<view class="menu-list">
 				<view class="menu-item" @tap="goToPersonalCenter">
 					<view class="menu-item-left">
 						<view class="menu-icon purple">
@@ -177,6 +177,20 @@
 						<view class="menu-text">
 							<text class="menu-name">个人中心</text>
 							<text class="menu-desc">修改个人信息</text>
+						</view>
+					</view>
+					<text class="iconfont icon-chevron-right"></text>
+				</view>
+				
+				<!-- 新增举报投诉菜单项 -->
+				<view class="menu-item" @tap="handleMenuClick('举报投诉')">
+					<view class="menu-item-left">
+						<view class="menu-icon red">
+							<text class="iconfont icon-flag"></text>
+						</view>
+						<view class="menu-text">
+							<text class="menu-name">举报投诉</text>
+							<text class="menu-desc">问题反馈和投诉建议</text>
 						</view>
 					</view>
 					<text class="iconfont icon-chevron-right"></text>
@@ -550,6 +564,11 @@
 						break;
 						
 					// 通用功能
+					case '举报投诉':
+						uni.navigateTo({
+							url: '/pages/mine/help/index'
+						});
+						break;
 					case '隐私与安全':
 						uni.navigateTo({
 							url: '/pages/mine/privacy'
