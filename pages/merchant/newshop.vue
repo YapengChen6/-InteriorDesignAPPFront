@@ -358,7 +358,7 @@
 
 <script>
 import productSpuApi from '@/api/productSpu.js';
-
+import { uploadImage} from '@/api/join.js'
 export default {
   data() {
     return {
