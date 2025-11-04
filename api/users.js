@@ -1,6 +1,5 @@
-
 import request from '@/utils/request'
-
+import upload from '@/utils/upload'
 
 // 查询用户个人信息
 export function getUserProfile() {
@@ -9,7 +8,6 @@ export function getUserProfile() {
     method: 'get'
   })
 }
-
 
 // 修改用户个人信息
 export function updateUserProfile(data) {
@@ -20,20 +18,29 @@ export function updateUserProfile(data) {
   })
 }
 
+// 获取用户路由
+export function getRouters() {
+  return request({
+    url: '/api/users/routers',
+    method: 'get'
+  })
+}
+
 // 用户头像上传
 export function uploadAvatar(data) {
   return upload({
-    url: '/api/users/profile',
+    url: '/api/users/profile/avatar', // 建议使用专门的头像上传接口
     name: data.name,
     filePath: data.filePath
   })
 }
+
 // 登出
-export function logout() {
+export function logout(token) {
   return request({
-    url: '/api/users/logout',  // 修正路径
-    method: 'post'
-    // 移除 token 参数，让拦截器自动添加 Authorization header
+    url: '/api/users/logout',
+    method: 'post',
+    params: { token } // 根据控制器需要token参数
   })
 }
 
@@ -61,4 +68,136 @@ export function getCodeImg() {
     method: 'get',
     timeout: 20000
   })
+}
+
+// 身份切换相关API
+
+// 切换用户身份
+export function switchRole(roleSwitchDTO) {
+  return request({
+    url: '/api/users/role/switch',
+    method: 'post',
+    data: roleSwitchDTO
+  })
+}
+
+// 获取身份信息（支持可选手机号查询）
+export function getRoleSwitchInfo(phone) {
+  const params = phone ? { phone: phone.trim() } : {}
+  return request({
+    url: '/api/users/role/info',
+    method: 'get',
+    params: params
+  })
+}
+
+// 获取当前角色类型
+export function getCurrentRole() {
+  return request({
+    url: '/api/users/role/current',
+    method: 'get'
+  })
+}
+
+// 获取可切换角色列表
+export function getAvailableRoles() {
+  return request({
+    url: '/api/users/role/available',
+    method: 'get'
+  })
+}
+
+// 重置为普通用户身份
+export function resetToUser() {
+  return request({
+    url: '/api/users/role/reset',
+    method: 'post'
+  })
+}
+
+// 获取身份切换历史记录
+export function getRoleSwitchHistory() {
+  return request({
+    url: '/api/users/role/history',
+    method: 'get'
+  })
+}
+
+// 检查是否有某个角色的权限
+export function checkRolePermission(roleType) {
+  return request({
+    url: `/api/users/role/check/${roleType}`,
+    method: 'get'
+  })
+}
+
+// 快速切换到设计师身份
+export function switchToDesigner() {
+  return request({
+    url: '/api/users/role/switch/designer',
+    method: 'post'
+  })
+}
+
+// 快速切换到监理身份
+export function switchToSupervisor() {
+  return request({
+    url: '/api/users/role/switch/supervisor',
+    method: 'post'
+  })
+}
+
+// 快速切换到材料商身份
+export function switchToMaterialSupplier() {
+  return request({
+    url: '/api/users/role/switch/material-supplier',
+    method: 'post'
+  })
+}
+
+// 快速切换到普通用户身份
+export function switchToUser() {
+  return request({
+    url: '/api/users/role/switch/user',
+    method: 'post'
+  })
+}
+
+// 获取当前身份剩余有效时间
+export function getRemainingTime() {
+  return request({
+    url: '/api/users/role/remaining-time',
+    method: 'get'
+  })
+}
+
+export default {
+  // 用户基本信息
+  getUserProfile,
+  updateUserProfile,
+  getRouters,
+  uploadAvatar,
+  logout,
+  
+  // 认证相关
+  sendCode,
+  getCodeImg,
+  
+  // 角色切换核心功能
+  switchRole,
+  getRoleSwitchInfo,
+  getCurrentRole,
+  getAvailableRoles,
+  resetToUser,
+  getRoleSwitchHistory,
+  checkRolePermission,
+  
+  // 快速角色切换
+  switchToDesigner,
+  switchToSupervisor,
+  switchToMaterialSupplier,
+  switchToUser,
+  
+  // 身份时间管理
+  getRemainingTime
 }

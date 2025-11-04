@@ -306,7 +306,7 @@ export default {
   },
   
   onLoad() {
-    console.log('🔄 DesignerJoin1 page loaded')
+    console.log('DesignerJoin1 page loaded')
     this.loadApplicationData()
   },
   
@@ -330,10 +330,10 @@ export default {
         const savedData = uni.getStorageSync('designer_application_data')
         if (savedData) {
           this.formData = { ...this.formData, ...savedData }
-          console.log('📥 Loaded saved designer application data')
+          console.log('Loaded saved designer application data')
         }
       } catch (error) {
-        console.error('❌ Failed to load saved data:', error)
+        console.error('Failed to load saved data:', error)
       }
     },
     
@@ -341,16 +341,16 @@ export default {
     saveApplicationData() {
       try {
         uni.setStorageSync('designer_application_data', this.formData)
-        console.log('💾 Saved designer application data')
+        console.log('Saved designer application data')
       } catch (error) {
-        console.error('❌ Failed to save data:', error)
+        console.error('Failed to save data:', error)
       }
     },
     
     // 上传文件
     async uploadFile(type) {
       try {
-        console.log('🔄 Starting upload process for:', type)
+        console.log('Starting upload process for:', type)
         
         // 选择图片
         const chooseResult = await new Promise((resolve, reject) => {
@@ -376,7 +376,7 @@ export default {
         const tempFilePath = chooseResult.tempFilePaths[0]
         const tempFile = chooseResult.tempFiles[0]
         
-        console.log('📁 Selected file info:', {
+        console.log('Selected file info:', {
           path: tempFilePath,
           size: tempFile.size,
           type: tempFile.type
@@ -393,7 +393,7 @@ export default {
         // 执行上传
         const result = await this.actualUploadFile(tempFilePath, type)
         
-        console.log('📤 Upload API response:', result)
+        console.log('Upload API response:', result)
         
         if (result.code === 200) {
           // 上传成功
@@ -413,7 +413,7 @@ export default {
         }
         
       } catch (error) {
-        console.error('❌ Upload process failed:', error)
+        console.error('Upload process failed:', error)
         this.uploadStatus[type] = 'error'
         
         uni.showToast({
@@ -427,7 +427,7 @@ export default {
     // 实际执行上传
     async actualUploadFile(filePath, fileType) {
       try {
-        console.log('🚀 Starting actual file upload...')
+        console.log('Starting actual file upload...')
         
         const relatedType = getRelatedTypeByFileType(fileType)
         const relatedId = this.applicationId ? Number(this.applicationId) : 0
@@ -435,7 +435,7 @@ export default {
         const stage = UPLOAD_STAGES.APPLICATION
         const sequence = getFileSequence(fileType)
         
-        console.log('📋 Upload parameters:', {
+        console.log('Upload parameters:', {
           filePath,
           relatedType,
           relatedId,
@@ -453,11 +453,11 @@ export default {
           sequence
         )
         
-        console.log('✅ Upload API response received:', response)
+        console.log('Upload API response received:', response)
         return response
         
       } catch (error) {
-        console.error('❌ Upload API call failed:', error)
+        console.error('Upload API call failed:', error)
         throw error
       }
     },
@@ -483,7 +483,7 @@ export default {
             if (res.confirm) {
               const mediaId = this.uploadedFiles[type]
               if (mediaId) {
-                console.log('🗑️ Deleting image from server, mediaId:', mediaId)
+                console.log('Deleting image from server, mediaId:', mediaId)
                 await deleteImage(mediaId)
               }
               
@@ -534,7 +534,7 @@ export default {
         idCardBackPhoto: this.formData.idCardBackPhoto
       }
       
-      console.log('📦 Built designer application data:', applicationData)
+      console.log('Built designer application data:', applicationData)
       return applicationData
     },
     
@@ -547,11 +547,11 @@ export default {
       try {
         this.isSubmitting = true
         
-        console.log('🔄 Starting form submission...')
+        console.log('Starting form submission...')
         
         // 表单验证
         await this.$refs.form.validate()
-        console.log('✅ Form validation passed')
+        console.log('Form validation passed')
         
         // 检查必填图片
         const requiredImages = ['qualificationCertificate', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto']
@@ -570,9 +570,9 @@ export default {
         
         const applicationData = this.buildApplicationData()
         
-        console.log('📨 Sending application data to server...')
+        console.log('Sending application data to server...')
         const response = await submitDesignerApplication(applicationData)
-        console.log('📨 Server response:', response)
+        console.log('Server response:', response)
         
         // 隐藏loading
         if (isLoadingShown) {
@@ -587,8 +587,10 @@ export default {
             duration: 2000
           })
           
-          this.applicationId = response.data.applicationId || response.data.id
-          console.log('🎉 Designer application created successfully, ID:', this.applicationId)
+          // 根据后端返回的数据结构调整
+          this.applicationId = response.data?.applicationId || response.data?.id || response.data?.designersId
+          
+          console.log('Designer application created successfully, ID:', this.applicationId)
           
           // 清除本地存储
           uni.removeStorageSync('designer_application_data')
@@ -608,7 +610,7 @@ export default {
           
           if (response.code === 400) {
             errorMsg = '数据格式错误，请检查填写的信息'
-            console.error('❌ 400 Bad Request:', {
+            console.error('400 Bad Request:', {
               formData: applicationData,
               response: response
             })
@@ -623,7 +625,7 @@ export default {
           uni.hideLoading()
         }
         
-        console.error('❌ Form submission failed:', error)
+        console.error('Form submission failed:', error)
         
         let errorMessage = '提交失败'
         if (error.message) {
@@ -646,7 +648,7 @@ export default {
     async updateTempImagesRelatedId() {
       if (!this.applicationId) return
       
-      console.log('🔄 Updating temporary images with application ID:', this.applicationId)
+      console.log('Updating temporary images with application ID:', this.applicationId)
       // 这里可以实现更新图片关联ID的逻辑
     }
   }
@@ -809,115 +811,4 @@ export default {
 
 .id-card-label {
   font-size: 24rpx;
-  color: #666;
-  text-align: center;
-}
-
-.upload-btn-container {
-  margin-top: 0;
-}
-
-.upload-btn {
-  width: 120rpx;
-  height: 120rpx;
-  background-color: #fff;
-  border: 2rpx dashed #007AFF;
-  border-radius: 12rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-}
-
-.upload-btn:active {
-  background-color: #f0f7ff;
-  border-style: solid;
-}
-
-.upload-btn-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.upload-btn-icon {
-  font-size: 40rpx;
-  color: #007AFF;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.upload-tips {
-  display: block;
-  font-size: 24rpx;
-  color: #999;
-  text-align: center;
-  margin-top: 20rpx;
-}
-
-.preview-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.preview-image {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: 8rpx;
-  border: 2rpx solid #e8e8e8;
-}
-
-.preview-actions {
-  display: flex;
-  gap: 15rpx;
-  margin-top: 10rpx;
-}
-
-.preview-action {
-  font-size: 20rpx;
-  color: #007AFF;
-  padding: 6rpx 12rpx;
-  border-radius: 4rpx;
-  background-color: rgba(0, 122, 255, 0.1);
-}
-
-.preview-action.delete {
-  color: #ff4d4f;
-  background-color: rgba(255, 77, 79, 0.1);
-}
-
-.upload-status {
-  font-size: 20rpx;
-  margin-top: 8rpx;
-  text-align: center;
-}
-
-.upload-status.uploading {
-  color: #007AFF;
-}
-
-.upload-status.success {
-  color: #52c41a;
-}
-
-.upload-status.error {
-  color: #ff4d4f;
-}
-
-.submit-btn {
-  width: 100%;
-  margin-top: 40rpx;
-  background-color: #007AFF;
-  color: #fff;
-  border: none;
-  border-radius: 12rpx;
-  font-size: 32rpx;
-  padding: 25rpx 0;
-}
-
-.submit-btn:disabled {
-  background-color: #ccc;
-}
-</style>
+  color

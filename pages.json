@@ -21,7 +21,7 @@
       "navigationBarTitleText": "工作台"
     }
   }, {
-    "path": "pages/mine/index",
+    "path": "pages/mine/index4",
     "style": {
       "navigationBarTitleText": "我的"
     }
@@ -197,6 +197,12 @@
     "style": {
       "navigationBarTitleText": "已发布页面"
     }
+  },
+  {
+    "path": "pages/mine/switch/index",
+    "style": {
+      "navigationBarTitleText": "角色切换"
+    }
   }
   ],
   "tabBar": {
@@ -227,7 +233,7 @@
         "selectedIconPath": "/static/images/tabbar/design_.png",
         "text": "订单"
       },{
-        "pagePath": "pages/mine/index",
+        "pagePath": "pages/mine/index4",
         "iconPath": "static/images/tabbar/mine.png",
         "selectedIconPath": "static/images/tabbar/mine_.png",
         "text": "我的"
