@@ -102,6 +102,9 @@
               <view class="media-status" v-if="media.uploadStatus === 'uploading'">
                 <text class="status-text">上传中...</text>
               </view>
+              <view class="media-status" v-else-if="media.uploadStatus === 'failed'">
+                <text class="status-text error">上传失败</text>
+              </view>
             </view>
           </view>
         </view>
@@ -143,7 +146,7 @@
 
 <script>
 import { createPost, updatePost, getPostDetail } from '@/api/community'
-import { uploadImage, deleteImage } from '@/api/join.js'
+import { uploadImage, uploadVideo } from '@/api/join.js' // 导入图片和视频上传接口
 import { getUserProfile } from '@/api/users.js'
 
 export default {
@@ -417,7 +420,7 @@ export default {
           this.previewMediaFiles[index].uploadStatus = 'uploading'
           
           try {
-            // 使用传入的帖子ID进行上传，related_type固定为3
+            // 根据文件类型调用不同的上传接口
             const result = await this.uploadSingleMediaFile(
               media.tempFilePath, 
               media.type, 
@@ -429,10 +432,10 @@ export default {
               // 上传成功，添加到已上传列表
               const uploadedMedia = {
                 type: media.type,
-                fileUrl: result.data.fileUrl,
+                fileUrl: result.data.fileUrl || result.data.videoUrl,
                 mediaId: result.data.mediaId,
-                fileName: result.data.fileName,
-                fileSize: result.data.fileSize,
+                fileName: result.data.filename || result.data.fileName,
+                fileSize: result.data.size || result.data.fileSize,
                 uploadStatus: 'completed'
               }
               this.uploadedMediaFiles.push(uploadedMedia)
@@ -464,6 +467,7 @@ export default {
           throw new Error('文件大小不能超过50MB')
         }
         
+        // 统一的参数
         const relatedType = 3 // 固定为3，根据你的要求
         const relatedId = postId ? Number(postId) : 0 // 使用传入的帖子ID
         const description = `帖子${fileType === 'image' ? '图片' : '视频'}`
@@ -472,6 +476,7 @@ export default {
         
         console.log('📤 上传文件参数:', {
           filePath,
+          fileType,
           relatedType, // 固定为3
           relatedId,   // 帖子ID
           description,
@@ -479,14 +484,28 @@ export default {
           sequence
         })
         
-        const response = await uploadImage(
-          filePath,
-          relatedType,
-          relatedId,
-          description,
-          stage,
-          sequence
-        )
+        let response
+        if (fileType === 'image') {
+          // 图片使用图片上传接口
+          response = await uploadImage(
+            filePath,
+            relatedType,
+            relatedId,
+            description,
+            stage,
+            sequence
+          )
+        } else {
+          // 视频使用视频上传接口
+          response = await uploadVideo(
+            filePath,
+            relatedType,
+            relatedId,
+            description,
+            stage,
+            sequence
+          )
+        }
         
         console.log('✅ 上传成功:', response)
         return response
@@ -815,6 +834,10 @@ export default {
   color: white;
   font-size: 12px;
   text-align: center;
+}
+
+.status-text.error {
+  color: #e74c3c;
 }
 
 .upload-progress {

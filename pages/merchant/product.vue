@@ -77,7 +77,7 @@
           <!-- 商品图片 -->
           <view class="product-image">
             <image 
-              :src="product.image" 
+              :src="getProductImage(product)" 
               mode="aspectFill" 
               class="image"
               @error="onImageError(product)"
@@ -92,10 +92,14 @@
           <!-- 商品信息 -->
           <view class="product-info">
             <text class="product-name">{{ product.productName }}</text>
-            <text class="product-category">{{ product.categoryName }}</text>
+            <text class="product-category">{{ product.category }}</text>
             <text class="product-detail">{{ product.productDetail }}</text>
-            <text class="product-price">{{ product.price }}</text>
+            <view class="price-section">
+              <text class="market-price">￥{{ formatPrice(product.marketPrice) }}</text>
+              <text class="cost-price" v-if="product.costPrice">成本: ￥{{ formatPrice(product.costPrice) }}</text>
+            </view>
             <text class="product-stock">库存: {{ product.stock }}</text>
+            <text class="spec-type">规格类型: {{ getSpecTypeText(product.specType) }}</text>
           </view>
           
           <!-- 操作按钮 -->
@@ -171,12 +175,12 @@ export default {
     filteredProducts() {
       let filtered = [...this.products];
       
-      // 搜索过滤 - 添加商品详情搜索
+      // 搜索过滤
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(product => 
           product.productName.toLowerCase().includes(query) || 
-          (product.categoryName && product.categoryName.toLowerCase().includes(query)) ||
+          (product.category && product.category.toLowerCase().includes(query)) ||
           (product.productDetail && product.productDetail.toLowerCase().includes(query))
         );
       }
@@ -185,7 +189,7 @@ export default {
       if (this.categoryIndex > 0) {
         const category = this.categoryOptions[this.categoryIndex];
         filtered = filtered.filter(product => 
-          product.categoryName === category
+          product.category === category
         );
       }
       
@@ -202,6 +206,34 @@ export default {
   },
   
   methods: {
+    // 获取商品图片
+    getProductImage(product) {
+      if (product.coverImages && product.coverImages.length > 0) {
+        // 按sequence排序，取第一张图片
+        const sortedImages = [...product.coverImages].sort((a, b) => a.sequence - b.sequence);
+        const mainImage = sortedImages[0];
+        if (mainImage && mainImage.fileUrl) {
+          // 处理blob URL和正常URL
+          if (mainImage.fileUrl.startsWith('blob:')) {
+            return mainImage.fileUrl;
+          } else {
+            return mainImage.fileUrl;
+          }
+        }
+      }
+      return '/static/images/default-product.jpg';
+    },
+
+    // 获取规格类型文本
+    getSpecTypeText(specType) {
+      const specTypes = {
+        '0': '单规格',
+        '1': '多规格',
+        '2': '无规格'
+      };
+      return specTypes[specType] || '未知';
+    },
+
     // 检查网络状态
     async checkNetworkStatus() {
       return new Promise((resolve, reject) => {
@@ -222,7 +254,7 @@ export default {
       });
     },
 
-    // 加载商品列表
+    // 加载商品列表 - 使用新的接口
     async loadProducts() {
       if (this.loading && this.pageParams.pageNum > 1) {
         return;
@@ -235,15 +267,29 @@ export default {
         
         // 构建请求参数
         const requestParams = {
-          productName: this.searchQuery || '',
-          category: this.categoryIndex > 0 ? this.categoryOptions[this.categoryIndex] : '',
-          productStatus: this.getStatusValue(),
           pageNum: this.pageParams.pageNum,
           pageSize: this.pageParams.pageSize
         };
         
+        // 添加搜索条件
+        if (this.searchQuery) {
+          requestParams.productName = this.searchQuery;
+        }
+        
+        // 添加分类条件
+        if (this.categoryIndex > 0) {
+          requestParams.category = this.categoryOptions[this.categoryIndex];
+        }
+        
+        // 添加状态条件
+        if (this.statusIndex > 0) {
+          requestParams.productStatus = this.getStatusValue();
+        }
+        
         console.log('📤 发送GET请求参数:', requestParams);
-        const res = await productApi.getList(requestParams);
+        
+        // 使用新的接口获取带媒体信息的商品列表
+        const res = await productApi.getProductListWithMedia(requestParams);
         console.log('✅ 接口响应成功:', res);
         
         if (res.code === 200) {
@@ -254,6 +300,7 @@ export default {
             this.products = [...this.products, ...this.formatProductData(productList)];
           }
           
+          // 注意：新接口可能没有返回total字段，需要根据实际情况调整
           this.pageParams.total = res.total || productList.length;
           
           if (this.products.length >= this.pageParams.total) {
@@ -266,7 +313,7 @@ export default {
         } else {
           console.error('❌ 接口返回错误:', res);
           uni.showToast({
-            title: res.msg || '获取商品列表失败',
+            title: res.message || '获取商品列表失败',
             icon: 'none',
             duration: 3000
           });
@@ -293,17 +340,19 @@ export default {
       return '';
     },
     
-    // 格式化商品数据
+    // 格式化商品数据 - 根据新接口结构调整
     formatProductData(products) {
       return products.map(product => ({
         id: product.productSpuId,
         productName: product.productName,
-        categoryName: product.category || '其他',
+        category: product.category,
         productDetail: product.productDetail,
-        price: `￥${this.formatPrice(product.marketPrice)}`,
-        status: product.productStatus || '2',
-        image: product.mainImage || '/static/images/default-product.jpg',
-        stock: product.stock || 0,
+        marketPrice: product.marketPrice,
+        costPrice: product.costPrice,
+        status: product.productStatus,
+        stock: product.stock,
+        specType: product.specType,
+        coverImages: product.coverImages || [],
         originalData: product
       }));
     },
@@ -316,7 +365,7 @@ export default {
     
     onImageError(product) {
       console.log('🖼️ 图片加载失败，使用默认图片');
-      product.image = '/static/images/default-product.jpg';
+      // 这里可以设置一个默认图片标记，但实际图片URL已经在getProductImage中处理
     },
     
     handleSearch() {
@@ -382,10 +431,8 @@ export default {
         
         console.log(`🗑️ 开始删除商品 ID: ${id}`);
         
-        // 直接传递单个ID数字
-        const res = await productApi.delete(id);
+        const res = await productApi.deleteProduct(id);
         
-        // 确保 hideLoading 在请求完成后调用
         uni.hideLoading();
         
         console.log('✅ 删除接口响应:', res);
@@ -396,7 +443,6 @@ export default {
             icon: 'success',
             duration: 2000
           });
-          // 延迟一下再刷新列表，确保删除操作完成
           setTimeout(() => {
             this.pageParams.pageNum = 1;
             this.loadProducts();
@@ -410,7 +456,6 @@ export default {
         }
       } catch (error) {
         console.error('💥 删除商品失败:', error);
-        // 确保在错误情况下也调用 hideLoading
         uni.hideLoading();
         uni.showToast({
           title: error.message || '删除失败，请重试',
@@ -450,14 +495,12 @@ export default {
         try {
           console.log(`🔄 第 ${i + 1} 次尝试更新状态`);
           await this.doUpdateStatus(product, newStatus, action);
-          return; // 成功则退出
+          return;
         } catch (error) {
           console.warn(`⚠️ 第 ${i + 1} 次尝试失败:`, error);
           if (i === retries - 1) {
-            // 最后一次失败则抛出错误
             throw error;
           }
-          // 等待1秒后重试
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
@@ -466,7 +509,6 @@ export default {
     async doUpdateStatus(product, newStatus, action) {
       this.actionLoading = true;
       try {
-        // 检查网络状态
         await this.checkNetworkStatus();
         
         uni.showLoading({
@@ -479,30 +521,26 @@ export default {
         let res;
         
         try {
-          // 使用状态更新接口
-          console.log(`📤 调用状态更新接口: PUT /product/spu/status?productSpuId=${product.id}&status=${newStatus}`);
-          res = await productApi.updateStatus(product.id, newStatus);
+          res = await productApi.updateProductStatus(product.id, newStatus);
           console.log('✅ 状态更新接口响应:', res);
         } catch (apiError) {
           console.warn('⚠️ 状态更新接口失败，错误信息:', apiError);
           
-          // 如果状态更新接口失败，使用通用更新接口
-          console.log('🔄 尝试使用通用更新接口');
+          // 使用通用更新接口
           const updateData = {
             productSpuId: product.id,
-            productName: product.originalData?.productName || product.productName,
-            productDetail: product.originalData?.productDetail || product.productDetail,
-            category: product.originalData?.category || product.categoryName,
+            productName: product.productName,
+            productDetail: product.productDetail,
+            category: product.category,
             productStatus: newStatus,
-            marketPrice: this.getOriginalPrice(product.price),
-            costPrice: product.originalData?.costPrice || 0,
-            stock: product.originalData?.stock || product.stock,
-            specType: product.originalData?.specType || '1',
-            mainImage: product.originalData?.mainImage || product.image
+            marketPrice: product.marketPrice,
+            costPrice: product.costPrice,
+            stock: product.stock,
+            specType: product.specType
           };
           
           console.log('📤 通用更新接口参数:', updateData);
-          res = await productApi.update(updateData);
+          res = await productApi.updateProduct(updateData);
           console.log('✅ 通用更新接口响应:', res);
         }
 
@@ -515,11 +553,10 @@ export default {
             duration: 2000
           });
           
-          // 立即更新本地状态
+          // 更新本地状态
           const productIndex = this.products.findIndex(p => p.id === product.id);
           if (productIndex !== -1) {
             this.products[productIndex].status = newStatus;
-            // 强制更新视图
             this.$forceUpdate();
           }
           
@@ -541,18 +578,10 @@ export default {
           icon: 'none',
           duration: 3000
         });
-        throw error; // 重新抛出错误供重试机制使用
+        throw error;
       } finally {
         this.actionLoading = false;
       }
-    },
-    
-    // 辅助方法：从格式化价格中提取原始价格
-    getOriginalPrice(formattedPrice) {
-      if (!formattedPrice) return 0;
-      // 移除 "￥" 符号并转换为数字
-      const priceStr = formattedPrice.replace('￥', '');
-      return parseFloat(priceStr) || 0;
     },
     
     // 下拉刷新
@@ -770,17 +799,34 @@ export default {
           -webkit-box-orient: vertical;
         }
         
-        .product-price {
-          display: block;
-          font-size: 28rpx;
-          color: #F56C6C;
-          font-weight: 600;
+        .price-section {
           margin-bottom: 8rpx;
+          
+          .market-price {
+            display: block;
+            font-size: 28rpx;
+            color: #F56C6C;
+            font-weight: 600;
+            margin-bottom: 4rpx;
+          }
+          
+          .cost-price {
+            display: block;
+            font-size: 22rpx;
+            color: #909399;
+          }
         }
         
         .product-stock {
           display: block;
           font-size: 24rpx;
+          color: #909399;
+          margin-bottom: 4rpx;
+        }
+        
+        .spec-type {
+          display: block;
+          font-size: 22rpx;
           color: #909399;
         }
       }

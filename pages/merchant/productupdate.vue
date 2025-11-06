@@ -155,18 +155,28 @@
         </view>
         <view class="card-content">
           <view class="image-upload-container">
-            <view class="image-upload-item" @tap="chooseImage">
+            <view class="image-upload-item" @tap="chooseImage" v-if="uploadedImages.length < 9">
               <view class="upload-placeholder">
                 <text class="upload-icon">+</text>
                 <text class="upload-text">添加图片</text>
               </view>
             </view>
             <view class="image-preview-item" v-for="(image, index) in uploadedImages" :key="index">
-              <image class="preview-image" :src="image" mode="aspectFill" />
+              <image class="preview-image" :src="getImageUrl(image)" mode="aspectFill" @tap="previewImage(index)" />
               <view class="image-overlay">
-                <button class="btn-danger btn-sm remove-image-btn" @tap="removeImage(index)">删除</button>
+                <button class="btn-danger btn-sm remove-image-btn" @tap.stop="removeImage(index)">删除</button>
+              </view>
+              <!-- 图片状态标识 -->
+              <view class="image-status-badge" v-if="getImageStatus(image) !== 'existing'">
+                <text class="status-text">{{ getImageStatus(image) === 'new' ? '新' : '删除' }}</text>
               </view>
             </view>
+          </view>
+          <!-- 图片状态统计 -->
+          <view class="image-status-summary" v-if="isEditMode">
+            <text class="status-item">保留: {{ getExistingImageCount() }}张</text>
+            <text class="status-item">新增: {{ imageStatus.newImages.length }}张</text>
+            <text class="status-item">删除: {{ imageStatus.deletedImages.length }}张</text>
           </view>
         </view>
       </view>
@@ -330,6 +340,7 @@
 
 <script>
 import productSpuApi from '@/api/productSpu.js';
+import { uploadImage } from '@/api/join.js'
 
 export default {
   data() {
@@ -360,7 +371,6 @@ export default {
         marketPrice: '',
         costPrice: '',
         stock: '',
-        coverImages: [],
         spuAttributes: [
           {
             attributeCategory: '',
@@ -379,6 +389,12 @@ export default {
         }
       ],
       uploadedImages: [],
+      // 图片状态管理
+      imageStatus: {
+        existingImages: [],    // 已存在的图片（从服务器加载的）
+        newImages: [],         // 新上传的图片
+        deletedImages: []      // 被删除的图片
+      },
       errors: {},
       
       easyInputStyles: {
@@ -401,13 +417,10 @@ export default {
   onLoad(options) {
     console.log('接收到的URL参数:', options);
     
-    // 接收从商品列表页面传递的参数
     if (options.id && options.type === 'edit') {
       this.productId = options.id;
       this.isEditMode = true;
       console.log('编辑模式，商品ID:', this.productId);
-      
-      // 使用传递过来的商品ID加载商品详情
       this.loadExistingProduct(this.productId);
     } else {
       console.log('新增模式');
@@ -425,12 +438,20 @@ export default {
           throw new Error('商品ID不能为空');
         }
         
-        const result = await productSpuApi.getDetail(productId);
+        const result = await productSpuApi.getProductDetail(productId);
         console.log('商品详情API响应:', result);
         
         if (result.code === 200 && result.data) {
           const product = result.data;
           console.log('商品详情数据:', product);
+          
+          // 修复规格类型映射
+          let specType = '0';
+          if (product.specType === '2') {
+            specType = '1';
+          } else {
+            specType = product.specType?.toString() || '0';
+          }
           
           // 根据实际接口返回的数据结构映射到表单
           this.spuData = {
@@ -438,11 +459,10 @@ export default {
             productDetail: product.productDetail || '',
             category: product.category || '',
             productStatus: product.productStatus?.toString() || '0',
-            specType: product.specType?.toString() || '0',
+            specType: specType,
             marketPrice: product.marketPrice?.toString() || '',
             costPrice: product.costPrice?.toString() || '',
             stock: product.stock?.toString() || '',
-            coverImages: product.coverImages || [],
             spuAttributes: product.spuAttributes ? product.spuAttributes.map(attr => ({
               attributeCategory: attr.attributeCategory || '',
               attributeValue: attr.attributeValue || '',
@@ -454,9 +474,8 @@ export default {
             }]
           };
           
-          // 更新前端展示的图片
-          this.uploadedImages = product.coverImages ? 
-            product.coverImages.map(media => media.fileUrl || media.url || media) : [];
+          // 处理图片数据 - 现在区分已存在和新图片
+          this.processImageData(product.coverImages);
           
           // 设置分类选择器
           this.categoryIndex = this.categoryOptions.indexOf(product.category);
@@ -470,16 +489,8 @@ export default {
           );
           this.productStatusIndex = statusIndex >= 0 ? statusIndex : 0;
           
-          // 设置规格类型
-          if (product.specType === '2') {
-            // 根据接口返回，specType为2表示多规格
-            this.spuData.specType = '1';
-          } else {
-            this.spuData.specType = product.specType?.toString() || '0';
-          }
-          
           // 加载SKU数据
-          if (product.productSkus && product.productSkus.length > 0) {
+          if (specType === '1' && product.productSkus && product.productSkus.length > 0) {
             this.productSkus = product.productSkus.map(sku => ({
               skuDetail: sku.skuDetail || '',
               salePrice: sku.salePrice?.toString() || '',
@@ -488,7 +499,6 @@ export default {
               skuStatus: sku.skuStatus?.toString() || '0'
             }));
           } else {
-            // 如果没有SKU数据，初始化一个空的
             this.productSkus = [{
               skuDetail: '',
               salePrice: '',
@@ -500,6 +510,7 @@ export default {
           
           console.log('表单数据加载完成:', this.spuData);
           console.log('SKU数据:', this.productSkus);
+          console.log('图片状态:', this.imageStatus);
           
         } else {
           throw new Error(result.msg || '获取商品详情失败');
@@ -514,6 +525,192 @@ export default {
       }
     },
     
+    // 处理图片数据 - 现在区分已存在和新图片
+    processImageData(images) {
+      if (!images || !Array.isArray(images)) {
+        this.uploadedImages = [];
+        this.imageStatus.existingImages = [];
+        return;
+      }
+      
+      this.uploadedImages = [];
+      this.imageStatus.existingImages = [];
+      
+      images.forEach((image, index) => {
+        if (!image) return;
+        
+        let imageUrl = '';
+        
+        if (typeof image === 'string') {
+          imageUrl = image;
+        } else if (image.fileUrl) {
+          imageUrl = image.fileUrl;
+        } else if (image.url) {
+          imageUrl = image.url;
+        }
+        
+        if (imageUrl && imageUrl.trim() !== '') {
+          this.uploadedImages.push(imageUrl);
+          this.imageStatus.existingImages.push(imageUrl);
+        }
+      });
+      
+      console.log('图片数组:', this.uploadedImages);
+      console.log('已存在图片:', this.imageStatus.existingImages);
+    },
+    
+    // 获取图片URL
+    getImageUrl(image) {
+      if (!image) return '';
+      
+      if (image.startsWith('http') || image.startsWith('https') || image.startsWith('//')) {
+        return image;
+      }
+      
+      if (image.startsWith('/') || image.startsWith('_www') || image.startsWith('_doc')) {
+        return image;
+      }
+      
+      return image;
+    },
+    
+    // 获取图片状态
+    getImageStatus(image) {
+      if (this.imageStatus.deletedImages.includes(image)) {
+        return 'deleted';
+      } else if (this.imageStatus.newImages.includes(image)) {
+        return 'new';
+      } else if (this.imageStatus.existingImages.includes(image)) {
+        return 'existing';
+      }
+      return 'unknown';
+    },
+    
+    // 获取保留的已存在图片数量
+    getExistingImageCount() {
+      return this.imageStatus.existingImages.filter(img => 
+        !this.imageStatus.deletedImages.includes(img)
+      ).length;
+    },
+    
+    // 图片预览功能
+    previewImage(index) {
+      if (!this.uploadedImages || this.uploadedImages.length === 0) return;
+      
+      const urls = this.uploadedImages.map(img => this.getImageUrl(img));
+      
+      uni.previewImage({
+        current: index,
+        urls: urls,
+        indicator: 'number',
+        loop: true,
+        success: () => {
+          console.log('图片预览打开成功');
+        },
+        fail: (error) => {
+          console.error('图片预览失败:', error);
+          uni.showToast({
+            title: '图片预览失败',
+            icon: 'none'
+          });
+        }
+      });
+    },
+    
+    // 选择图片
+    chooseImage() {
+      const remainingCount = 9 - this.uploadedImages.length;
+      if (remainingCount <= 0) {
+        uni.showToast({
+          title: '最多只能上传9张图片',
+          icon: 'none'
+        });
+        return;
+      }
+
+      uni.chooseImage({
+        count: remainingCount,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera'],
+        success: (res) => {
+          console.log('选择图片成功:', res);
+          
+          if (!res || !res.tempFilePaths) {
+            console.error('选择图片返回数据异常:', res);
+            uni.showToast({
+              title: '选择图片失败，返回数据异常',
+              icon: 'none'
+            });
+            return;
+          }
+          
+          const tempFilePaths = res.tempFilePaths || [];
+          
+          // 添加到图片数组和新图片数组
+          this.uploadedImages.push(...tempFilePaths);
+          this.imageStatus.newImages.push(...tempFilePaths);
+
+          console.log('更新后的图片数组:', this.uploadedImages);
+          console.log('新图片数组:', this.imageStatus.newImages);
+          
+          uni.showToast({
+            title: `成功添加${tempFilePaths.length}张图片`,
+            icon: 'success'
+          });
+        },
+        fail: (error) => {
+          console.error('选择图片失败:', error);
+          let errorMsg = '选择图片失败';
+          if (error && error.errMsg) {
+            errorMsg = error.errMsg;
+          }
+          uni.showToast({
+            title: errorMsg,
+            icon: 'none'
+          });
+        }
+      });
+    },
+    
+    // 删除图片
+    removeImage(index) {
+      uni.showModal({
+        title: '提示',
+        content: '确定要删除这张图片吗？',
+        success: (res) => {
+          if (res.confirm) {
+            const deletedImage = this.uploadedImages[index];
+            
+            // 检查删除的是已存在的图片还是新图片
+            const isExistingImage = this.imageStatus.existingImages.includes(deletedImage);
+            if (isExistingImage) {
+              // 如果是已存在的图片，添加到删除列表
+              this.imageStatus.deletedImages.push(deletedImage);
+            } else {
+              // 如果是新图片，从新图片列表中移除
+              const newImageIndex = this.imageStatus.newImages.indexOf(deletedImage);
+              if (newImageIndex > -1) {
+                this.imageStatus.newImages.splice(newImageIndex, 1);
+              }
+            }
+            
+            // 从显示列表中移除
+            this.uploadedImages.splice(index, 1);
+            
+            console.log('删除后的图片数组:', this.uploadedImages);
+            console.log('删除的图片:', deletedImage);
+            console.log('删除列表:', this.imageStatus.deletedImages);
+            console.log('新图片列表:', this.imageStatus.newImages);
+            
+            uni.showToast({
+              title: '删除成功',
+              icon: 'success'
+            });
+          }
+        }
+      });
+    },
+
     onCategoryChange(e) {
       this.categoryIndex = e.detail.value;
       this.spuData.category = this.categoryOptions[this.categoryIndex];
@@ -526,7 +723,6 @@ export default {
     
     onSpecTypeChange(e) {
       this.spuData.specType = e.detail.value ? '1' : '0';
-      // 重置SKU数据
       if (this.spuData.specType === '1' && this.productSkus.length === 0) {
         this.productSkus = [{
           skuDetail: '',
@@ -562,7 +758,6 @@ export default {
     removeAttribute(index) {
       if (this.spuData.spuAttributes.length > 1) {
         this.spuData.spuAttributes.splice(index, 1);
-        // 重新排序
         this.spuData.spuAttributes.forEach((attr, idx) => {
           attr.sortOrder = idx;
         });
@@ -595,48 +790,6 @@ export default {
       }
     },
     
-    // 修改图片选择方法
-    async chooseImage() {
-      try {
-        const res = await uni.chooseImage({
-          count: 9,
-          sizeType: ['compressed'],
-          sourceType: ['album', 'camera'],
-          success: (res) => {
-            // 先清空现有图片
-            this.uploadedImages = [];
-            this.spuData.coverImages = [];
-            
-            // 处理每张图片
-            res.tempFilePaths.forEach((tempFilePath, index) => {
-              // 创建符合后端 Media 对象结构的数据
-              const mediaObject = {
-                fileUrl: tempFilePath,
-                mediaType: 1,
-                fileName: `product_image_${Date.now()}_${index}`,
-              };
-              
-              this.uploadedImages.push(tempFilePath);
-              this.spuData.coverImages.push(mediaObject);
-            });
-            
-            console.log('处理后的图片数据:', this.spuData.coverImages);
-          }
-        });
-      } catch (error) {
-        console.error('选择图片失败:', error);
-        uni.showToast({
-          title: '选择图片失败',
-          icon: 'none'
-        });
-      }
-    },
-    
-    removeImage(index) {
-      this.uploadedImages.splice(index, 1);
-      this.spuData.coverImages.splice(index, 1);
-    },
-    
     resetNewSpuForm() {
       this.spuData = {
         productName: '',
@@ -647,7 +800,6 @@ export default {
         marketPrice: '',
         costPrice: '',
         stock: '',
-        coverImages: [],
         spuAttributes: [
           {
             attributeCategory: '',
@@ -668,6 +820,11 @@ export default {
       ];
       
       this.uploadedImages = [];
+      this.imageStatus = {
+        existingImages: [],
+        newImages: [],
+        deletedImages: []
+      };
       this.errors = {};
       this.categoryIndex = -1;
       this.productStatusIndex = 0;
@@ -677,7 +834,6 @@ export default {
       this.errors = {};
       let isValid = true;
       
-      // SPU 基础验证
       if (!this.spuData.productName.trim()) {
         this.errors.productName = true;
         isValid = false;
@@ -708,7 +864,6 @@ export default {
         isValid = false;
       }
       
-      // SPU 属性验证
       if (this.spuData.specType === '0') {
         this.spuData.spuAttributes.forEach((attr, index) => {
           if (!attr.attributeCategory.trim()) {
@@ -723,7 +878,6 @@ export default {
         });
       }
       
-      // SKU 验证
       if (this.spuData.specType === '1') {
         this.productSkus.forEach((sku, index) => {
           if (!sku.skuDetail.trim()) {
@@ -751,6 +905,100 @@ export default {
       return isValid;
     },
     
+    // 上传所有需要上传的图片（保留的 + 新增的）
+    async uploadAllImages(productId) {
+      // 获取所有需要上传的图片（保留的图片 + 新图片）
+      const imagesToUpload = [
+        ...this.imageStatus.existingImages.filter(img => 
+          !this.imageStatus.deletedImages.includes(img)
+        ),
+        ...this.imageStatus.newImages
+      ];
+
+      if (imagesToUpload.length === 0) {
+        console.log('没有需要上传的图片');
+        return [];
+      }
+
+      console.log('开始上传所有图片，商品ID:', productId);
+      console.log('需要上传的图片数量:', imagesToUpload.length);
+      console.log('需要上传的图片:', imagesToUpload);
+
+      try {
+        // 使用完整的图片上传参数
+        const uploadPromises = imagesToUpload.map(async (imagePath, index) => {
+          try {
+            console.log(`开始上传第 ${index + 1} 张图片:`, imagePath);
+            
+            // 完整的图片上传参数
+            const uploadResult = await uploadImage(
+              imagePath,                    // filePath: 文件临时路径
+              5,                            // relatedType: 关联类型，5表示商品
+              productId,                    // relatedId: 商品ID
+              `商品图片${index + 1}`,       // description: 图片描述
+              'product',                    // stage: 阶段标识
+              index + 1                     // sequence: 排序序号
+            );
+            
+            console.log(`第 ${index + 1} 张图片上传结果:`, uploadResult);
+            
+            if (uploadResult.code === 200 && uploadResult.data) {
+              // 上传成功，返回图片URL
+              return uploadResult.data;
+            } else {
+              throw new Error(uploadResult.msg || `第 ${index + 1} 张图片上传失败`);
+            }
+          } catch (error) {
+            console.error(`第 ${index + 1} 张图片上传失败:`, error);
+            throw error;
+          }
+        });
+
+        // 等待所有图片上传完成
+        const uploadedUrls = await Promise.all(uploadPromises);
+        console.log('所有图片上传完成，返回的URL:', uploadedUrls);
+
+        uni.showToast({
+          title: `成功上传${imagesToUpload.length}张图片`,
+          icon: 'success'
+        });
+
+        return uploadedUrls;
+
+      } catch (error) {
+        console.error('图片上传失败:', error);
+        uni.showToast({
+          title: '图片上传失败: ' + (error.message || '请稍后重试'),
+          icon: 'none',
+          duration: 3000
+        });
+        return [];
+      }
+    },
+
+    // 处理图片更新（编辑模式下）
+    async handleImageUpdate(productId) {
+      try {
+        // 上传所有需要上传的图片（保留的 + 新增的）
+        const uploadedUrls = await this.uploadAllImages(productId);
+        
+        // 如果有删除的图片，调用删除接口（如果需要）
+        if (this.imageStatus.deletedImages.length > 0) {
+          console.log('需要删除的图片:', this.imageStatus.deletedImages);
+          // 这里可以调用删除图片的API
+          // await productSpuApi.deleteProductImages(productId, this.imageStatus.deletedImages);
+        }
+        
+        console.log('最终上传成功的图片URL:', uploadedUrls);
+        return uploadedUrls;
+        
+      } catch (error) {
+        console.error('图片更新处理失败:', error);
+        throw error;
+      }
+    },
+
+    // 提交表单
     async submitForm() {
       if (this.isSubmitting) return;
       
@@ -765,7 +1013,7 @@ export default {
       this.isSubmitting = true;
 
       try {
-        // 准备提交数据 - 完全匹配DTO结构
+        // 准备商品数据
         const formData = {
           productName: this.spuData.productName,
           productDetail: this.spuData.productDetail,
@@ -775,8 +1023,6 @@ export default {
           marketPrice: parseFloat(this.spuData.marketPrice),
           costPrice: parseFloat(this.spuData.costPrice),
           stock: parseInt(this.spuData.stock),
-          coverImages: this.spuData.coverImages,
-          // 根据规格类型设置不同的数据
           spuAttributes: this.spuData.specType === '0' ? this.spuData.spuAttributes.map(attr => ({
             attributeCategory: attr.attributeCategory,
             attributeValue: attr.attributeValue,
@@ -791,20 +1037,50 @@ export default {
           })) : []
         };
 
-        console.log('提交的数据:', JSON.stringify(formData, null, 2));
+        console.log('提交的商品数据:', JSON.stringify(formData, null, 2));
 
         let result;
+        let finalProductId = this.productId;
         
-        // 根据模式调用不同的API
         if (this.isEditMode && this.productId) {
-          // 编辑模式 - 调用更新接口
-          formData.productSpuId = this.productId; // 添加商品ID
+          // 编辑模式 - 直接使用现有的 productId
+          formData.productSpuId = this.productId;
           console.log('编辑商品，ID:', this.productId);
-          result = await productSpuApi.update(formData);
+          
+          uni.showLoading({ title: '更新商品中...', mask: true });
+          result = await productSpuApi.updateProduct(formData);
+          uni.hideLoading();
+          
+          console.log('商品更新API返回:', result);
+          
+          if (result && result.code === 200) {
+            // 更新成功后处理图片（上传保留图片 + 新图片）
+            await this.handleImageUpdate(this.productId);
+          } else {
+            throw new Error(result.msg || '更新商品失败');
+          }
+          
         } else {
-          // 新增模式 - 调用保存接口
+          // 新增模式 - 需要先创建商品获取ID
           console.log('新增商品');
-          result = await productSpuApi.save(formData);
+          
+          uni.showLoading({ title: '创建商品中...', mask: true });
+          const createResult = await productSpuApi.saveProduct(formData);
+          uni.hideLoading();
+
+          console.log('商品创建API返回:', createResult);
+
+          if (createResult && createResult.code === 200) {
+            finalProductId = createResult.data;
+            console.log('获取到商品ID:', finalProductId);
+            
+            // 创建成功后上传所有图片（新增模式下所有图片都是新图片）
+            await this.uploadAllImages(finalProductId);
+            
+            result = createResult;
+          } else {
+            throw new Error(createResult.msg || '创建商品失败');
+          }
         }
         
         // 提交成功
@@ -816,17 +1092,18 @@ export default {
         
         setTimeout(() => {
           this.showSuccessMessage = false;
-          this.resetNewSpuForm();
           this.isSubmitting = false;
           
-          // 返回上一页或重新加载
           if (this.isEditMode) {
             uni.navigateBack();
+          } else {
+            this.resetNewSpuForm();
           }
         }, 2000);
         
       } catch (error) {
         console.error('提交失败:', error);
+        uni.hideLoading();
         
         let errorMessage = this.isEditMode ? '更新失败，请重试' : '提交失败，请重试';
         if (error.message) {
@@ -836,6 +1113,8 @@ export default {
             errorMessage = '接口不存在，请检查接口路径';
           } else if (error.message.includes('500')) {
             errorMessage = '服务器内部错误，请检查数据格式';
+          } else {
+            errorMessage = error.message;
           }
         }
         
@@ -852,7 +1131,7 @@ export default {
 </script>
 
 <style scoped>
-/* 样式保持不变，与之前相同 */
+/* 样式部分保持不变 */
 .container {
   padding: 24rpx;
   background: linear-gradient(135deg, #f5f7fa 0%, #e4efe9 100%);
@@ -1290,6 +1569,37 @@ export default {
   z-index: 15;
 }
 
+/* 新增图片状态样式 */
+.image-status-badge {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  font-size: 20rpx;
+  z-index: 20;
+}
+
+.status-text {
+  font-size: 20rpx;
+}
+
+.image-status-summary {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 20rpx;
+  padding: 16rpx;
+  background: #f8f9fa;
+  border-radius: 8rpx;
+}
+
+.status-item {
+  font-size: 24rpx;
+  color: #666;
+}
+
 .inline-form-group {
   display: flex;
   gap: 24rpx;
@@ -1468,6 +1778,11 @@ export default {
   
   .card-content {
     padding: 20rpx;
+  }
+  
+  .image-status-summary {
+    flex-direction: column;
+    gap: 8rpx;
   }
 }
 

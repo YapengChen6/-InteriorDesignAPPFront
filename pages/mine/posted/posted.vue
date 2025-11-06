@@ -72,20 +72,40 @@
             
             <!-- 帖子内容 - 展开时显示 -->
             <view class="post-content" v-if="post.expanded">
-              <!-- 图片展示 -->
+              <!-- 媒体展示 - 图片和视频一起显示 -->
               <view class="media-container" v-if="post.mediaUrls && post.mediaUrls.length > 0">
                 <view class="media-grid" :class="`grid-${Math.min(post.mediaUrls.length, 4)}`">
                   <view 
-                    v-for="(mediaUrl, index) in post.mediaUrls" 
+                    v-for="(media, index) in post.mediaUrls" 
                     :key="index"
                     class="media-item"
-                    @tap="previewImage(mediaUrl)"
+                    @tap="handleMediaClick(media, index, post.mediaUrls)"
                   >
+                    <!-- 图片显示 -->
                     <image 
-                      :src="mediaUrl" 
+                      v-if="isImage(media.fileUrl || media)"
+                      :src="media.fileUrl || media" 
                       mode="aspectFill"
-                      class="media-image"
+                      class="media-content"
                     />
+                    <!-- 视频显示 - 只显示封面，不嵌入video组件 -->
+                    <view 
+                      v-else-if="isVideo(media.fileUrl || media)"
+                      class="video-preview-container"
+                    >
+                      <image 
+                        :src="getVideoCover(media.fileUrl || media)" 
+                        mode="aspectFill"
+                        class="video-cover"
+                      />
+                      <view class="video-play-icon">
+                        <text class="play-icon">▶</text>
+                      </view>
+                    </view>
+                    <!-- 文件类型标识 -->
+                    <view class="media-type-tag" :class="getMediaTypeClass(media.fileUrl || media)">
+                      {{ getMediaTypeText(media.fileUrl || media) }}
+                    </view>
                   </view>
                 </view>
               </view>
@@ -121,7 +141,7 @@
     </view>
     
     <!-- 图片预览模态框 -->
-    <view class="modal" v-if="showModal">
+    <view class="modal" v-if="showModal && currentMediaType === 'image'">
       <view class="modal-mask" @tap="closeModal"></view>
       <view class="modal-content">
         <view class="modal-header">
@@ -133,14 +153,106 @@
         
         <view class="modal-body">
           <image 
-            :src="currentImage" 
+            :src="currentMedia" 
             mode="aspectFit"
             class="modal-image"
           />
         </view>
         
         <view class="modal-footer">
-          <text class="image-source">来源: {{ currentImage }}</text>
+          <text class="media-source">来源: {{ currentMedia }}</text>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 视频播放模态框 -->
+    <view class="modal" v-if="showModal && currentMediaType === 'video'">
+      <view class="modal-mask" @tap="closeModal"></view>
+      <view class="modal-content video-modal">
+        <view class="modal-header">
+          <text class="modal-title">视频播放</text>
+          <view class="modal-close" @tap="closeModal">
+            <text class="close-icon">×</text>
+          </view>
+        </view>
+        
+        <view class="modal-body video-body">
+          <!-- 尝试直接播放 -->
+          <video 
+            v-if="!videoError && !showDownloadOption"
+            :src="currentMedia" 
+            class="modal-video"
+            :controls="true"
+            :autoplay="false"
+            :show-fullscreen-btn="true"
+            :show-play-btn="true"
+            :show-center-play-btn="true"
+            :enable-play-gesture="true"
+            objectFit="contain"
+            :poster="getVideoCover(currentMedia)"
+            :show-loading="true"
+            :enable-progress-gesture="true"
+            @error="onVideoError"
+            @play="onVideoPlay"
+            @loadedmetadata="onVideoLoaded"
+            @loadstart="onVideoLoadStart"
+            @waiting="onVideoWaiting"
+            @canplay="onVideoCanPlay"
+            @progress="onVideoProgress"
+            @ended="onVideoEnded"
+          />
+          
+          <!-- 视频加载状态 -->
+          <view v-if="videoLoading" class="video-loading">
+            <view class="loading-spinner"></view>
+            <text class="loading-text">视频加载中...</text>
+            <text class="loading-tip" v-if="isOSSUrl(currentMedia)">检测到OSS视频，可能需要CORS配置</text>
+          </view>
+          
+          <!-- 视频错误提示 -->
+          <view v-if="videoError || showDownloadOption" class="video-error">
+            <text class="error-icon">🎬</text>
+            <text class="error-text">{{ errorTitle }}</text>
+            <text class="error-desc">{{ errorDescription }}</text>
+            
+            <!-- CORS配置提示 -->
+            <view v-if="showCorsHelp" class="cors-help">
+              <text class="cors-title">CORS配置解决方案：</text>
+              <view class="cors-steps">
+                <text class="cors-step">1. 登录阿里云OSS控制台</text>
+                <text class="cors-step">2. 选择对应Bucket → 权限管理 → 跨域设置</text>
+                <text class="cors-step">3. 添加CORS规则（允许来源、GET方法）</text>
+                <text class="cors-step">4. 保存配置并刷新页面</text>
+              </view>
+            </view>
+            
+            <text class="error-solution">临时解决方案：</text>
+            <view class="solution-options">
+              <view class="solution-item" @tap="downloadVideo">
+                <text class="solution-icon">📥</text>
+                <text class="solution-text">下载视频到本地播放</text>
+              </view>
+              <view class="solution-item" @tap="copyVideoLink">
+                <text class="solution-icon">🔗</text>
+                <text class="solution-text">复制视频链接</text>
+              </view>
+              <view class="solution-item" @tap="openVideoInBrowser">
+                <text class="solution-icon">🌐</text>
+                <text class="solution-text">在浏览器中打开</text>
+              </view>
+              <view class="solution-item" @tap="retryVideoPlay">
+                <text class="solution-icon">🔄</text>
+                <text class="solution-text">重新尝试播放</text>
+              </view>
+            </view>
+          </view>
+        </view>
+        
+        <view class="modal-footer">
+          <text class="media-source">视频地址: {{ currentMedia }}</text>
+          <text class="cors-status" v-if="isOSSUrl(currentMedia)">
+            {{ hasCorsSupport ? 'CORS: 已配置' : 'CORS: 未配置' }}
+          </text>
         </view>
       </view>
     </view>
@@ -152,13 +264,23 @@ import { getPostList, getPostDetail } from '@/api/community'
 import { getUserProfile } from '@/api/users.js'
 
 export default {
+  name: 'PostedPage',
   data() {
     return {
       currentTab: 'posts',
       currentNav: 3,
-      currentImage: '',
+      currentMedia: '',
+      currentMediaType: 'image',
       showModal: false,
       userId: '',
+      videoError: false,
+      videoLoading: false,
+      showDownloadOption: false,
+      videoTimeout: null,
+      hasCorsSupport: false,
+      errorTitle: '视频无法直接播放',
+      errorDescription: '由于跨域限制，视频无法在浏览器中直接播放',
+      showCorsHelp: false,
       navList: [
         { value: 1, label: '作品集' },
         { value: 2, label: '案例集' },
@@ -181,8 +303,11 @@ export default {
     this.initData()
   },
   
+  onUnload() {
+    this.clearVideoTimeout()
+  },
+  
   methods: {
-    // 初始化数据
     async initData() {
       try {
         uni.showLoading({
@@ -190,10 +315,7 @@ export default {
           mask: true
         })
         
-        // 1. 先获取用户信息
         await this.getUserInfo()
-        
-        // 2. 再加载帖子列表
         await this.loadPosts()
         
       } catch (error) {
@@ -207,14 +329,12 @@ export default {
       }
     },
     
-    // 获取用户信息
     async getUserInfo() {
       try {
         const res = await getUserProfile()
         if (res.code === 200) {
           this.userId = res.data.userId
           uni.setStorageSync('userId', this.userId)
-          console.log('获取到用户ID:', this.userId)
         } else {
           throw new Error(res.msg || '获取用户信息失败')
         }
@@ -224,20 +344,15 @@ export default {
       }
     },
     
-    // 加载帖子列表
     async loadPosts() {
       try {
         if (!this.userId) {
           await this.getUserInfo()
         }
         
-        // 根据你的getPostList接口实际情况调整参数
-        const params = {
-          userId: this.userId
-          // 如果getPostList接口也需要参数的话
-        }
-        
+        const params = { userId: this.userId }
         const res = await getPostList(params)
+        
         if (res.code === 200) {
           this.posts = res.data.rows.map(post => ({
             ...post,
@@ -263,7 +378,412 @@ export default {
       }
     },
     
-    // 修复：正确调用getPostDetail接口
+    // ========== CORS优化处理方法 ==========
+    
+    /**
+     * 检查是否为OSS URL
+     */
+    isOSSUrl(url) {
+      return url && url.includes('aliyuncs.com')
+    },
+    
+    /**
+     * 处理媒体点击事件
+     */
+    handleMediaClick(media, index, mediaList) {
+      const mediaUrl = media.fileUrl || media
+      
+      console.log('点击媒体:', {
+        originalUrl: mediaUrl,
+        type: this.isImage(mediaUrl) ? 'image' : 'video',
+        isOSS: this.isOSSUrl(mediaUrl)
+      })
+      
+      if (this.isImage(mediaUrl)) {
+        this.currentMedia = mediaUrl
+        this.currentMediaType = 'image'
+        this.showModal = true
+      } else if (this.isVideo(mediaUrl)) {
+        this.prepareVideoPlayback(mediaUrl)
+      }
+    },
+    
+    /**
+     * 准备视频播放
+     */
+    async prepareVideoPlayback(videoUrl) {
+      // 重置状态
+      this.videoError = false
+      this.videoLoading = true
+      this.showDownloadOption = false
+      this.showModal = true
+      this.currentMediaType = 'video'
+      this.showCorsHelp = false
+      
+      // 直接使用原始视频URL
+      this.currentMedia = videoUrl
+      
+      console.log('视频播放准备:', {
+        videoUrl: this.currentMedia,
+        isOSS: this.isOSSUrl(videoUrl),
+        platform: uni.getSystemInfoSync().platform
+      })
+      
+      // 如果是OSS视频，测试CORS支持
+      if (this.isOSSUrl(videoUrl)) {
+        this.hasCorsSupport = await this.testCorsSupport(videoUrl)
+        console.log('CORS支持状态:', this.hasCorsSupport)
+      }
+      
+      // 设置加载超时
+      this.startVideoTimeout()
+    },
+    
+    /**
+     * 测试CORS支持
+     */
+    async testCorsSupport(url) {
+      return new Promise((resolve) => {
+        // 在小程序环境中，我们通过尝试加载视频来判断
+        const testVideo = document.createElement('video')
+        testVideo.src = url
+        testVideo.oncanplay = () => {
+          resolve(true)
+        }
+        testVideo.onerror = () => {
+          resolve(false)
+        }
+        // 设置超时
+        setTimeout(() => resolve(false), 2000)
+      })
+    },
+    
+    /**
+     * 开始视频加载超时检测
+     */
+    startVideoTimeout() {
+      this.clearVideoTimeout()
+      this.videoTimeout = setTimeout(() => {
+        if (this.videoLoading && this.showModal) {
+          console.log('视频加载超时')
+          this.videoLoading = false
+          this.showDownloadOption = true
+          this.videoError = true
+          
+          // 根据是否OSS视频显示不同的错误信息
+          if (this.isOSSUrl(this.currentMedia)) {
+            this.errorTitle = '视频加载超时（CORS限制）'
+            this.errorDescription = 'OSS视频由于跨域限制无法直接播放'
+            this.showCorsHelp = true
+          } else {
+            this.errorTitle = '视频加载超时'
+            this.errorDescription = '视频加载时间过长，请检查网络或尝试下载'
+          }
+        }
+      }, 8000)
+    },
+    
+    /**
+     * 清理视频超时定时器
+     */
+    clearVideoTimeout() {
+      if (this.videoTimeout) {
+        clearTimeout(this.videoTimeout)
+        this.videoTimeout = null
+      }
+    },
+    
+    // ========== 视频事件处理 ==========
+    
+    /**
+     * 视频错误处理
+     */
+    onVideoError(e) {
+      console.error('视频播放错误详情:', {
+        error: e,
+        detail: e.detail,
+        videoUrl: this.currentMedia
+      })
+      
+      this.clearVideoTimeout()
+      this.videoError = true
+      this.videoLoading = false
+      this.showDownloadOption = true
+      
+      const errorInfo = this.getVideoErrorInfo(e)
+      this.errorTitle = errorInfo.title
+      this.errorDescription = errorInfo.description
+      this.showCorsHelp = errorInfo.showCorsHelp
+      
+      uni.showToast({
+        title: errorInfo.toast,
+        icon: 'none',
+        duration: 3000
+      })
+    },
+    
+    /**
+     * 获取视频错误信息
+     */
+    getVideoErrorInfo(e) {
+      const errMsg = e.detail?.errMsg || ''
+      const isOSS = this.isOSSUrl(this.currentMedia)
+      
+      console.log('视频错误信息:', errMsg)
+      
+      // CORS相关错误
+      if (isOSS && (
+        errMsg.includes('Failed to load') || 
+        errMsg.includes('Network Error') ||
+        errMsg.includes('跨域') ||
+        errMsg.includes('MEDIA_ERR_NETWORK') ||
+        !errMsg.includes('404') && !errMsg.includes('403')
+      )) {
+        return {
+          title: '视频跨域限制',
+          description: 'OSS视频由于CORS策略无法直接播放',
+          toast: '视频跨域限制，请配置OSS CORS',
+          showCorsHelp: true
+        }
+      }
+      
+      // 其他错误类型
+      if (errMsg.includes('404')) {
+        return {
+          title: '视频文件不存在',
+          description: '请求的视频文件在服务器上不存在',
+          toast: '视频文件不存在',
+          showCorsHelp: false
+        }
+      } else if (errMsg.includes('403')) {
+        return {
+          title: '无权限访问',
+          description: '您没有权限访问该视频文件',
+          toast: '无权限访问视频',
+          showCorsHelp: false
+        }
+      } else if (errMsg.includes('MEDIA_ERR_DECODE')) {
+        return {
+          title: '视频格式不支持',
+          description: '当前视频格式在此设备上不支持播放',
+          toast: '视频格式不支持',
+          showCorsHelp: false
+        }
+      } else {
+        return {
+          title: '视频播放失败',
+          description: '视频无法正常播放，请尝试其他方式',
+          toast: '视频播放失败',
+          showCorsHelp: isOSS
+        }
+      }
+    },
+    
+    /**
+     * 重新尝试播放
+     */
+    retryVideoPlay() {
+      this.prepareVideoPlayback(this.currentMedia)
+    },
+    
+    onVideoLoadStart() {
+      console.log('视频开始加载')
+      this.videoLoading = true
+      this.videoError = false
+      this.showDownloadOption = false
+    },
+    
+    onVideoWaiting() {
+      console.log('视频等待加载')
+      this.videoLoading = true
+    },
+    
+    onVideoCanPlay() {
+      console.log('视频可以播放')
+      this.clearVideoTimeout()
+      this.videoLoading = false
+      this.videoError = false
+      this.showDownloadOption = false
+      this.hasCorsSupport = true
+      
+      uni.showToast({
+        title: '视频加载完成',
+        icon: 'success',
+        duration: 1500
+      })
+    },
+    
+    onVideoLoaded() {
+      console.log('视频元数据加载完成')
+      this.videoLoading = false
+    },
+    
+    onVideoPlay() {
+      console.log('视频开始播放')
+      this.clearVideoTimeout()
+      this.videoLoading = false
+      this.videoError = false
+      this.showDownloadOption = false
+    },
+    
+    onVideoProgress(e) {
+      // 可以在这里添加进度显示
+      const { buffered, currentTime, duration } = e.detail
+      console.log('视频进度:', { buffered, currentTime, duration })
+    },
+    
+    onVideoEnded() {
+      console.log('视频播放结束')
+      uni.showToast({
+        title: '播放完成',
+        icon: 'success',
+        duration: 2000
+      })
+    },
+    
+    // ========== 下载相关方法 ==========
+    
+    downloadVideo() {
+      uni.showLoading({
+        title: '准备下载...',
+        mask: true
+      })
+      
+      uni.downloadFile({
+        url: this.currentMedia,
+        success: (res) => {
+          uni.hideLoading()
+          if (res.statusCode === 200) {
+            uni.saveVideoToPhotosAlbum({
+              filePath: res.tempFilePath,
+              success: () => {
+                uni.showToast({
+                  title: '视频已保存到相册',
+                  icon: 'success'
+                })
+              },
+              fail: (err) => {
+                console.error('保存视频失败:', err)
+                uni.showToast({
+                  title: '保存失败，请重试',
+                  icon: 'none'
+                })
+              }
+            })
+          } else {
+            uni.showToast({
+              title: `下载失败，状态码: ${res.statusCode}`,
+              icon: 'none'
+            })
+          }
+        },
+        fail: (err) => {
+          uni.hideLoading()
+          console.error('下载视频失败:', err)
+          uni.showToast({
+            title: '下载失败，请检查网络',
+            icon: 'none'
+          })
+        }
+      })
+    },
+    
+    copyVideoLink() {
+      uni.setClipboardData({
+        data: this.currentMedia,
+        success: () => {
+          uni.showToast({
+            title: '链接已复制',
+            icon: 'success'
+          })
+        },
+        fail: () => {
+          uni.showToast({
+            title: '复制失败',
+            icon: 'none'
+          })
+        }
+      })
+    },
+    
+    openVideoInBrowser() {
+      if (uni.canIUse('openUrl')) {
+        uni.openUrl({
+          url: this.currentMedia
+        })
+      } else {
+        window.open(this.currentMedia, '_blank')
+      }
+      uni.showToast({
+        title: '请在浏览器中查看',
+        icon: 'none'
+      })
+    },
+    
+    // ========== 基础工具方法 ==========
+    
+    isImage(url) {
+      if (!url) return false
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+      return imageExtensions.some(ext => url.toLowerCase().includes(ext))
+    },
+    
+    isVideo(url) {
+      if (!url) return false
+      const videoExtensions = ['.mp4', '.mov', '.avi', '.flv', '.webm', '.3gp', '.ogg', '.wmv', '.mkv']
+      return videoExtensions.some(ext => url.toLowerCase().includes(ext))
+    },
+    
+    getVideoCover(videoUrl) {
+      if (!videoUrl) return '/static/images/video-cover.png'
+      
+      if (videoUrl.includes('aliyuncs.com') && videoUrl.includes('.mp4')) {
+        try {
+          const baseUrl = videoUrl.split('?')[0]
+          return baseUrl + '?x-oss-process=video/snapshot,t_1000,f_jpg,w_300,h_300,m_fast'
+        } catch (error) {
+          console.warn('生成视频封面失败:', error)
+        }
+      }
+      
+      return '/static/images/video-cover.png'
+    },
+    
+    getMediaTypeClass(url) {
+      if (this.isImage(url)) return 'image-tag'
+      if (this.isVideo(url)) return 'video-tag'
+      return 'other-tag'
+    },
+    
+    getMediaTypeText(url) {
+      if (this.isImage(url)) return '图片'
+      if (this.isVideo(url)) return '视频'
+      return '文件'
+    },
+    
+    switchTab(tab) {
+      this.currentTab = tab
+    },
+    
+    switchNav(nav) {
+      this.currentNav = nav
+      this.posts.forEach(post => {
+        post.expanded = false
+      })
+    },
+    
+    togglePost(postId) {
+      const post = this.posts.find(p => p.id === postId)
+      if (post) {
+        this.posts.forEach(p => {
+          if (p.id !== postId) {
+            p.expanded = false
+          }
+        })
+        post.expanded = !post.expanded
+      }
+    },
+    
     async togglePostWithDetail(postId) {
       const post = this.posts.find(p => p.id === postId)
       if (post) {
@@ -278,7 +798,6 @@ export default {
             mask: true
           })
           
-          // 直接传递帖子ID，不需要对象
           const res = await getPostDetail(postId)
           
           if (res.code === 200) {
@@ -310,42 +829,20 @@ export default {
       }
     },
     
-    // 其他方法保持不变...
-    switchTab(tab) {
-      this.currentTab = tab
-    },
-    
-    switchNav(nav) {
-      this.currentNav = nav
-      this.posts.forEach(post => {
-        post.expanded = false
-      })
-    },
-    
-    togglePost(postId) {
-      const post = this.posts.find(p => p.id === postId)
-      if (post) {
-        this.posts.forEach(p => {
-          if (p.id !== postId) {
-            p.expanded = false
-          }
-        })
-        post.expanded = !post.expanded
-      }
-    },
-    
     getTypeLabel(threadType) {
       const nav = this.navList.find(n => n.value === parseInt(threadType))
       return nav ? nav.label : '未知类型'
     },
     
-    previewImage(imageUrl) {
-      this.currentImage = imageUrl
-      this.showModal = true
-    },
-    
     closeModal() {
+      this.clearVideoTimeout()
       this.showModal = false
+      this.currentMedia = ''
+      this.currentMediaType = 'image'
+      this.videoError = false
+      this.videoLoading = false
+      this.showDownloadOption = false
+      this.showCorsHelp = false
     },
     
     stripHtmlTags(html) {
@@ -355,12 +852,10 @@ export default {
     
     parseRichContent(html) {
       if (!html) return ''
-      
       let content = html
         .replace(/<img/gi, '<img style="max-width:100%;height:auto;"')
         .replace(/<table/gi, '<table style="width:100%;"')
         .replace(/<video/gi, '<video style="max-width:100%;"')
-      
       return content
     },
     
@@ -379,6 +874,52 @@ export default {
 </script>
 
 <style scoped>
+/* 保持原有的所有样式，只添加新的CORS相关样式 */
+
+.loading-tip {
+  display: block;
+  font-size: 24rpx;
+  color: #ccc;
+  margin-top: 16rpx;
+}
+
+.cors-help {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin: 20rpx 0;
+  text-align: left;
+}
+
+.cors-title {
+  display: block;
+  font-size: 26rpx;
+  color: #ffa940;
+  margin-bottom: 16rpx;
+  font-weight: 600;
+}
+
+.cors-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.cors-step {
+  display: block;
+  font-size: 24rpx;
+  color: #ddd;
+  line-height: 1.4;
+}
+
+.cors-status {
+  display: block;
+  font-size: 22rpx;
+  color: #ff4d4f;
+  margin-top: 8rpx;
+}
+
+/* 其他原有样式保持不变 */
 .container {
   display: flex;
   flex-direction: column;
@@ -595,14 +1136,73 @@ export default {
   border-radius: 16rpx;
   overflow: hidden;
   aspect-ratio: 1;
+  cursor: pointer;
 }
 
-.media-image {
+.media-content {
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
-/* 富文本内容样式 */
+.video-preview-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.video-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80rpx;
+  height: 80rpx;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.play-icon {
+  color: white;
+  font-size: 36rpx;
+  margin-left: 6rpx;
+}
+
+.media-type-tag {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 12rpx;
+  font-size: 20rpx;
+  color: white;
+  z-index: 2;
+}
+
+.image-tag {
+  background: rgba(52, 152, 219, 0.8);
+}
+
+.video-tag {
+  background: rgba(231, 76, 60, 0.8);
+}
+
+.other-tag {
+  background: rgba(149, 165, 166, 0.8);
+}
+
 .rich-content-container {
   margin-bottom: 24rpx;
 }
@@ -611,21 +1211,6 @@ export default {
   font-size: 30rpx;
   line-height: 1.6;
   color: #333;
-}
-
-.rich-text-content >>> img {
-  border-radius: 12rpx;
-  margin: 16rpx 0;
-}
-
-.rich-text-content >>> p {
-  margin: 16rpx 0;
-  text-align: justify;
-}
-
-.rich-text-content >>> video {
-  border-radius: 12rpx;
-  margin: 16rpx 0;
 }
 
 .content-text {
@@ -640,7 +1225,6 @@ export default {
   line-height: 1.6;
 }
 
-/* 修改帖子底部样式，只保留发布时间 */
 .post-footer {
   display: flex;
   justify-content: flex-start;
@@ -716,6 +1300,10 @@ export default {
   z-index: 10000;
 }
 
+.video-modal {
+  max-width: 800rpx;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -739,6 +1327,7 @@ export default {
   align-items: center;
   justify-content: center;
   background: #f5f5f5;
+  cursor: pointer;
 }
 
 .close-icon {
@@ -753,9 +1342,20 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+}
+
+.video-body {
+  height: 450rpx;
+  background: #000;
 }
 
 .modal-image {
+  width: 100%;
+  height: 100%;
+}
+
+.modal-video {
   width: 100%;
   height: 100%;
 }
@@ -766,9 +1366,141 @@ export default {
   background: #fafafa;
 }
 
-.image-source {
+.media-source {
   font-size: 24rpx;
   color: #666;
   word-break: break-all;
+}
+
+.video-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  padding: 40rpx;
+  border-radius: 20rpx;
+  color: white;
+  text-align: center;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.loading-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid rgba(255, 255, 255, 0.3);
+  border-top: 4rpx solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20rpx;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 28rpx;
+}
+
+.video-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.9);
+  padding: 40rpx;
+  border-radius: 20rpx;
+  color: white;
+  text-align: center;
+  z-index: 10;
+  min-width: 400rpx;
+}
+
+.error-icon {
+  display: block;
+  font-size: 60rpx;
+  margin-bottom: 20rpx;
+}
+
+.error-text {
+  display: block;
+  font-size: 32rpx;
+  margin-bottom: 16rpx;
+  font-weight: 600;
+}
+
+.error-desc {
+  display: block;
+  font-size: 26rpx;
+  margin-bottom: 10rpx;
+  color: #ccc;
+}
+
+.error-solution {
+  display: block;
+  font-size: 26rpx;
+  margin: 20rpx 0 10rpx;
+  color: #ccc;
+  text-align: left;
+}
+
+.solution-options {
+  margin-top: 30rpx;
+  width: 100%;
+}
+
+.solution-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12rpx;
+  margin-bottom: 16rpx;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.solution-item:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.solution-icon {
+  font-size: 36rpx;
+  margin-right: 20rpx;
+}
+
+.solution-text {
+  font-size: 28rpx;
+  color: white;
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .nav-container {
+    padding: 20rpx 24rpx;
+    gap: 16rpx;
+  }
+  
+  .nav-btn {
+    padding: 16rpx 28rpx;
+    font-size: 26rpx;
+  }
+  
+  .post-list {
+    padding: 20rpx;
+  }
+  
+  .post-item {
+    padding: 24rpx;
+  }
+  
+  .post-title {
+    font-size: 32rpx;
+  }
 }
 </style>

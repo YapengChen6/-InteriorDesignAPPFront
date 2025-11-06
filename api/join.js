@@ -67,13 +67,9 @@ export function downloadTemplate() {
 
 // ==================== 媒体资源上传相关API ====================
 
-// 图片上传接口 - 调试版本
+// 图片上传接口
 export function uploadImage(file, relatedType, relatedId, description, stage, sequence) {
   return new Promise((resolve, reject) => {
-    console.log('🔍 DEBUG UPLOAD - Starting upload process')
-    console.log('🔍 DEBUG UPLOAD - File:', file)
-    console.log('🔍 DEBUG UPLOAD - File type:', typeof file)
-    
     // 构建 formData
     const formData = {
       relatedType: Number(relatedType),
@@ -83,43 +79,25 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
       stage: stage || ''
     }
 
-    console.log('🔍 DEBUG UPLOAD - FormData:', formData)
-    console.log('🔍 DEBUG UPLOAD - Base URL:', getBaseUrl())
-    console.log('🔍 DEBUG UPLOAD - Full URL:', getBaseUrl() + '/api/media/uploadImage')
-    console.log('🔍 DEBUG UPLOAD - Token exists:', !!getToken())
-
-    // 首先检查文件是否存在
+    // 检查文件是否存在
     uni.getFileInfo({
       filePath: file,
       success: (fileInfo) => {
-        console.log('✅ DEBUG UPLOAD - File info:', {
-          size: fileInfo.size,
-          exists: true
-        })
-
         // 开始上传
         const uploadTask = uni.uploadFile({
           url: getBaseUrl() + '/api/media/upload',
           filePath: file,
-          name: 'file', // 必须和后端 @RequestParam("file") 一致
+          name: 'file',
           formData: formData,
           header: {
             'Authorization': 'Bearer ' + getToken(),
-            // 不要手动设置 Content-Type，uni.uploadFile 会自动设置
           },
           success: (res) => {
-            console.log('📡 DEBUG UPLOAD - Upload response received')
-            console.log('📡 DEBUG UPLOAD - Status code:', res.statusCode)
-            console.log('📡 DEBUG UPLOAD - Response data:', res.data)
-            console.log('📡 DEBUG UPLOAD - Error message:', res.errMsg)
-
             if (res.statusCode === 200) {
               try {
                 const data = JSON.parse(res.data)
-                console.log('📡 DEBUG UPLOAD - Parsed response:', data)
                 
                 if (data.code === 200) {
-                  console.log('✅ DEBUG UPLOAD - Upload successful')
                   // 提取图片URL信息
                   const result = {
                     ...data,
@@ -136,84 +114,207 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
                   }
                   resolve(result)
                 } else {
-                  console.error('❌ DEBUG UPLOAD - Business logic error:', data.msg)
                   reject(new Error(data.msg || '上传失败'))
                 }
               } catch (e) {
-                console.error('❌ DEBUG UPLOAD - JSON parse error:', e)
-                console.error('❌ DEBUG UPLOAD - Raw response that failed to parse:', res.data)
                 reject(new Error('服务器响应格式错误'))
               }
             } else {
-              console.error('❌ DEBUG UPLOAD - HTTP error, status:', res.statusCode)
-              // 尝试解析错误信息
               let errorMessage = `上传失败，状态码: ${res.statusCode}`
               try {
                 const errorData = JSON.parse(res.data)
                 errorMessage = errorData.message || errorData.error || errorMessage
-                console.error('❌ DEBUG UPLOAD - Error details:', errorData)
               } catch (parseError) {
-                console.error('❌ DEBUG UPLOAD - Cannot parse error response')
+                // 忽略解析错误
               }
               reject(new Error(errorMessage))
             }
           },
           fail: (error) => {
-            console.error('❌ DEBUG UPLOAD - Upload request failed:', error)
             reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
-          },
-          complete: (completeRes) => {
-            console.log('📡 DEBUG UPLOAD - Upload completed:', completeRes)
           }
         })
 
         // 监听上传进度
         uploadTask.onProgressUpdate((res) => {
-          console.log('📊 DEBUG UPLOAD - Upload progress:', res.progress + '%')
+          console.log('上传进度:', res.progress + '%')
         })
 
       },
       fail: (fileError) => {
-        console.error('❌ DEBUG UPLOAD - File check failed:', fileError)
         reject(new Error('文件不存在或无法访问: ' + fileError.errMsg))
       }
     })
   })
 }
 
-// 简单上传测试方法
-export function testUpload() {
+// 视频上传接口
+export function uploadVideo(file, relatedType, relatedId, description, stage, sequence) {
   return new Promise((resolve, reject) => {
-    // 先选择一张图片
-    uni.chooseImage({
-      count: 1,
-      sizeType: ['compressed'],
-      sourceType: ['album'],
-      success: (chooseRes) => {
-        const tempFilePath = chooseRes.tempFilePaths[0]
-        console.log('🧪 TEST UPLOAD - Selected test file:', tempFilePath)
-        
-        // 使用最简单的参数测试
-        uploadImage(
-          tempFilePath,
-          1, // relatedType
-          0, // relatedId
-          '测试图片',
-          'TEST',
-          0
-        ).then(resolve).catch(reject)
+    // 构建 formData
+    const formData = {
+      relatedType: Number(relatedType),
+      relatedId: Number(relatedId),
+      sequence: Number(sequence || 0),
+      description: description || '',
+      stage: stage || ''
+    }
+
+    // 检查文件是否存在
+    uni.getFileInfo({
+      filePath: file,
+      success: (fileInfo) => {
+        // 开始上传
+        const uploadTask = uni.uploadFile({
+          url: getBaseUrl() + '/api/media/upload/video',
+          filePath: file,
+          name: 'file',
+          formData: formData,
+          header: {
+            'Authorization': 'Bearer ' + getToken(),
+          },
+          success: (res) => {
+            if (res.statusCode === 200) {
+              try {
+                const data = JSON.parse(res.data)
+                
+                if (data.code === 200) {
+                  // 提取视频URL信息
+                  const result = {
+                    ...data,
+                    videoUrl: data.data?.fileUrl,
+                    videoInfo: {
+                      filename: data.data?.filename,
+                      size: data.data?.size,
+                      sequence: data.data?.sequence,
+                      relatedType: data.data?.relatedType,
+                      relatedId: data.data?.relatedId,
+                      stage: data.data?.stage,
+                      description: data.data?.description,
+                      mediaType: data.data?.mediaType,
+                      mediaTypeName: data.data?.mediaTypeName || '视频'
+                    }
+                  }
+                  resolve(result)
+                } else {
+                  reject(new Error(data.msg || '视频上传失败'))
+                }
+              } catch (e) {
+                reject(new Error('服务器响应格式错误'))
+              }
+            } else {
+              let errorMessage = `视频上传失败，状态码: ${res.statusCode}`
+              try {
+                const errorData = JSON.parse(res.data)
+                errorMessage = errorData.message || errorData.error || errorMessage
+              } catch (parseError) {
+                // 忽略解析错误
+              }
+              reject(new Error(errorMessage))
+            }
+          },
+          fail: (error) => {
+            reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
+          }
+        })
+
+        // 监听上传进度
+        uploadTask.onProgressUpdate((res) => {
+          console.log('视频上传进度:', res.progress + '%')
+        })
+
       },
-      fail: (error) => {
-        reject(new Error('选择测试图片失败: ' + error.errMsg))
+      fail: (fileError) => {
+        reject(new Error('视频文件不存在或无法访问: ' + fileError.errMsg))
       }
     })
   })
 }
 
-// 批量图片上传接口 - 简化版本
+// 通用文件上传接口（自动识别类型）
+export function uploadFile(file, relatedType, relatedId, description, stage, sequence) {
+  return new Promise((resolve, reject) => {
+    // 构建 formData
+    const formData = {
+      relatedType: Number(relatedType || 0),
+      relatedId: Number(relatedId || 0),
+      sequence: Number(sequence || 0),
+      description: description || '',
+      stage: stage || ''
+    }
+
+    // 检查文件是否存在
+    uni.getFileInfo({
+      filePath: file,
+      success: (fileInfo) => {
+        // 开始上传
+        const uploadTask = uni.uploadFile({
+          url: getBaseUrl() + '/api/media/upload/file',
+          filePath: file,
+          name: 'file',
+          formData: formData,
+          header: {
+            'Authorization': 'Bearer ' + getToken(),
+          },
+          success: (res) => {
+            if (res.statusCode === 200) {
+              try {
+                const data = JSON.parse(res.data)
+                
+                if (data.code === 200) {
+                  const result = {
+                    ...data,
+                    fileUrl: data.data?.fileUrl,
+                    fileInfo: {
+                      filename: data.data?.filename,
+                      size: data.data?.size,
+                      mediaType: data.data?.mediaType,
+                      mediaTypeName: data.data?.mediaTypeName,
+                      sequence: data.data?.sequence,
+                      relatedType: data.data?.relatedType,
+                      relatedId: data.data?.relatedId,
+                      stage: data.data?.stage,
+                      description: data.data?.description
+                    }
+                  }
+                  resolve(result)
+                } else {
+                  reject(new Error(data.msg || '文件上传失败'))
+                }
+              } catch (e) {
+                reject(new Error('服务器响应格式错误'))
+              }
+            } else {
+              let errorMessage = `文件上传失败，状态码: ${res.statusCode}`
+              try {
+                const errorData = JSON.parse(res.data)
+                errorMessage = errorData.message || errorData.error || errorMessage
+              } catch (parseError) {
+                // 忽略解析错误
+              }
+              reject(new Error(errorMessage))
+            }
+          },
+          fail: (error) => {
+            reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
+          }
+        })
+
+        // 监听上传进度
+        uploadTask.onProgressUpdate((res) => {
+          console.log('文件上传进度:', res.progress + '%')
+        })
+
+      },
+      fail: (fileError) => {
+        reject(new Error('文件不存在或无法访问: ' + fileError.errMsg))
+      }
+    })
+  })
+}
+
+// 批量图片上传接口
 export function batchUploadImages(files, relatedType, relatedId, stage) {
-  console.log('🔍 DEBUG BATCH - Starting batch upload, file count:', files.length)
-  
   // 逐个上传文件
   const uploadPromises = files.map((file, index) => {
     return uploadImage(
@@ -239,6 +340,33 @@ export function batchUploadImages(files, relatedType, relatedId, stage) {
   })
 }
 
+// 批量视频上传接口
+export function batchUploadVideos(files, relatedType, relatedId, stage) {
+  // 逐个上传视频文件
+  const uploadPromises = files.map((file, index) => {
+    return uploadVideo(
+      file,
+      relatedType,
+      relatedId,
+      `视频${index + 1}`,
+      stage,
+      index
+    )
+  })
+  
+  return Promise.all(uploadPromises).then(results => {
+    return {
+      code: 200,
+      msg: '批量视频上传成功',
+      data: results.map(result => result.data),
+      videos: results.map(result => ({
+        videoUrl: result.videoUrl,
+        videoInfo: result.videoInfo
+      }))
+    }
+  })
+}
+
 // 根据关联信息查询图片列表
 export function getImagesByRelatedInfo(relatedType, relatedId) {
   return request({
@@ -251,26 +379,72 @@ export function getImagesByRelatedInfo(relatedType, relatedId) {
   })
 }
 
-// 删除图片
-export function deleteImage(mediaId) {
+// 根据关联信息查询视频列表
+export function getVideosByRelatedInfo(relatedType, relatedId) {
+  return request({
+    url: '/api/media/videos',
+    method: 'get',
+    params: {
+      relatedType: Number(relatedType),
+      relatedId: Number(relatedId)
+    }
+  })
+}
+
+// 根据媒体类型获取列表
+export function getMediaByType(relatedType, relatedId, mediaType) {
+  return request({
+    url: '/api/media/list/type',
+    method: 'get',
+    params: {
+      relatedType: Number(relatedType),
+      relatedId: Number(relatedId),
+      mediaType: Number(mediaType)
+    }
+  })
+}
+
+// 获取所有媒体列表
+export function getAllMedia(relatedType, relatedId) {
+  return request({
+    url: '/api/media/list',
+    method: 'get',
+    params: {
+      relatedType: Number(relatedType),
+      relatedId: Number(relatedId)
+    }
+  })
+}
+
+// 删除媒体资源
+export function deleteMedia(mediaId) {
   return request({
     url: '/api/media/image/' + mediaId,
     method: 'delete'
   })
 }
 
-// 获取图片详情
-export function getImageDetail(mediaId) {
+// 批量删除媒体资源
+export function batchDeleteMedia(mediaIds) {
   return request({
-    url: '/api/media/image/' + mediaId,
+    url: '/api/media/batch',
+    method: 'delete',
+    data: mediaIds
+  })
+}
+
+// 获取媒体详情
+export function getMediaDetail(mediaId) {
+  return request({
+    url: '/api/media/detail/' + mediaId,
     method: 'get'
   })
 }
 
-// 更新图片信息
-export function updateImageInfo(mediaId, updateData) {
+// 更新媒体信息
+export function updateMediaInfo(mediaId, updateData) {
   return request({
-    url: '/api/media/image/' + mediaId,
+    url: '/api/media/update/' + mediaId,
     method: 'put',
     data: updateData
   })
@@ -320,12 +494,11 @@ export function getRouters() {
   })
 }
 
-// 退出登录 - 修改后的版本
+// 退出登录
 export function logout() {
   return request({
-    url: '/logout',  // 修正路径
+    url: '/logout',
     method: 'post'
-    // 移除 token 参数，让拦截器自动添加 Authorization header
   })
 }
 
@@ -353,202 +526,37 @@ export function getCodeImg() {
   })
 }
 
-// ==================== 图片上传测试页面相关API ====================
-
-/**
- * 测试服务连接状态
- * @param {string} type - 接口类型: 'media' | 'test'
- */
-export function testConnection(type) {
-  let url, name;
-
-  switch(type) {
-    case 'media':
-      url = '/api/media/health';
-      name = '媒体接口';
-      break;
-    case 'test':
-      url = '/test/health';
-      name = '测试接口';
-      break;
-    default:
-      return Promise.reject(new Error('未知的接口类型'));
-  }
-
-  return request({
-    url: url,
-    method: 'get',
-    headers: {
-      isToken: false
-    }
-  }).then(response => {
-    return {
-      success: true,
-      name: name,
-      status: 200,
-      data: response
-    };
-  }).catch(error => {
-    return {
-      success: false,
-      name: name,
-      error: error
-    };
-  });
-}
-
-/**
- * 测试所有服务连接
- */
-export function testAllConnections() {
-  return Promise.allSettled([
-    testConnection('media'),
-    testConnection('test')
-  ]);
-}
-
-/**
- * 上传文件测试 - 修复版本
- * @param {Object} uploadConfig - 上传配置
- * @param {File} uploadConfig.file - 文件对象
- * @param {string} uploadConfig.apiUrl - 接口地址
- * @param {number} uploadConfig.relatedType - 关联类型
- * @param {number} uploadConfig.relatedId - 关联ID
- * @param {string} uploadConfig.description - 描述
- */
-export function uploadFileTest(uploadConfig) {
-  const { file, apiUrl, relatedType, relatedId, description } = uploadConfig;
-  
-  return new Promise((resolve, reject) => {
-    // 构建 formData
-    const formData = {
-      relatedType: Number(relatedType),
-      relatedId: Number(relatedId),
-      description: description || '',
-      sequence: 0,
-      stage: 'TEST'
-    };
-
-    console.log('🔍 UPLOAD TEST - Starting upload with config:', {
-      apiUrl,
-      relatedType,
-      relatedId,
-      description,
-      file: file.name || file.path
-    });
-
-    // 使用 uni.uploadFile 进行上传
-    const uploadTask = uni.uploadFile({
-      url: getBaseUrl() + apiUrl,
-      filePath: file.path || file,
-      name: 'file',
-      formData: formData,
-      header: {
-        'Authorization': 'Bearer ' + getToken(),
-      },
-      success: (res) => {
-        console.log('📡 UPLOAD TEST - Upload response received');
-        console.log('📡 UPLOAD TEST - Status code:', res.statusCode);
-        console.log('📡 UPLOAD TEST - Response data:', res.data);
-
-        if (res.statusCode === 200) {
-          try {
-            const data = JSON.parse(res.data);
-            console.log('✅ UPLOAD TEST - Upload successful:', data);
-            
-            // 提取图片URL和其他信息
-            const result = {
-              success: true,
-              code: data.code,
-              message: data.msg,
-              imageUrl: data.data?.fileUrl, // 提取图片URL
-              imageInfo: {
-                filename: data.data?.filename,
-                size: data.data?.size,
-                sequence: data.data?.sequence,
-                relatedType: data.data?.relatedType,
-                relatedId: data.data?.relatedId,
-                stage: data.data?.stage,
-                description: data.data?.description
-              },
-              originalData: data // 保留原始数据
-            };
-            
-            resolve(result);
-          } catch (e) {
-            console.error('❌ UPLOAD TEST - JSON parse error:', e);
-            reject(new Error('服务器响应格式错误'));
-          }
-        } else {
-          console.error('❌ UPLOAD TEST - HTTP error, status:', res.statusCode);
-          let errorMessage = `上传失败，状态码: ${res.statusCode}`;
-          try {
-            const errorData = JSON.parse(res.data);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } catch (parseError) {
-            // 忽略解析错误
-          }
-          reject(new Error(errorMessage));
-        }
-      },
-      fail: (error) => {
-        console.error('❌ UPLOAD TEST - Upload request failed:', error);
-        reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')));
-      }
-    });
-
-    // 监听上传进度（可选）
-    uploadTask.onProgressUpdate((res) => {
-      console.log('📊 UPLOAD TEST - Upload progress:', res.progress + '%');
-    });
-  });
-}
-
-/**
- * 简化的上传测试方法
- */
-export function simpleUploadTest(file) {
-  return uploadFileTest({
-    file: file,
-    apiUrl: '/api/media/upload',
-    relatedType: 1,
-    relatedId: 123,
-    description: '测试上传'
-  });
-}
-
-/**
- * 获取上传测试日志
- */
-export function getUploadTestLogs() {
-  // 这里可以返回存储在本地或全局的日志信息
-  return Promise.resolve([]);
-}
-
-/**
- * 清空测试日志
- */
-export function clearTestLogs() {
-  // 这里可以清空本地或全局的日志信息
-  return Promise.resolve();
-}
-
 // ==================== 工具函数和常量 ====================
 
 // 获取基础URL
 function getBaseUrl() {
   try {
-    // 从配置文件获取基础URL
     const config = require('@/config')
     const baseUrl = config.baseUrl || 'http://localhost:8080'
-    console.log('🔧 DEBUG - Base URL:', baseUrl)
     return baseUrl
   } catch (error) {
-    console.error('❌ DEBUG - Cannot get base URL from config:', error)
-    // 默认URL，根据你的实际情况修改
     return 'https://your-api-domain.com'
   }
 }
+
+// 支持的视频格式
+export const VIDEO_FORMATS = {
+  MP4: 'mp4',
+  MOV: 'mov',
+  AVI: 'avi',
+  FLV: 'flv',
+  WEBM: 'webm',
+  '3GP': '3gp',
+  OGG: 'ogg',
+  WMV: 'wmv',
+  MKV: 'mkv'
+}
+
+// 视频最大大小限制（50MB）
+export const VIDEO_MAX_SIZE = 50 * 1024 * 1024
+
+// 视频最大时长限制（5分钟）
+export const VIDEO_MAX_DURATION = 300
 
 export const RELATED_TYPES = {
   MATERIAL_SUPPLIER: 1,      // 物料供应商
@@ -558,14 +566,15 @@ export const RELATED_TYPES = {
   ID_CARD: 5,                // 身份证
   BUSINESS_LICENSE: 6,       // 营业执照
   STORE_PHOTO: 7,            // 门店照片
-  USER_AVATAR: 8,            // 用户头像 - 确保这个存在
+  USER_AVATAR: 8,            // 用户头像
+  VIDEO_CONTENT: 9,          // 视频内容
   TEST: 99                   // 测试
 }
 
 export const MEDIA_TYPES = {
   IMAGE: 1,      // 图片
-  VIDEO: 2,      // 视频
-  DOCUMENT: 3,   // 文档
+  VIDEO: 3,      // 视频（注意：后端定义中视频是3）
+  DOCUMENT: 5,   // 文档
   OTHER: 4       // 其他
 }
 
@@ -574,7 +583,7 @@ export const UPLOAD_STAGES = {
   VERIFICATION: 'VERIFICATION',      // 验证阶段
   APPROVAL: 'APPROVAL',             // 审批阶段
   COMPLETED: 'COMPLETED',           // 完成阶段
-  TEST: 'TEST'                      // 测试阶段
+  VIDEO: 'VIDEO'                    // 视频阶段
 }
 
 // 工具函数：获取文件描述
@@ -587,6 +596,7 @@ export function getFileDescription(fileType) {
     businessLicense: '营业执照',
     legalPersonIdCard: '法人身份证',
     bankAccount: '银行账户证明',
+    video: '视频文件',
     other: '其他申请材料'
   }
   return descriptions[fileType] || '申请材料'
@@ -602,6 +612,7 @@ export function getFileSequence(fileType) {
     businessLicense: 5,
     legalPersonIdCard: 6,
     bankAccount: 7,
+    video: 10,
     other: 99
   }
   return sequences[fileType] || 0
@@ -617,6 +628,7 @@ export function getRelatedTypeByFileType(fileType) {
     businessLicense: RELATED_TYPES.BUSINESS_LICENSE,
     legalPersonIdCard: RELATED_TYPES.ID_CARD,
     bankAccount: RELATED_TYPES.MERCHANT_APPLICATION,
+    video: RELATED_TYPES.VIDEO_CONTENT,
     other: RELATED_TYPES.MERCHANT_APPLICATION
   }
   return typeMapping[fileType] || RELATED_TYPES.MERCHANT_APPLICATION
@@ -631,9 +643,37 @@ export function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// 工具函数：获取当前时间戳
-export function getCurrentTimestamp() {
-  return new Date().toLocaleTimeString();
+// 工具函数：验证视频文件
+export function validateVideoFile(file, maxSize = VIDEO_MAX_SIZE, maxDuration = VIDEO_MAX_DURATION) {
+  return new Promise((resolve, reject) => {
+    // 检查文件大小
+    uni.getFileInfo({
+      filePath: file,
+      success: (fileInfo) => {
+        if (fileInfo.size > maxSize) {
+          reject(new Error(`视频文件大小不能超过 ${formatFileSize(maxSize)}`));
+          return;
+        }
+        
+        // 检查文件格式
+        const fileExt = file.split('.').pop().toLowerCase();
+        const supportedFormats = Object.values(VIDEO_FORMATS);
+        if (!supportedFormats.includes(fileExt)) {
+          reject(new Error(`不支持的视频格式，支持的格式: ${supportedFormats.join(', ')}`));
+          return;
+        }
+        
+        resolve({
+          size: fileInfo.size,
+          format: fileExt,
+          isValid: true
+        });
+      },
+      fail: (error) => {
+        reject(new Error('无法获取视频文件信息: ' + error.errMsg));
+      }
+    });
+  });
 }
 
 // ==================== 默认导出 ====================
@@ -650,12 +690,20 @@ export default {
   
   // 媒体上传
   uploadImage,
-  testUpload,
+  uploadVideo,
+  uploadFile,
   batchUploadImages,
+  batchUploadVideos,
+  
+  // 媒体查询和管理
   getImagesByRelatedInfo,
-  deleteImage,
-  getImageDetail,
-  updateImageInfo,
+  getVideosByRelatedInfo,
+  getMediaByType,
+  getAllMedia,
+  deleteMedia,
+  batchDeleteMedia,
+  getMediaDetail,
+  updateMediaInfo,
   
   // 用户认证
   login,
@@ -666,21 +714,16 @@ export default {
   register,
   getCodeImg,
   
-  // 图片上传测试
-  testConnection,
-  testAllConnections,
-  uploadFileTest,
-  simpleUploadTest,
-  getUploadTestLogs,
-  clearTestLogs,
-  
   // 常量和工具函数
   RELATED_TYPES,
   MEDIA_TYPES,
   UPLOAD_STAGES,
+  VIDEO_FORMATS,
+  VIDEO_MAX_SIZE,
+  VIDEO_MAX_DURATION,
   getFileDescription,
   getFileSequence,
   getRelatedTypeByFileType,
   formatFileSize,
-  getCurrentTimestamp
+  validateVideoFile
 }
