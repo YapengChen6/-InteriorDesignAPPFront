@@ -1,114 +1,132 @@
 <template>
 	<view class="container">
-		<!-- 顶部导航 -->
-		<view class="top-nav">
-			<view class="time">{{ currentTime }}</view>
-			<view class="search-bar">搜索</view>
+		<!-- 顶部搜索区域 -->
+		<view class="search-section">
+			<view class="search-container">
+				<!-- 定位按钮 -->
+				<view class="location-btn" @click="goToLocationPage">
+					<text class="location-icon">📍</text>
+					<text class="location-text">{{ locationText }}</text>
+					<text class="location-arrow">▼</text>
+				</view>
+				<!-- 搜索框 -->
+				<view class="search-box">
+					<text class="search-icon">🔍</text>
+					<input type="text" placeholder="搜索装修相关内容" v-model="searchKeyword">
+					<text v-if="searchKeyword" class="clear-icon" @click="clearSearch">×</text>
+				</view>
+			</view>
 		</view>
 		
 		<!-- 主菜单 -->
 		<view class="main-menu">
-			<view class="menu-item">订单大厅</view>
-			<view class="menu-item">购买居家建材</view>
-			<view class="menu-item">找设计师</view>
-			<view class="menu-item">找监工</view>
-			<view class="menu-item active">查看案例</view>
+			<view class="menu-item" :class="{ active: activeMainMenu === 0 }" @click="activeMainMenu = 0">
+				<view class="menu-icon">📋</view>
+				<text>订单大厅</text>
+			</view>
+			<view class="menu-item" 
+			      :class="{ active: activeMainMenu === 1 }" 
+			      @click="goToShopPage()">
+				<view class="menu-icon">🏠</view>
+				<text>购买居家建材</text>
+			</view>
+			<view class="menu-item" 
+			      :class="{ active: activeMainMenu === 2 }" 
+			      @click="goToFindDesigner()">
+				<view class="menu-icon">👨‍🎨</view>
+				<text>找设计师</text>
+			</view>
+			<view class="menu-item" :class="{ active: activeMainMenu === 3 }" @click="activeMainMenu = 3">
+				<view class="menu-icon">👷</view>
+				<text>找监工</text>
+			</view>
+			<view class="menu-item" :class="{ active: activeMainMenu === 4 }" @click="activeMainMenu = 4">
+				<view class="menu-icon">📖</view>
+				<text>查看案例</text>
+			</view>
 		</view>
 		
 		<!-- 轮播图区域 -->
 		<view class="banner-section">
 			<view class="swiper-container">
 				<view class="swiper-wrapper">
-					<view class="swiper-slide active">
-						<view class="banner-image" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)">
-							<text class="banner-text">限时特惠！全屋定制8折起</text>
-						</view>
-					</view>
-					<view class="swiper-slide">
-						<view class="banner-image" style="background: linear-gradient(135deg, #4834d4 0%, #686de0 100%)">
-							<text class="banner-text">新用户专享 ¥1000装修礼包</text>
-						</view>
-					</view>
-					<view class="swiper-slide">
-						<view class="banner-image" style="background: linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%)">
-							<text class="banner-text">设计师精品案例合集</text>
+					<view class="swiper-slide" v-for="(banner, index) in banners" :key="index" 
+						  :class="{ active: currentBanner === index }"
+						  @click="goToBannerLink(banner.link)">
+						<view class="banner-image" :style="{ background: banner.color }">
+							<text class="banner-text">{{ banner.title }}</text>
 						</view>
 					</view>
 				</view>
 				<!-- 轮播图指示器 -->
 				<view class="swiper-indicator">
-					<view class="indicator-dot active"></view>
-					<view class="indicator-dot"></view>
-					<view class="indicator-dot"></view>
+					<view class="indicator-dot" v-for="(banner, index) in banners" :key="index"
+						  :class="{ active: currentBanner === index }"
+						  @click="switchBanner(index)"></view>
 				</view>
 			</view>
 		</view>
 		
 		<!-- 内容区域 -->
 		<view class="content">
-			<!-- 帖子类型标签 -->
-			<view class="post-type-tabs">
-				<view class="type-tab active" @click="switchType('all')">全部</view>
-				<view class="type-tab" @click="switchType('portfolio')">作品集</view>
-				<view class="type-tab" @click="switchType('caseStudy')">案例集</view>
-				<view class="type-tab" @click="switchType('normal')">普通帖</view>
-				<view class="type-tab" @click="switchType('materialShow')">材料展示</view>
+			<!-- 标签导航 -->
+			<view class="tab-nav">
+				<view class="tab-item" :class="{ active: activeTab === 0 }" @click="activeTab = 0">推荐</view>
+				<view class="tab-item" :class="{ active: activeTab === 1 }" @click="activeTab = 1">装修案例</view>
+				<view class="tab-item" :class="{ active: activeTab === 2 }" @click="activeTab = 2">户型改造</view>
+				<view class="tab-item" :class="{ active: activeTab === 3 }" @click="activeTab = 3">装修避坑</view>
 			</view>
 			
-			<view class="post-list">
-				<!-- 加载状态 -->
-				<view class="loading" v-if="loading">
-					<text class="loading-icon">⏳</text>
-					<text>正在加载帖子...</text>
-				</view>
-				
-				<!-- 错误状态 -->
-				<view class="error" v-else-if="error">
-					<text class="error-icon">❌</text>
-					<text>加载失败，请稍后重试</text>
-					<button class="retry-btn" @click="fetchPosts">重新加载</button>
-				</view>
-				
-				<!-- 空状态 -->
-				<view class="empty-state" v-else-if="filteredPosts.length === 0">
-					<text class="empty-icon">📝</text>
-					<text>暂无帖子</text>
-				</view>
-				
-				<!-- 帖子列表 -->
-				<view class="post-card" v-for="post in filteredPosts" :key="post.id" @click="viewPost(post.id)">
-					<view class="post-header">
+			<!-- 瀑布流布局 -->
+			<view class="post-container">
+				<view class="post-item post-large" v-for="post in largePosts" :key="post.id" @click="viewPost(post.id)">
+					<view class="post-image">
+						<text>热门图片</text>
+					</view>
+					<view class="post-content">
+						<view class="post-badge">热门</view>
 						<view class="post-title">{{ post.title }}</view>
-						<view class="post-type" :class="getTypeClass(post.threadType)">{{ getTypeName(post.threadType) }}</view>
-					</view>
-					<view class="post-content">{{ post.content }}</view>
-					<view class="post-footer">
-						<view class="post-author">
-							<view class="author-avatar">{{ getAuthorInitial(post.authorName) }}</view>
-							<text>{{ post.authorName || '匿名用户' }}</text>
-						</view>
+						<view class="post-author">{{ post.author }}</view>
 						<view class="post-stats">
-							<view class="stat-item">
-								<text class="stat-icon">👁️</text>
-								<text>{{ post.viewCount || 0 }}</text>
-							</view>
-							<view class="stat-item">
-								<text class="stat-icon">❤️</text>
-								<text>{{ post.likeCount || 0 }}</text>
-							</view>
-							<view class="stat-item">
-								<text class="stat-icon">💬</text>
-								<text>{{ post.commentCount || 0 }}</text>
-							</view>
+							<text>🔥 {{ post.views }} 浏览</text>
 						</view>
 					</view>
 				</view>
 				
-				<!-- 加载更多 -->
-				<view class="load-more" v-if="hasMore && !loading && filteredPosts.length > 0">
-					<button class="load-more-btn" @click="loadMore" :disabled="loadingMore">
-						{{ loadingMore ? '加载中...' : '加载更多' }}
-					</button>
+				<view class="post-item post-small" v-for="post in smallPosts" :key="post.id" @click="viewPost(post.id)">
+					<view class="post-image">
+						<text>普通图片</text>
+					</view>
+					<view class="post-content">
+						<view class="post-title">{{ post.title }}</view>
+						<view class="post-author">{{ post.author }}</view>
+					</view>
+				</view>
+				
+				<view class="post-item post-large ad-post" v-for="post in adPosts" :key="post.id" @click="viewPost(post.id)">
+					<view class="post-image">
+						<text>广告图片</text>
+					</view>
+					<view class="post-content">
+						<view class="post-badge ad-badge">广告</view>
+						<view class="post-title">{{ post.title }}</view>
+						<view class="post-author">{{ post.author }}</view>
+						<view class="post-ad-tag">赞助内容</view>
+					</view>
+				</view>
+			</view>
+		</view>
+		
+		<!-- 发布菜单弹窗 -->
+		<view v-if="showPublishMenu" class="publish-menu-overlay" @tap="closePublishMenu">
+			<view class="publish-menu" @tap.stop>
+				<view class="publish-menu-item" @tap="goToPublishPost">
+					<view class="menu-icon">📝</view>
+					<text class="menu-text">发布帖子</text>
+				</view>
+				<view class="publish-menu-item" @tap="goToPublishOrder">
+					<view class="menu-icon">📋</view>
+					<text class="menu-text">发布订单</text>
 				</view>
 			</view>
 		</view>
@@ -116,22 +134,22 @@
 </template>
 
 <script>
-	import { getPostList } from '@/api/community.js';
-	
 	export default {
 		data() {
 			return {
-				currentTime: this.getCurrentTime(),
-				loading: false,
-				loadingMore: false,
-				error: false,
-				currentType: 'all',
-				posts: [], // 确保初始化为数组
+				// 定位相关数据
+				locationText: '选择位置',
+				searchKeyword: '',
+				unreadCount: 3, // 未读消息数量
+				pendingOrderCount: 2, // 待处理订单数量
+				showPublishMenu: false, // 控制发布菜单显示
+				
+				// 原有数据
+				activeMainMenu: 0,
+				activeTab: 0,
+				activeNav: 0,
 				currentBanner: 0,
 				bannerTimer: null,
-				pageNum: 1,
-				pageSize: 10,
-				hasMore: true,
 				banners: [
 					{
 						title: '限时特惠！全屋定制8折起',
@@ -147,100 +165,91 @@
 						title: '设计师精品案例合集',
 						color: 'linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%)',
 						link: '/pages/designer'
+					},
+					{
+						title: '春季装修节 建材买一送一',
+						color: 'linear-gradient(135deg, #f368e0 0%, #ff9ff3 100%)',
+						link: '/pages/spring'
 					}
 				],
-				// 帖子类型映射
-				threadTypeMap: {
-					'portfolio': { name: '作品集', class: 'portfolio-type' },
-					'caseStudy': { name: '案例集', class: 'case-study-type' },
-					'normal': { name: '普通帖', class: 'normal-type' },
-					'materialShow': { name: '材料展示', class: 'material-show-type' }
-				}
-			}
-		},
-		computed: {
-			filteredPosts() {
-				// 确保 posts 是数组
-				if (!Array.isArray(this.posts)) {
-					console.warn('posts is not an array:', this.posts);
-					return [];
-				}
-				
-				if (this.currentType === 'all') {
-					return this.posts;
-				}
-				return this.posts.filter(post => post && post.threadType === this.currentType);
+				largePosts: [
+					{
+						id: 1,
+						title: '查漏报告：好消息，卫生间不存在水平渗漏！',
+						author: '智通-美女',
+						views: '2.3万'
+					},
+					{
+						id: 4,
+						title: '极致装修：现代简约风格案例分享',
+						author: '住小帮 原创',
+						views: '1.8万'
+					}
+				],
+				smallPosts: [
+					{
+						id: 2,
+						title: '好好吃饭 好好生活~',
+						author: '皮皮成长日记'
+					},
+					{
+						id: 3,
+						title: '小户型改造技巧',
+						author: '装修达人'
+					},
+					{
+						id: 5,
+						title: '装修材料选购指南',
+						author: '建材专家'
+					},
+					{
+						id: 6,
+						title: '色彩搭配心得',
+						author: '设计师李工'
+					}
+				],
+				adPosts: [
+					{
+						id: 7,
+						title: '限时优惠！品牌建材特价促销',
+						author: '建材商城官方'
+					}
+				]
 			}
 		},
 		methods: {
-			// 获取当前时间
-			getCurrentTime() {
-				const now = new Date();
-				return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-			},
-			
-			// 获取作者首字母
-			getAuthorInitial(authorName) {
-				if (!authorName) return '匿';
-				return authorName.charAt(0);
-			},
-			
-			// 切换帖子类型
-			switchType(type) {
-				this.currentType = type;
-				this.pageNum = 1;
-				this.posts = []; // 重置为数组
-				this.hasMore = true;
-				this.fetchPosts();
-				
-				// 更新活跃标签
-				this.updateActiveTab(type);
-			},
-			
-			// 更新活跃标签
-			updateActiveTab(activeType) {
-				const tabs = document.querySelectorAll('.type-tab');
-				tabs.forEach(tab => {
-					tab.classList.remove('active');
+			// 跳转到定位页面
+			goToLocationPage() {
+				uni.navigateTo({
+					url: '/pages/location/location'
 				});
-				// 这里简化处理，实际项目中可以使用更优雅的方式
-				setTimeout(() => {
-					const activeTab = Array.from(tabs).find(tab => 
-						tab.textContent === this.getTabText(activeType)
-					);
-					if (activeTab) {
-						activeTab.classList.add('active');
-					}
-				}, 0);
 			},
 			
-			// 获取标签文本
-			getTabText(type) {
-				const textMap = {
-					'all': '全部',
-					'portfolio': '作品集',
-					'caseStudy': '案例集',
-					'normal': '普通帖',
-					'materialShow': '材料展示'
-				};
-				return textMap[type] || '全部';
+			// 跳转到商城页面
+			goToShopPage() {
+				uni.navigateTo({
+					url: '/pages/shop/shop'
+				});
 			},
 			
-			// 获取类型样式类
-			getTypeClass(threadType) {
-				return this.threadTypeMap[threadType]?.class || 'normal-type';
+			// 清空搜索
+			clearSearch() {
+				this.searchKeyword = '';
 			},
 			
-			// 获取类型名称
-			getTypeName(threadType) {
-				return this.threadTypeMap[threadType]?.name || '普通帖';
-			},
-			
-			// 查看帖子详情
+			// 查看帖子
 			viewPost(id) {
 				console.log('查看帖子:', id);
+				// 实际项目中这里可以跳转到帖子详情页
 				uni.navigateTo({
 					url: `/pages/post/detail?id=${id}`
+				});
+			},
+			
+			// 跳转到找设计师页面
+			goToFindDesigner() {
+				uni.navigateTo({
+					url: '/pages/find-design/find-design'
 				});
 			},
 			
@@ -254,28 +263,7 @@
 			autoPlayBanner() {
 				this.bannerTimer = setInterval(() => {
 					this.currentBanner = (this.currentBanner + 1) % this.banners.length;
-					this.updateBannerDisplay();
 				}, 3000);
-			},
-			
-			// 更新轮播图显示
-			updateBannerDisplay() {
-				const banners = document.querySelectorAll('.swiper-slide');
-				const dots = document.querySelectorAll('.indicator-dot');
-				
-				banners.forEach((banner, index) => {
-					banner.classList.remove('active');
-					if (index === this.currentBanner) {
-						banner.classList.add('active');
-					}
-				});
-				
-				dots.forEach((dot, index) => {
-					dot.classList.remove('active');
-					if (index === this.currentBanner) {
-						dot.classList.add('active');
-					}
-				});
 			},
 			
 			// 重置轮播定时器
@@ -286,195 +274,215 @@
 				this.autoPlayBanner();
 			},
 			
-			// 获取帖子列表
-			async fetchPosts() {
-				try {
-					this.loading = true;
-					this.error = false;
-					
-					const queryParams = {
-						pageNum: this.pageNum,
-						pageSize: this.pageSize
-					};
-					
-					// 如果当前不是全部类型，添加类型筛选
-					if (this.currentType !== 'all') {
-						queryParams.threadType = this.getThreadTypeValue(this.currentType);
-					}
-					
-					const response = await getPostList(queryParams);
-					console.log('API Response:', response); // 调试用
-					
-					// 处理不同的响应格式
-					let postList = [];
-					if (response && response.data) {
-						// 处理不同的数据结构
-						if (Array.isArray(response.data)) {
-							postList = response.data;
-						} else if (Array.isArray(response.data.list)) {
-							postList = response.data.list;
-						} else if (Array.isArray(response.data.records)) {
-							postList = response.data.records;
-						} else if (Array.isArray(response.data.data)) {
-							postList = response.data.data;
-						} else {
-							console.warn('Unexpected response format:', response.data);
-							postList = [];
-						}
-					}
-					
-					// 确保 postList 是数组
-					if (!Array.isArray(postList)) {
-						console.warn('postList is not an array:', postList);
-						postList = [];
-					}
-					
-					if (this.pageNum === 1) {
-						this.posts = postList;
-					} else {
-						this.posts = [...this.posts, ...postList];
-					}
-					
-					// 判断是否还有更多数据
-					this.hasMore = postList.length === this.pageSize;
-					
-				} catch (error) {
-					console.error('获取帖子失败:', error);
-					this.error = true;
-					this.posts = []; // 出错时重置为数组
-					uni.showToast({
-						title: '加载失败',
-						icon: 'none'
-					});
-				} finally {
-					this.loading = false;
-					this.loadingMore = false;
-				}
-			},
-			
-			// 加载更多帖子
-			async loadMore() {
-				if (this.loadingMore || !this.hasMore) return;
-				
-				this.loadingMore = true;
-				this.pageNum++;
-				await this.fetchPosts();
-			},
-			
-			// 将类型字符串转换为对应的数值（根据后端定义）
-			getThreadTypeValue(type) {
-				const typeMap = {
-					'portfolio': 1,      // 作品集
-					'caseStudy': 2,     // 案例集
-					'normal': 3,        // 普通帖
-					'materialShow': 4   // 材料展示
-				};
-				return typeMap[type] || 3;
-			},
-			
-			// 初始化轮播图点击事件
-			initBannerEvents() {
-				const dots = document.querySelectorAll('.indicator-dot');
-				dots.forEach((dot, index) => {
-					dot.onclick = () => {
-						this.switchBanner(index);
-					};
+			// 跳转到轮播图链接
+			goToBannerLink(link) {
+				console.log('跳转到:', link);
+				uni.navigateTo({
+					url: link
 				});
 			},
 			
-			// 刷新页面
-			refresh() {
-				this.pageNum = 1;
-				this.posts = [];
-				this.hasMore = true;
-				this.fetchPosts();
+			// 获取缓存的定位信息
+			getCachedLocation() {
+				try {
+					const cachedLocation = uni.getStorageSync('userLocation');
+					if (cachedLocation) {
+						this.locationText = cachedLocation.city || cachedLocation.address || '定位成功';
+					}
+				} catch (e) {
+					console.log('获取缓存定位失败:', e);
+				}
+			},
+			
+			// 发布菜单相关方法
+			togglePublishMenu() {
+				this.showPublishMenu = !this.showPublishMenu
+			},
+
+			closePublishMenu() {
+				this.showPublishMenu = false
+			},
+
+			goToPublishPost() {
+				this.closePublishMenu()
+				uni.showToast({
+					title: '跳转到发布帖子页面',
+					icon: 'success'
+				})
+				// 实际跳转代码
+				// uni.navigateTo({
+				//   url: '/pages/publish/post'
+				// })
+			},
+
+			goToPublishOrder() {
+				this.closePublishMenu()
+				uni.showToast({
+					title: '跳转到发布订单页面',
+					icon: 'success'
+				})
+				// 实际跳转代码
+				// uni.navigateTo({
+				//   url: '/pages/publish/order'
+				// })
 			}
 		},
+		
 		onLoad() {
-			this.fetchPosts();
-			this.autoPlayBanner();
-			
-			// 更新时间
-			setInterval(() => {
-				this.currentTime = this.getCurrentTime();
-			}, 60000);
+			// 页面加载时尝试获取缓存的定位信息
+			this.getCachedLocation();
 		},
+		
 		onShow() {
+			// 页面显示时检查是否有新的定位信息
+			this.getCachedLocation();
+			// 恢复轮播图自动播放
 			this.resetBannerTimer();
 		},
-		onUnload() {
+		
+		mounted() {
+			this.autoPlayBanner();
+		},
+		
+		beforeUnmount() {
 			if (this.bannerTimer) {
 				clearInterval(this.bannerTimer);
 			}
-		},
-		onPullDownRefresh() {
-			this.refresh();
-			setTimeout(() => {
-				uni.stopPullDownRefresh();
-			}, 1000);
-		},
-		onReachBottom() {
-			this.loadMore();
-		},
-		mounted() {
-			this.initBannerEvents();
 		}
 	}
 </script>
 
 <style>
-	/* 样式保持不变，与之前相同 */
 	.container {
-		background-color: #f5f5f5;
+		max-width: 750px;
+		margin: 0 auto;
+		background-color: #fff;
 		min-height: 100vh;
+		position: relative;
 	}
 	
-	.top-nav {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 10px 15px;
+	/* 顶部搜索区域 */
+	.search-section {
+		padding: 15px;
 		background-color: #fff;
 		border-bottom: 1px solid #eee;
 	}
 	
-	.time {
-		font-size: 14px;
-		color: #666;
+	.search-container {
+		display: flex;
+		align-items: center;
+		gap: 10px;
 	}
 	
-	.search-bar {
-		flex: 1;
-		margin: 0 15px;
+	/* 定位按钮样式 */
+	.location-btn {
+		display: flex;
+		align-items: center;
+		background-color: #f8f9fa;
+		border-radius: 20px;
+		padding: 8px 12px;
+		min-width: 80px;
+		cursor: pointer;
+		transition: all 0.3s;
+		border: 1px solid #eee;
+		flex-shrink: 0;
+	}
+	
+	.location-btn:active {
+		background-color: #e9ecef;
+		transform: scale(0.98);
+	}
+	
+	.location-icon {
+		font-size: 14px;
+		margin-right: 4px;
+	}
+	
+	.location-text {
+		font-size: 13px;
+		color: #333;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 60px;
+	}
+	
+	.location-arrow {
+		font-size: 10px;
+		color: #999;
+		margin-left: 4px;
+	}
+	
+	/* 搜索框样式 */
+	.search-box {
+		display: flex;
+		align-items: center;
 		background-color: #f5f5f5;
 		border-radius: 20px;
 		padding: 8px 15px;
-		font-size: 14px;
-		color: #999;
+		flex: 1;
+		position: relative;
 	}
 	
+	.search-box input {
+		flex: 1;
+		border: none;
+		background: transparent;
+		outline: none;
+		font-size: 14px;
+		padding: 5px;
+	}
+	
+	.search-icon {
+		color: #999;
+		font-size: 16px;
+		margin-right: 8px;
+	}
+	
+	.clear-icon {
+		color: #999;
+		font-size: 18px;
+		padding: 2px;
+		cursor: pointer;
+		transition: color 0.3s;
+	}
+	
+	.clear-icon:active {
+		color: #666;
+	}
+	
+	/* 主菜单 */
 	.main-menu {
 		display: flex;
+		justify-content: space-between;
+		padding: 15px;
 		background-color: #fff;
-		padding: 10px 0;
 		border-bottom: 1px solid #eee;
 		overflow-x: auto;
 		white-space: nowrap;
 	}
 	
 	.menu-item {
-		flex-shrink: 0;
-		padding: 8px 15px;
-		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 		font-size: 14px;
-		color: #333;
+		padding: 0 10px;
+		min-width: 80px;
+		cursor: pointer;
+		transition: color 0.3s;
 	}
 	
 	.menu-item.active {
-		color: #ff6b6b;
-		font-weight: bold;
+		color: #ff6b00;
 	}
 	
+	.menu-icon {
+		font-size: 20px;
+		margin-bottom: 5px;
+	}
+	
+	/* 轮播图区域 */
 	.banner-section {
 		padding: 15px;
 		background-color: #f8f9fa;
@@ -502,10 +510,12 @@
 		height: 100%;
 		opacity: 0;
 		transition: opacity 0.8s ease-in-out;
+		transform: translateX(100%);
 	}
 	
 	.swiper-slide.active {
 		opacity: 1;
+		transform: translateX(0);
 		z-index: 1;
 	}
 	
@@ -519,6 +529,12 @@
 		font-size: 20px;
 		font-weight: bold;
 		text-align: center;
+		cursor: pointer;
+		transition: transform 0.3s;
+	}
+	
+	.banner-image:hover {
+		transform: scale(1.02);
 	}
 	
 	.banner-text {
@@ -526,6 +542,7 @@
 		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 	}
 	
+	/* 轮播图指示器 */
 	.swiper-indicator {
 		position: absolute;
 		bottom: 15px;
@@ -541,6 +558,7 @@
 		height: 8px;
 		border-radius: 50%;
 		background-color: rgba(255, 255, 255, 0.5);
+		cursor: pointer;
 		transition: all 0.3s;
 	}
 	
@@ -550,171 +568,303 @@
 		border-radius: 4px;
 	}
 	
+	/* 内容区域 */
 	.content {
 		padding: 15px;
 	}
 	
-	.post-type-tabs {
+	.tab-nav {
 		display: flex;
 		margin-bottom: 15px;
 		border-bottom: 1px solid #eee;
 		overflow-x: auto;
 	}
 	
-	.type-tab {
+	.tab-item {
 		padding: 8px 15px;
-		font-size: 14px;
+		font-size: 16px;
 		white-space: nowrap;
+		cursor: pointer;
+		transition: color 0.3s;
 	}
 	
-	.type-tab.active {
-		color: #ff6b6b;
-		border-bottom: 2px solid #ff6b6b;
+	.tab-item.active {
+		color: #ff6b00;
+		border-bottom: 2px solid #ff6b00;
 	}
 	
-	.post-list {
-		display: flex;
-		flex-direction: column;
+	/* 瀑布流布局 */
+	.post-container {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
 		gap: 15px;
 	}
 	
-	.post-card {
+	.post-item {
 		background-color: #fff;
-		border-radius: 8px;
-		padding: 15px;
-		box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+		border-radius: 12px;
+		overflow: hidden;
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+		transition: transform 0.3s, box-shadow 0.3s;
+		cursor: pointer;
 	}
 	
-	.post-header {
+	.post-item:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+	}
+	
+	.post-large {
+		grid-column: span 2;
+		height: 250px;
+	}
+	
+	.post-small {
+		height: 180px;
+	}
+	
+	.post-image {
+		width: 100%;
+		height: 60%;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 10px;
-	}
-	
-	.post-title {
+		justify-content: center;
+		color: white;
 		font-size: 16px;
 		font-weight: bold;
-		color: #333;
-		flex: 1;
-		margin-right: 10px;
 	}
 	
-	.post-type {
-		font-size: 12px;
-		padding: 2px 8px;
-		border-radius: 10px;
-		flex-shrink: 0;
+	.post-small .post-image {
+		height: 60%;
+		background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
 	}
 	
-	.portfolio-type {
-		background-color: #f0f7ff;
-		color: #1890ff;
-	}
-	
-	.case-study-type {
-		background-color: #f6ffed;
-		color: #52c41a;
-	}
-	
-	.normal-type {
-		background-color: #fff7e6;
-		color: #fa8c16;
-	}
-	
-	.material-show-type {
-		background-color: #f9f0ff;
-		color: #722ed1;
+	.ad-post .post-image {
+		background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
 	}
 	
 	.post-content {
-		font-size: 14px;
-		color: #666;
-		line-height: 1.5;
-		margin-bottom: 10px;
+		padding: 12px;
+		position: relative;
+	}
+	
+	.post-badge {
+		position: absolute;
+		top: -10px;
+		left: 12px;
+		background: #ff6b00;
+		color: white;
+		padding: 2px 8px;
+		border-radius: 10px;
+		font-size: 12px;
+		font-weight: bold;
+	}
+	
+	.ad-badge {
+		background: #ff4757;
+	}
+	
+	.post-title {
+		font-size: 15px;
+		font-weight: bold;
+		margin-bottom: 6px;
+		line-height: 1.4;
 		display: -webkit-box;
-		-webkit-line-clamp: 3;
+		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
 	
-	.post-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		font-size: 12px;
-		color: #999;
+	.post-small .post-title {
+		font-size: 14px;
+		-webkit-line-clamp: 2;
 	}
 	
 	.post-author {
-		display: flex;
-		align-items: center;
-	}
-	
-	.author-avatar {
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background-color: #eee;
-		margin-right: 5px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 10px;
-		color: #999;
+		font-size: 12px;
+		color: #666;
+		margin-bottom: 5px;
 	}
 	
 	.post-stats {
-		display: flex;
-		gap: 15px;
-	}
-	
-	.stat-item {
-		display: flex;
-		align-items: center;
-		gap: 5px;
-	}
-	
-	.loading, .error, .empty-state {
-		text-align: center;
-		padding: 40px 20px;
+		font-size: 11px;
 		color: #999;
+	}
+	
+	.post-ad-tag {
+		font-size: 11px;
+		color: #ff6b00;
+		font-weight: bold;
+		margin-top: 5px;
+	}
+	
+	/* 发布菜单样式 */
+	.publish-menu-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 10px;
-	}
-	
-	.loading-icon, .error-icon, .empty-icon {
-		font-size: 48px;
-	}
-	
-	.retry-btn {
-		margin-top: 10px;
-		padding: 8px 16px;
-		background-color: #ff6b6b;
-		color: white;
-		border: none;
-		border-radius: 4px;
-		font-size: 14px;
-	}
-	
-	.load-more {
-		display: flex;
+		align-items: flex-end;
 		justify-content: center;
-		padding: 20px 0;
+		z-index: 2000;
+	}
+
+	.publish-menu {
+		background: white;
+		border-radius: 24rpx 24rpx 0 0;
+		padding: 40rpx;
+		width: 100%;
+		max-width: 750rpx;
+		box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.1);
+		animation: slideUp 0.3s ease-out;
+	}
+
+	@keyframes slideUp {
+		from {
+			transform: translateY(100%);
+		}
+		to {
+			transform: translateY(0);
+		}
+	}
+
+	.publish-menu-item {
+		display: flex;
+		align-items: center;
+		padding: 30rpx 0;
+		border-bottom: 2rpx solid #f0f0f0;
+		cursor: pointer;
+	}
+
+	.publish-menu-item:last-child {
+		border-bottom: none;
+	}
+
+	.publish-menu-item .menu-icon {
+		font-size: 48rpx;
+		margin-right: 30rpx;
+		width: 80rpx;
+		text-align: center;
+	}
+
+	.publish-menu-item .menu-text {
+		font-size: 32rpx;
+		color: #333;
+		font-weight: 500;
+	}
+
+	.publish-menu-item:active {
+		background-color: #f5f5f5;
+	}
+
+	/* 响应式调整 */
+	@media (max-width: 480px) {
+		.search-section {
+			padding: 12px;
+		}
+		
+		.search-container {
+			gap: 8px;
+		}
+		
+		.location-btn {
+			padding: 6px 10px;
+			min-width: 70px;
+		}
+		
+		.location-text {
+			font-size: 12px;
+			max-width: 50px;
+		}
+		
+		.search-box {
+			padding: 6px 12px;
+		}
+		
+		.search-box input {
+			font-size: 13px;
+		}
+		
+		.banner-section {
+			padding: 12px;
+		}
+		
+		.swiper-container {
+			height: 140px;
+		}
+		
+		.banner-text {
+			font-size: 18px;
+		}
+		
+		.tab-item {
+			padding: 8px 10px;
+			font-size: 14px;
+		}
+		
+		.post-container {
+			gap: 12px;
+		}
+		
+		.post-large {
+			height: 220px;
+		}
+		
+		.post-small {
+			height: 160px;
+		}
+		
+		.post-title {
+			font-size: 14px;
+		}
+		
+		.post-small .post-title {
+			font-size: 13px;
+		}
+		
+		.menu-item {
+			min-width: 70px;
+			font-size: 13px;
+		}
+		
+		.main-menu {
+			padding: 12px;
+		}
+		
+		.content {
+			padding: 12px;
+		}
+		
+		.publish-menu {
+			padding: 30rpx;
+		}
+		
+		.publish-menu-item {
+			padding: 24rpx 0;
+		}
+		
+		.publish-menu-item .menu-icon {
+			font-size: 40rpx;
+			margin-right: 24rpx;
+			width: 60rpx;
+		}
+		
+		.publish-menu-item .menu-text {
+			font-size: 28rpx;
+		}
 	}
 	
-	.load-more-btn {
-		padding: 10px 20px;
-		background-color: #fff;
-		color: #666;
-		border: 1px solid #eee;
-		border-radius: 20px;
-		font-size: 14px;
-	}
-	
-	.load-more-btn:disabled {
-		opacity: 0.6;
+	@media (max-width: 375px) {
+		.location-text {
+			max-width: 45px;
+		}
+		
+		.location-btn {
+			min-width: 65px;
+		}
 	}
 </style>

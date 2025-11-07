@@ -1,6 +1,6 @@
 <template>
   <view class="product-management">
-    <!-- 搜索和添加按钮 -->
+    <!-- 搜索栏 -->
     <view class="top-section">
       <view class="search-box">
         <uni-icons type="search" size="18" color="#999"></uni-icons>
@@ -19,10 +19,6 @@
           class="clear-icon"
         ></uni-icons>
       </view>
-      <button class="add-btn" @click="handleAddProduct">
-        <uni-icons type="plus" size="16" color="#fff"></uni-icons>
-        上架新产品
-      </button>
     </view>
 
     <!-- 筛选栏 -->
@@ -140,7 +136,6 @@
       <view class="empty-state" v-if="!loading && filteredProducts.length === 0">
         <image src="/static/images/empty-product.png" class="empty-image"></image>
         <text class="empty-text">暂无产品数据</text>
-        <button class="empty-btn" @click="handleAddProduct">立即添加产品</button>
       </view>
     </scroll-view>
   </view>
@@ -386,13 +381,6 @@ export default {
       this.statusIndex = parseInt(e.detail.value);
       this.pageParams.pageNum = 1;
       this.loadProducts();
-    },
-    
-    // 添加新产品
-    handleAddProduct() {
-      uni.navigateTo({
-        url: '/pages/merchant/newshop?type=add'
-      });
     },
     
     // 编辑产品
@@ -660,26 +648,6 @@ export default {
       margin-left: 16rpx;
     }
   }
-  
-  .add-btn {
-    background: #409EFF;
-    color: #fff;
-    border: none;
-    border-radius: 12rpx;
-    padding: 24rpx;
-    font-size: 28rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: auto;
-    min-height: 88rpx;
-    line-height: normal;
-    
-    &::after {
-      border: none;
-    }
-  }
 }
 
 .filter-section {
@@ -716,7 +684,7 @@ export default {
 }
 
 .product-grid {
-  height: calc(100vh - 400rpx);
+  height: calc(100vh - 300rpx);
   
   .grid-container {
     display: flex;
@@ -899,19 +867,6 @@ export default {
       margin-bottom: 40rpx;
       font-size: 28rpx;
       color: #909399;
-    }
-    
-    .empty-btn {
-      background: #409EFF;
-      color: #fff;
-      border: none;
-      border-radius: 12rpx;
-      padding: 20rpx 40rpx;
-      font-size: 28rpx;
-      
-      &::after {
-        border: none;
-      }
     }
   }
 }

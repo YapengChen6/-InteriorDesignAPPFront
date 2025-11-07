@@ -182,17 +182,34 @@
           </view>
           <view class="card-content">
             <view class="image-upload-container">
-              <view class="image-upload-item" @tap="chooseImage">
+              <!-- 添加图片按钮 -->
+              <view class="image-upload-item" @tap="chooseImage" v-if="previewMediaFiles.length < 9">
                 <view class="upload-placeholder">
                   <text class="upload-icon">+</text>
                   <text class="upload-text">添加图片</text>
                 </view>
               </view>
-              <view class="image-preview-item" v-for="(image, index) in uploadedImages" :key="index">
-                <image class="preview-image" :src="image" mode="aspectFill" />
-                <view class="image-overlay">
-                  <button class="btn-danger btn-sm remove-image-btn" @tap="removeImage(index)">删除</button>
+              
+              <!-- 图片预览 -->
+              <view class="image-preview-item" v-for="(file, index) in previewMediaFiles" :key="file.id">
+                <image class="preview-image" :src="file.tempFilePath" mode="aspectFill" />
+                <view class="image-actions">
+                  <button class="btn-danger btn-sm remove-image-btn" @tap="removePreviewMedia(index)">删除</button>
                 </view>
+                <view class="media-status" v-if="file.uploadStatus === 'uploading'">
+                  <text class="status-text">上传中...</text>
+                </view>
+                <view class="media-status" v-else-if="file.uploadStatus === 'failed'">
+                  <text class="status-text error">上传失败</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 上传进度 -->
+            <view v-if="uploadProgress > 0 && uploadProgress < 100" class="upload-progress">
+              <text class="progress-text">批量上传中 {{uploadProgress}}%</text>
+              <view class="progress-bar">
+                <view class="progress-inner" :style="{width: uploadProgress + '%'}"></view>
               </view>
             </view>
           </view>
@@ -358,7 +375,9 @@
 
 <script>
 import productSpuApi from '@/api/productSpu.js';
-import { uploadImage} from '@/api/join.js'
+import { uploadImage } from '@/api/join.js'
+import { getUserProfile } from '@/api/users.js'
+
 export default {
   data() {
     return {
@@ -368,6 +387,7 @@ export default {
       categoryIndex: -1,
       productStatusIndex: 0,
       isSubmitting: false,
+      uploadProgress: 0, // 上传进度
       
       existingSpuOptions: [],
       categoryOptions: ['建材', '家具', '灯具', '厨卫', '软装', '饰品', '家电', '全屋定制', '其他'],
@@ -390,7 +410,6 @@ export default {
         marketPrice: '',
         costPrice: '',
         stock: '',
-        coverImages: [],
         spuAttributes: [
           {
             attributeCategory: '',
@@ -408,7 +427,8 @@ export default {
           skuStatus: '0'
         }
       ],
-      uploadedImages: [],
+      previewMediaFiles: [], // 预览文件列表（临时路径）
+      uploadedMediaFiles: [], // 已上传的媒体文件
       errors: {},
       
       easyInputStyles: {
@@ -432,7 +452,8 @@ export default {
         
         let result;
         try {
-          result = await productSpuApi.getList();
+          // 使用正确的API方法名
+          result = await productSpuApi.getProductList();
         } catch (error) {
           console.log('API调用失败，使用模拟数据');
           // 使用模拟数据
@@ -464,6 +485,180 @@ export default {
           icon: 'none'
         });
         this.existingSpuOptions = [];
+      }
+    },
+    
+    // 图片选择（仅预览）
+    chooseImage() {
+      uni.chooseImage({
+        count: 9 - this.previewMediaFiles.length,
+        sizeType: ['original', 'compressed'],
+        sourceType: ['album', 'camera'],
+        success: (res) => {
+          for (let i = 0; i < res.tempFilePaths.length; i++) {
+            this.addPreviewMedia({
+              type: 'image',
+              tempFilePath: res.tempFilePaths[i],
+              fileInfo: res.tempFiles[i],
+              uploadStatus: 'pending' // 等待上传
+            })
+          }
+        },
+        fail: (error) => {
+          console.error('选择图片失败:', error)
+          uni.showToast({
+            title: '选择图片失败',
+            icon: 'none'
+          })
+        }
+      })
+    },
+
+    // 添加预览媒体文件
+    addPreviewMedia(media) {
+      if (this.previewMediaFiles.length >= 9) {
+        uni.showToast({
+          title: '最多只能上传9张图片',
+          icon: 'none'
+        })
+        return
+      }
+
+      this.previewMediaFiles.push({
+        id: Date.now() + Math.random(),
+        type: media.type,
+        tempFilePath: media.tempFilePath,
+        fileInfo: media.fileInfo,
+        uploadStatus: media.uploadStatus || 'pending'
+      })
+    },
+
+    // 移除预览文件
+    removePreviewMedia(index) {
+      uni.showModal({
+        title: '提示',
+        content: '确定要删除这个文件吗？',
+        success: (res) => {
+          if (res.confirm) {
+            this.previewMediaFiles.splice(index, 1)
+            uni.showToast({
+              title: '删除成功',
+              icon: 'success',
+              duration: 2000
+            })
+          }
+        }
+      })
+    },
+
+    // 批量上传媒体文件
+    async uploadAllMediaFiles(productId) {
+      const pendingMedia = this.previewMediaFiles.filter(media => media.uploadStatus === 'pending')
+      
+      if (pendingMedia.length === 0) {
+        console.log('📝 没有需要上传的图片');
+        return this.uploadedMediaFiles
+      }
+      
+      console.log(`📤 开始上传 ${pendingMedia.length} 张图片，商品ID: ${productId}`);
+      
+      this.uploadProgress = 0
+      const totalFiles = pendingMedia.length
+      let completedFiles = 0
+      let successCount = 0
+      
+      for (let i = 0; i < pendingMedia.length; i++) {
+        const media = pendingMedia[i]
+        const index = this.previewMediaFiles.findIndex(m => m.tempFilePath === media.tempFilePath)
+        
+        if (index !== -1) {
+          // 更新状态为上传中
+          this.previewMediaFiles[index].uploadStatus = 'uploading'
+          
+          try {
+            console.log(`🔄 上传第 ${i + 1} 张图片...`);
+            
+            // 使用传入的商品ID进行上传
+            const result = await this.uploadSingleMediaFile(
+              media.tempFilePath, 
+              media.type, 
+              media.fileInfo, 
+              productId
+            )
+            
+            if (result && result.code === 200) {
+              // 上传成功，添加到已上传列表
+              const uploadedMedia = {
+                type: media.type,
+                fileUrl: result.data.fileUrl,
+                mediaId: result.data.mediaId,
+                fileName: result.data.fileName,
+                fileSize: result.data.fileSize,
+                uploadStatus: 'completed'
+              }
+              this.uploadedMediaFiles.push(uploadedMedia)
+              
+              // 更新预览文件状态
+              this.previewMediaFiles[index].uploadStatus = 'completed'
+              successCount++
+              console.log(`✅ 第 ${i + 1} 张图片上传成功`);
+            } else {
+              throw new Error(result?.msg || result?.message || '上传失败')
+            }
+          } catch (error) {
+            console.error(`❌ 第 ${i + 1} 张图片上传失败:`, error)
+            this.previewMediaFiles[index].uploadStatus = 'failed'
+            // 继续上传其他文件，不抛出错误
+            continue
+          }
+          
+          // 更新进度
+          completedFiles++
+          this.uploadProgress = Math.round((completedFiles / totalFiles) * 100)
+        }
+      }
+      
+      console.log(`📊 图片上传完成: 成功 ${successCount}/${totalFiles}`);
+      return this.uploadedMediaFiles
+    },
+    
+    // 上传单个媒体文件 - relatedType 修改为 5
+    async uploadSingleMediaFile(filePath, fileType, fileInfo, productId) {
+      try {
+        if (fileInfo.size > 50 * 1024 * 1024) {
+          throw new Error('文件大小不能超过50MB')
+        }
+        
+        const relatedType = 5; // 修改为 5
+        const relatedId = productId ? Number(productId) : 0 // 使用传入的商品ID
+        const description = `商品${fileType === 'image' ? '图片' : '视频'}`
+        const stage = 'product'
+        const sequence = this.uploadedMediaFiles.length + 1
+        
+        console.log('📤 上传商品文件参数:', {
+          filePath,
+          relatedType, // 现在为 5
+          relatedId,   // 商品ID
+          description,
+          stage,
+          sequence
+        })
+        
+        const response = await uploadImage(
+          filePath,
+          relatedType, // 修改为 5
+          relatedId,
+          description,
+          stage,
+          sequence
+        )
+        
+        console.log('✅ 商品图片上传成功:', response)
+        return response
+        
+      } catch (error) {
+        console.error('❌ 商品图片上传失败:', error)
+        throw error
       }
     },
     
@@ -563,63 +758,16 @@ export default {
       }
     },
     
-    // 修改图片选择方法 - 使用正确的数据类型
-    async chooseImage() {
-      try {
-        const res = await uni.chooseImage({
-          count: 9,
-          sizeType: ['compressed'],
-          sourceType: ['album', 'camera'],
-          success: (res) => {
-            // 先清空现有图片
-            this.uploadedImages = [];
-            this.spuData.coverImages = [];
-            
-            // 处理每张图片
-            res.tempFilePaths.forEach((tempFilePath, index) => {
-              // 创建符合后端 Media 对象结构的数据 - 使用正确的数据类型
-              const mediaObject = {
-                // 使用后端 Media 类的正确字段名和数据类型
-                fileUrl: tempFilePath, // 文件路径
-                mediaType: 1, // 使用数字类型，1表示图片，根据后端枚举值设置
-                fileName: `product_image_${Date.now()}_${index}`,
-                // 其他可能的字段，根据后端需要设置
-                // fileSize: null,
-                // description: '商品图片',
-                // 新增记录不需要设置ID
-                // mediaId: null,
-              };
-              
-              this.uploadedImages.push(tempFilePath);
-              this.spuData.coverImages.push(mediaObject);
-            });
-            
-            console.log('处理后的图片数据:', this.spuData.coverImages);
-          }
-        });
-      } catch (error) {
-        console.error('选择图片失败:', error);
-        uni.showToast({
-          title: '选择图片失败',
-          icon: 'none'
-        });
-      }
-    },
-    
-    removeImage(index) {
-      this.uploadedImages.splice(index, 1);
-      this.spuData.coverImages.splice(index, 1);
-    },
-    
     async loadExistingProduct(productId) {
       try {
         console.log('加载商品详情，API对象:', productSpuApi);
         
-        if (!productSpuApi || typeof productSpuApi.getDetail !== 'function') {
+        if (!productSpuApi || typeof productSpuApi.getProductDetail !== 'function') {
           throw new Error('API方法不可用');
         }
         
-        const result = await productSpuApi.getDetail(productId);
+        // 修改：使用正确的API方法名
+        const result = await productSpuApi.getProductDetail(productId);
         const product = result.data;
         
         if (product) {
@@ -633,7 +781,6 @@ export default {
             marketPrice: product.marketPrice?.toString() || '',
             costPrice: product.costPrice?.toString() || '',
             stock: product.stock?.toString() || '',
-            coverImages: product.coverImages || [],
             spuAttributes: product.spuAttributes || [{
               attributeCategory: '',
               attributeValue: '',
@@ -641,8 +788,25 @@ export default {
             }]
           };
           
-          // 更新前端展示的图片 - 从 Media 对象中提取 fileUrl
-          this.uploadedImages = product.coverImages ? product.coverImages.map(media => media.fileUrl || media) : [];
+          // 重置预览文件列表
+          this.previewMediaFiles = [];
+          this.uploadedMediaFiles = [];
+          
+          // 如果有已上传的图片，添加到预览列表
+          // 注意：这里需要根据你的实际图片接口来加载
+          if (product.coverImages && product.coverImages.length > 0) {
+            product.coverImages.forEach((media, index) => {
+              if (media.fileUrl) {
+                this.previewMediaFiles.push({
+                  id: `existing_${index}`,
+                  type: 'image',
+                  tempFilePath: media.fileUrl,
+                  fileInfo: { size: 0 },
+                  uploadStatus: 'completed'
+                });
+              }
+            });
+          }
           
           // 设置分类选择器
           this.categoryIndex = this.categoryOptions.indexOf(product.category);
@@ -685,7 +849,6 @@ export default {
         marketPrice: '',
         costPrice: '',
         stock: '',
-        coverImages: [],
         spuAttributes: [
           {
             attributeCategory: '',
@@ -705,11 +868,13 @@ export default {
         }
       ];
       
-      this.uploadedImages = [];
+      this.previewMediaFiles = [];
+      this.uploadedMediaFiles = [];
       this.errors = {};
       this.categoryIndex = -1;
       this.productStatusIndex = 0;
       this.existingSpuIndex = -1;
+      this.uploadProgress = 0;
     },
     
     validateForm() {
@@ -804,69 +969,118 @@ export default {
       this.isSubmitting = true;
 
       try {
-        // 准备提交数据 - 完全匹配DTO结构
-        const formData = {
+        // 第一步：创建商品（不包含图片）
+        const productData = {
           productName: this.spuData.productName,
           productDetail: this.spuData.productDetail,
           category: this.spuData.category,
-          productStatus: parseInt(this.spuData.productStatus),
-          specType: parseInt(this.spuData.specType),
-          marketPrice: parseFloat(this.spuData.marketPrice),
-          costPrice: parseFloat(this.spuData.costPrice),
-          stock: parseInt(this.spuData.stock),
-          coverImages: this.spuData.coverImages,
-          // 根据规格类型设置不同的数据
+          productStatus: parseInt(this.spuData.productStatus), // 转换为数字
+          specType: parseInt(this.spuData.specType), // 转换为数字
+          marketPrice: parseFloat(this.spuData.marketPrice), // 转换为数字
+          costPrice: parseFloat(this.spuData.costPrice), // 转换为数字
+          stock: parseInt(this.spuData.stock), // 转换为数字
           spuAttributes: this.spuData.specType === '0' ? this.spuData.spuAttributes.map(attr => ({
             attributeCategory: attr.attributeCategory,
             attributeValue: attr.attributeValue,
-            sortOrder: attr.sortOrder
+            sortOrder: parseInt(attr.sortOrder) // 转换为数字
           })) : [],
           productSkus: this.spuData.specType === '1' ? this.productSkus.map(sku => ({
             skuDetail: sku.skuDetail,
-            salePrice: parseFloat(sku.salePrice),
-            costPrice: parseFloat(sku.costPrice),
-            stockQuantity: parseInt(sku.stockQuantity),
-            skuStatus: parseInt(sku.skuStatus)
+            salePrice: parseFloat(sku.salePrice), // 转换为数字
+            costPrice: parseFloat(sku.costPrice), // 转换为数字
+            stockQuantity: parseInt(sku.stockQuantity), // 转换为数字
+            skuStatus: parseInt(sku.skuStatus) // 转换为数字
           })) : []
         };
 
-        console.log('提交的数据:', JSON.stringify(formData, null, 2));
-        console.log('准备调用save方法，API对象:', productSpuApi);
+        console.log('📦 提交商品数据:', JSON.stringify(productData, null, 2));
 
-        // 调用后端API
-        const result = await productSpuApi.save(formData);
+        // 创建商品
+        uni.showLoading({ title: '创建商品中...', mask: true });
         
+        // 修改：使用正确的API方法名
+        const createResult = await productSpuApi.saveProduct(productData);
+        
+        uni.hideLoading();
+
+        console.log('🔍 商品创建API返回:', createResult);
+
+        // 根据API返回结构获取商品ID
+        let productId = null;
+        
+        if (createResult && createResult.code === 200) {
+          // data字段就是商品ID的字符串
+          productId = createResult.data;
+          console.log('✅ 从 createResult.data 获取到商品ID:', productId);
+        } else {
+          console.error('❌ API返回失败:', createResult);
+          throw new Error(createResult.message || '创建商品失败');
+        }
+
+        if (!productId) {
+          console.error('❌ 无法获取商品ID，完整返回结构:', createResult);
+          throw new Error('创建商品失败，未返回商品ID');
+        }
+
+        console.log('🎯 最终获取的商品ID:', productId);
+
+        // 第二步：如果有图片，使用单独的图片上传接口（relatedType=5）
+        if (this.previewMediaFiles.length > 0 && productId) {
+          uni.showLoading({ title: '上传商品图片中...', mask: true });
+          
+          // 上传图片到专门的图片接口
+          const uploadedFiles = await this.uploadAllMediaFiles(productId);
+          
+          if (uploadedFiles.length > 0) {
+            console.log('✅ 商品图片上传成功，数量:', uploadedFiles.length);
+            uni.showToast({
+              title: `商品创建成功，${uploadedFiles.length}张图片已上传`,
+              icon: 'success',
+              duration: 3000
+            });
+          } else {
+            console.log('⚠️ 商品图片上传失败');
+            uni.showToast({
+              title: '商品创建成功，但图片上传失败',
+              icon: 'none',
+              duration: 3000
+            });
+          }
+          
+          uni.hideLoading();
+        } else {
+          // 没有图片的情况
+          uni.showToast({
+            title: '商品创建成功',
+            icon: 'success',
+            duration: 2000
+          });
+        }
+
         // 提交成功
         this.showSuccessMessage = true;
-        uni.showToast({
-          title: '商品添加成功',
-          icon: 'success'
-        });
-        
+
         setTimeout(() => {
           this.showSuccessMessage = false;
           this.resetNewSpuForm();
           this.showNewSpuForm = false;
           this.isSubmitting = false;
-          // 重新加载商品列表
           this.loadExistingProducts();
         }, 3000);
-        
+
       } catch (error) {
-        console.error('提交失败:', error);
+        uni.hideLoading();
+        console.error('❌ 提交失败:', error);
         
-        // 更详细的错误信息
         let errorMessage = '提交失败，请重试';
-        if (error.message && error.message.includes('405')) {
+        if (error.message && error.message.includes('未返回商品ID')) {
+          errorMessage = '商品创建成功但未返回商品ID，请联系管理员';
+        } else if (error.message && error.message.includes('405')) {
           errorMessage = '接口方法不允许，请检查后端接口';
         } else if (error.message && error.message.includes('404')) {
           errorMessage = '接口不存在，请检查接口路径';
         } else if (error.message && error.message.includes('500')) {
-          if (error.message.includes('mediaType')) {
-            errorMessage = '图片类型设置错误，请检查mediaType字段';
-          } else {
-            errorMessage = '服务器内部错误，请检查数据格式';
-          }
+          errorMessage = '服务器内部错误，请检查数据格式';
         }
         
         uni.showToast({
@@ -880,6 +1094,7 @@ export default {
   }
 }
 </script>
+
 <style scoped>
 /* 样式保持不变，与之前相同 */
 .container {
@@ -1341,23 +1556,15 @@ export default {
   z-index: 1;
 }
 
-.image-overlay {
+.image-actions {
   position: absolute;
-  top: 0;
+  bottom: 8rpx;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s;
-  z-index: 10;
-}
-
-.image-preview-item:hover .image-overlay {
-  opacity: 1;
+  gap: 8rpx;
+  padding: 0 8rpx;
 }
 
 .remove-image-btn {
@@ -1366,6 +1573,57 @@ export default {
   border: none;
   font-size: 24rpx;
   z-index: 15;
+}
+
+/* 新增状态样式 */
+.media-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-text {
+  color: white;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.status-text.error {
+  color: #ff4d4f;
+}
+
+.upload-progress {
+  margin-top: 15px;
+  width: 100%;
+}
+
+.progress-text {
+  font-size: 28rpx;
+  color: #1890ff;
+  text-align: center;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8rpx;
+  background-color: #e0e0e0;
+  border-radius: 4rpx;
+  overflow: hidden;
+}
+
+.progress-inner {
+  height: 100%;
+  background-color: #1890ff;
+  border-radius: 4rpx;
+  transition: width 0.3s ease;
 }
 
 .inline-form-group {
