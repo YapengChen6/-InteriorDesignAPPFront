@@ -512,6 +512,32 @@
 			// 处理统计项点击
 			handleStatClick(statName) {
 				console.log(`点击了统计: ${statName}`);
+				
+				// 根据统计名称进行路由跳转
+				switch(statName) {
+					case '关注':
+						// 这里可以添加跳转到关注页面的逻辑
+						uni.showToast({
+							title: '跳转到关注页面',
+							icon: 'none'
+						});
+						break;
+					case '点赞':
+						// 这里可以添加跳转到点赞页面的逻辑
+						uni.showToast({
+							title: '跳转到点赞页面',
+							icon: 'none'
+						});
+						break;
+					case '发布':
+						// 跳转到发布页面
+						uni.navigateTo({
+							url: '/pages/mine/posted/posted'
+						});
+						break;
+					default:
+						break;
+				}
 			},
 			
 			// 处理菜单项点击
@@ -547,7 +573,7 @@
 					// 商家功能
 					case '产品管理':
 						uni.navigateTo({
-							url: '/pages/business/merchant/newshop'
+							url: '/pages/merchant/product'
 						});
 						break;
 					case '商家页面':

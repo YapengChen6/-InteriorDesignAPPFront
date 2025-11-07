@@ -24,7 +24,9 @@
 				<view class="menu-icon">📋</view>
 				<text>订单大厅</text>
 			</view>
-			<view class="menu-item" :class="{ active: activeMainMenu === 1 }" @click="activeMainMenu = 1">
+			<view class="menu-item" 
+			      :class="{ active: activeMainMenu === 1 }" 
+			      @click="goToShopPage()">
 				<view class="menu-icon">🏠</view>
 				<text>购买居家建材</text>
 			</view>
@@ -220,6 +222,13 @@
 			goToLocationPage() {
 				uni.navigateTo({
 					url: '/pages/location/location'
+				});
+			},
+			
+			// 跳转到商城页面
+			goToShopPage() {
+				uni.navigateTo({
+					url: '/pages/shop/shop'
 				});
 			},
 			

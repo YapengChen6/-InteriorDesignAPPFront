@@ -187,9 +187,9 @@
     }
   },
   {
-    "path": "pages/post/order",
+    "path": "pages/post/FindDesign-order",
     "style": {
-      "navigationBarTitleText": "发布订单页面"
+      "navigationBarTitleText": "寻找设计师页面"
     }
   },
   {
@@ -202,6 +202,12 @@
     "path": "pages/mine/switch/index",
     "style": {
       "navigationBarTitleText": "角色切换"
+    }
+  },
+  {
+    "path": "pages/shop/shop",
+    "style": {
+      "navigationBarTitleText": "商品展示页面"
     }
   }
   ],

@@ -197,18 +197,62 @@
     </view>
   </view>
 </template>
-
 <script>
+// 导入已有的API函数
 import { 
   submitDesignerApplication, 
   uploadImage, 
-  deleteImage,
-  RELATED_TYPES,
-  UPLOAD_STAGES,
-  getFileDescription,
-  getFileSequence,
-  getRelatedTypeByFileType
+  deleteImage
 } from '@/api/design.js';
+
+// 在组件内部定义缺失的常量
+const RELATED_TYPES = {
+  DESIGNER: 1,        // 设计师
+  SHOP: 2,            // 商家
+  SUPERVISOR: 3,      // 监工
+  PROJECT: 4,         // 项目
+  ORDER: 5            // 订单
+};
+
+const UPLOAD_STAGES = {
+  APPLICATION: 'application',     // 申请阶段
+  VERIFICATION: 'verification',   // 验证阶段
+  COMPLETION: 'completion',       // 完成阶段
+  WORK: 'work',                   // 作品阶段
+  AVATAR: 'avatar'                // 头像阶段
+};
+
+// 定义缺失的工具函数
+function getFileDescription(fileType) {
+  const descriptions = {
+    qualificationCertificate: '设计师资格证书',
+    handheldIdPhoto: '手持身份证照片',
+    idCardFrontPhoto: '身份证正面照片',
+    idCardBackPhoto: '身份证反面照片',
+    avatar: '头像',
+    portfolio: '作品集',
+    designDraft: '设计稿',
+    contract: '合同文件'
+  };
+  return descriptions[fileType] || '设计师资料';
+}
+
+function getFileSequence(fileType) {
+  const sequences = {
+    qualificationCertificate: 1,
+    handheldIdPhoto: 2,
+    idCardFrontPhoto: 3,
+    idCardBackPhoto: 4,
+    avatar: 1,
+    portfolio: 5
+  };
+  return sequences[fileType] || 0;
+}
+
+function getRelatedTypeByFileType(fileType) {
+  // 设计师相关的文件都使用设计师类型
+  return RELATED_TYPES.DESIGNER;
+}
 
 export default {
   data() {
@@ -306,12 +350,12 @@ export default {
   },
   
   onLoad() {
-    console.log('DesignerJoin1 page loaded')
-    this.loadApplicationData()
+    console.log('DesignerJoin1 page loaded');
+    this.loadApplicationData();
   },
   
   onReady() {
-    this.$refs.form.setRules(this.rules)
+    this.$refs.form.setRules(this.rules);
   },
   
   methods: {
@@ -321,36 +365,36 @@ export default {
         // 手机号只允许数字
         this.formData[fieldName] = this.formData[fieldName].replace(/[^\d]/g, '');
       }
-      this.saveApplicationData()
+      this.saveApplicationData();
     },
     
     // 加载保存的数据
     loadApplicationData() {
       try {
-        const savedData = uni.getStorageSync('designer_application_data')
+        const savedData = uni.getStorageSync('designer_application_data');
         if (savedData) {
-          this.formData = { ...this.formData, ...savedData }
-          console.log('Loaded saved designer application data')
+          this.formData = { ...this.formData, ...savedData };
+          console.log('Loaded saved designer application data');
         }
       } catch (error) {
-        console.error('Failed to load saved data:', error)
+        console.error('Failed to load saved data:', error);
       }
     },
     
     // 保存数据到本地存储
     saveApplicationData() {
       try {
-        uni.setStorageSync('designer_application_data', this.formData)
-        console.log('Saved designer application data')
+        uni.setStorageSync('designer_application_data', this.formData);
+        console.log('Saved designer application data');
       } catch (error) {
-        console.error('Failed to save data:', error)
+        console.error('Failed to save data:', error);
       }
     },
     
     // 上传文件
     async uploadFile(type) {
       try {
-        console.log('Starting upload process for:', type)
+        console.log('Starting upload process for:', type);
         
         // 选择图片
         const chooseResult = await new Promise((resolve, reject) => {
@@ -360,80 +404,80 @@ export default {
             sourceType: ['album', 'camera'],
             success: resolve,
             fail: (error) => {
-              let errMsg = '选择图片失败'
+              let errMsg = '选择图片失败';
               if (error.errMsg.includes('cancel')) {
-                errMsg = '用户取消了选择'
+                errMsg = '用户取消了选择';
               }
-              reject(new Error(errMsg))
+              reject(new Error(errMsg));
             }
-          })
-        })
+          });
+        });
         
         if (!chooseResult.tempFilePaths || chooseResult.tempFilePaths.length === 0) {
-          throw new Error('未选择图片')
+          throw new Error('未选择图片');
         }
         
-        const tempFilePath = chooseResult.tempFilePaths[0]
-        const tempFile = chooseResult.tempFiles[0]
+        const tempFilePath = chooseResult.tempFilePaths[0];
+        const tempFile = chooseResult.tempFiles[0];
         
         console.log('Selected file info:', {
           path: tempFilePath,
           size: tempFile.size,
           type: tempFile.type
-        })
+        });
         
         // 文件大小检查
         if (tempFile.size > 5 * 1024 * 1024) {
-          throw new Error('图片大小不能超过5MB')
+          throw new Error('图片大小不能超过5MB');
         }
         
         // 设置上传状态
-        this.uploadStatus[type] = 'uploading'
+        this.uploadStatus[type] = 'uploading';
         
         // 执行上传
-        const result = await this.actualUploadFile(tempFilePath, type)
+        const result = await this.actualUploadFile(tempFilePath, type);
         
-        console.log('Upload API response:', result)
+        console.log('Upload API response:', result);
         
         if (result.code === 200) {
           // 上传成功
-          this.formData[type] = result.imageUrl || result.data?.fileUrl
-          this.uploadedFiles[type] = result.data?.mediaId
-          this.uploadStatus[type] = 'success'
+          this.formData[type] = result.imageUrl || result.data?.fileUrl;
+          this.uploadedFiles[type] = result.data?.mediaId;
+          this.uploadStatus[type] = 'success';
           
-          this.saveApplicationData()
+          this.saveApplicationData();
           
           uni.showToast({
             title: '上传成功',
             icon: 'success',
             duration: 2000
-          })
+          });
         } else {
-          throw new Error(result.msg || result.message || '上传失败')
+          throw new Error(result.msg || result.message || '上传失败');
         }
         
       } catch (error) {
-        console.error('Upload process failed:', error)
-        this.uploadStatus[type] = 'error'
+        console.error('Upload process failed:', error);
+        this.uploadStatus[type] = 'error';
         
         uni.showToast({
           title: error.message || '上传失败',
           icon: 'none',
           duration: 3000
-        })
+        });
       }
     },
     
     // 实际执行上传
     async actualUploadFile(filePath, fileType) {
       try {
-        console.log('Starting actual file upload...')
+        console.log('Starting actual file upload...');
         
-        const relatedType = getRelatedTypeByFileType(fileType)
-        const relatedId = this.applicationId ? Number(this.applicationId) : 0
-        const description = getFileDescription(fileType)
-        const stage = UPLOAD_STAGES.APPLICATION
-        const sequence = getFileSequence(fileType)
+        const relatedType = getRelatedTypeByFileType(fileType);
+        const relatedId = this.applicationId ? Number(this.applicationId) : 0;
+        const description = getFileDescription(fileType);
+        const stage = UPLOAD_STAGES.APPLICATION;
+        const sequence = getFileSequence(fileType);
         
         console.log('Upload parameters:', {
           filePath,
@@ -442,7 +486,7 @@ export default {
           description,
           stage,
           sequence
-        })
+        });
         
         const response = await uploadImage(
           filePath,
@@ -451,25 +495,25 @@ export default {
           description,
           stage,
           sequence
-        )
+        );
         
-        console.log('Upload API response received:', response)
-        return response
+        console.log('Upload API response received:', response);
+        return response;
         
       } catch (error) {
-        console.error('Upload API call failed:', error)
-        throw error
+        console.error('Upload API call failed:', error);
+        throw error;
       }
     },
     
     // 预览图片
     previewImage(type) {
-      const url = this.formData[type]
+      const url = this.formData[type];
       if (url) {
         uni.previewImage({
           urls: [url],
           current: url
-        })
+        });
       }
     },
     
@@ -481,34 +525,34 @@ export default {
           content: '确定要删除这张图片吗？',
           success: async (res) => {
             if (res.confirm) {
-              const mediaId = this.uploadedFiles[type]
+              const mediaId = this.uploadedFiles[type];
               if (mediaId) {
-                console.log('Deleting image from server, mediaId:', mediaId)
-                await deleteImage(mediaId)
+                console.log('Deleting image from server, mediaId:', mediaId);
+                await deleteImage(mediaId);
               }
               
               // 清除本地数据
-              this.formData[type] = ''
-              this.uploadedFiles[type] = null
-              this.uploadStatus[type] = ''
+              this.formData[type] = '';
+              this.uploadedFiles[type] = null;
+              this.uploadStatus[type] = '';
               
-              this.saveApplicationData()
+              this.saveApplicationData();
               
               uni.showToast({
                 title: '删除成功',
                 icon: 'success',
                 duration: 2000
-              })
+              });
             }
           }
-        })
+        });
       } catch (error) {
-        console.error('删除图片失败:', error)
+        console.error('删除图片失败:', error);
         uni.showToast({
           title: '删除失败',
           icon: 'none',
           duration: 3000
-        })
+        });
       }
     },
     
@@ -518,8 +562,8 @@ export default {
         uploading: '上传中...',
         success: '上传成功',
         error: '上传失败'
-      }
-      return statusMap[status] || ''
+      };
+      return statusMap[status] || '';
     },
     
     // 构建申请数据
@@ -532,52 +576,52 @@ export default {
         handheldIdPhoto: this.formData.handheldIdPhoto,
         idCardFrontPhoto: this.formData.idCardFrontPhoto,
         idCardBackPhoto: this.formData.idCardBackPhoto
-      }
+      };
       
-      console.log('Built designer application data:', applicationData)
-      return applicationData
+      console.log('Built designer application data:', applicationData);
+      return applicationData;
     },
     
     // 提交表单
     async submit() {
-      if (this.isSubmitting) return
+      if (this.isSubmitting) return;
       
-      let isLoadingShown = false
+      let isLoadingShown = false;
       
       try {
-        this.isSubmitting = true
+        this.isSubmitting = true;
         
-        console.log('Starting form submission...')
+        console.log('Starting form submission...');
         
         // 表单验证
-        await this.$refs.form.validate()
-        console.log('Form validation passed')
+        await this.$refs.form.validate();
+        console.log('Form validation passed');
         
         // 检查必填图片
-        const requiredImages = ['qualificationCertificate', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto']
-        const missingImages = requiredImages.filter(type => !this.formData[type])
+        const requiredImages = ['qualificationCertificate', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto'];
+        const missingImages = requiredImages.filter(type => !this.formData[type]);
         
         if (missingImages.length > 0) {
-          throw new Error('请上传所有必需的图片资料')
+          throw new Error('请上传所有必需的图片资料');
         }
         
         // 显示loading
         uni.showLoading({
           title: '提交中...',
           mask: true
-        })
-        isLoadingShown = true
+        });
+        isLoadingShown = true;
         
-        const applicationData = this.buildApplicationData()
+        const applicationData = this.buildApplicationData();
         
-        console.log('Sending application data to server...')
-        const response = await submitDesignerApplication(applicationData)
-        console.log('Server response:', response)
+        console.log('Sending application data to server...');
+        const response = await submitDesignerApplication(applicationData);
+        console.log('Server response:', response);
         
         // 隐藏loading
         if (isLoadingShown) {
-          uni.hideLoading()
-          isLoadingShown = false
+          uni.hideLoading();
+          isLoadingShown = false;
         }
         
         if (response.code === 200) {
@@ -585,76 +629,75 @@ export default {
             title: '提交成功',
             icon: 'success',
             duration: 2000
-          })
+          });
           
           // 根据后端返回的数据结构调整
-          this.applicationId = response.data?.applicationId || response.data?.id || response.data?.designersId
+          this.applicationId = response.data?.applicationId || response.data?.id || response.data?.designersId;
           
-          console.log('Designer application created successfully, ID:', this.applicationId)
+          console.log('Designer application created successfully, ID:', this.applicationId);
           
           // 清除本地存储
-          uni.removeStorageSync('designer_application_data')
+          uni.removeStorageSync('designer_application_data');
           
           // 更新临时图片的关联ID
-          await this.updateTempImagesRelatedId()
+          await this.updateTempImagesRelatedId();
           
           // 跳转到下一步
           setTimeout(() => {
             uni.navigateTo({
               url: `/pages/join/DesignerJoin2?applicationId=${this.applicationId}`
-            })
-          }, 1500)
+            });
+          }, 1500);
           
         } else {
-          let errorMsg = response.msg || response.message || '提交失败'
+          let errorMsg = response.msg || response.message || '提交失败';
           
           if (response.code === 400) {
-            errorMsg = '数据格式错误，请检查填写的信息'
+            errorMsg = '数据格式错误，请检查填写的信息';
             console.error('400 Bad Request:', {
               formData: applicationData,
               response: response
-            })
+            });
           }
           
-          throw new Error(errorMsg)
+          throw new Error(errorMsg);
         }
         
       } catch (error) {
         // 隐藏loading
         if (isLoadingShown) {
-          uni.hideLoading()
+          uni.hideLoading();
         }
         
-        console.error('Form submission failed:', error)
+        console.error('Form submission failed:', error);
         
-        let errorMessage = '提交失败'
+        let errorMessage = '提交失败';
         if (error.message) {
-          errorMessage = error.message
+          errorMessage = error.message;
         } else if (error.errorMessage) {
-          errorMessage = error.errorMessage
+          errorMessage = error.errorMessage;
         }
         
         uni.showToast({
           title: errorMessage,
           icon: 'none',
           duration: 3000
-        })
+        });
       } finally {
-        this.isSubmitting = false
+        this.isSubmitting = false;
       }
     },
     
     // 更新临时图片的关联ID
     async updateTempImagesRelatedId() {
-      if (!this.applicationId) return
+      if (!this.applicationId) return;
       
-      console.log('Updating temporary images with application ID:', this.applicationId)
+      console.log('Updating temporary images with application ID:', this.applicationId);
       // 这里可以实现更新图片关联ID的逻辑
     }
   }
 }
 </script>
-
 <style lang="scss" scoped>
 .container {
   background-color: #f5f5f5;

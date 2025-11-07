@@ -1,66 +1,147 @@
+// 设计师入驻相关API
 import request from '@/utils/request'
 import { getToken } from '@/utils/auth'
 
-// ==================== 物料供应商申请相关API ====================
+// ==================== 常量定义 ====================
 
-// 提交入驻申请
-export function submitApplication(applicationDTO) {
+// 相关类型常量
+const RELATED_TYPES = {
+  DESIGNER: 1,        // 设计师
+  SHOP: 2,            // 商家
+  SUPERVISOR: 3,      // 监工
+  PROJECT: 4,         // 项目
+  ORDER: 5            // 订单
+}
+
+// 媒体类型常量
+const MEDIA_TYPES = {
+  IMAGE: 1,
+  VIDEO: 2,
+  DOCUMENT: 3,
+  AUDIO: 4
+}
+
+// 上传阶段常量
+const UPLOAD_STAGES = {
+  APPLICATION: 'application',     // 申请阶段
+  VERIFICATION: 'verification',   // 验证阶段
+  COMPLETION: 'completion',       // 完成阶段
+  WORK: 'work',                   // 作品阶段
+  AVATAR: 'avatar'                // 头像阶段
+}
+
+// 根据文件类型获取描述
+function getFileDescription(fileType) {
+  const descriptions = {
+    qualificationCertificate: '设计师资格证书',
+    handheldIdPhoto: '手持身份证照片',
+    idCardFrontPhoto: '身份证正面照片',
+    idCardBackPhoto: '身份证反面照片',
+    avatar: '头像',
+    portfolio: '作品集',
+    designDraft: '设计稿',
+    contract: '合同文件'
+  }
+  return descriptions[fileType] || '设计师资料'
+}
+
+// 根据文件类型获取序列号
+function getFileSequence(fileType) {
+  const sequences = {
+    qualificationCertificate: 1,
+    handheldIdPhoto: 2,
+    idCardFrontPhoto: 3,
+    idCardBackPhoto: 4,
+    avatar: 1,
+    portfolio: 5
+  }
+  return sequences[fileType] || 0
+}
+
+// 根据文件类型获取相关类型
+function getRelatedTypeByFileType(fileType) {
+  // 设计师相关的文件都使用设计师类型
+  return RELATED_TYPES.DESIGNER
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// 获取基础URL
+function getBaseUrl() {
+  // 根据你的环境配置返回对应的基础URL
+  // 开发环境
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:8080'
+  }
+  // 生产环境
+  return 'https://your-production-domain.com'
+}
+
+// ==================== 设计师入驻相关API ====================
+
+// 提交设计师入驻申请
+export function submitDesignerApplication(applicationDTO) {
   return request({
-    url: '/api/material-supplier/application',
+    url: '/api/designer/application',
     method: 'post',
     data: applicationDTO
   })
 }
 
-// 查询申请状态
-export function getApplicationStatus(applicationId) {
+// 查询设计师申请状态
+export function getDesignerApplicationStatus() {
   return request({
-    url: '/api/material-supplier/status/' + applicationId,
+    url: '/api/designer/status',
     method: 'get'
   })
 }
 
-// 获取申请详情
-export function getApplicationDetail(applicationId) {
+// 获取设计师申请详情
+export function getDesignerApplicationDetail() {
   return request({
-    url: '/api/material-supplier/detail/' + applicationId,
+    url: '/api/designer/detail',
     method: 'get'
   })
 }
 
-// 更新申请信息
-export function updateApplication(applicationId, applicationDTO) {
+// 更新设计师申请信息
+export function updateDesignerApplication(applicationDTO) {
   return request({
-    url: '/api/material-supplier/application/' + applicationId,
+    url: '/api/designer/application',
     method: 'put',
     data: applicationDTO
   })
 }
 
-// 撤销申请
-export function cancelApplication(applicationId) {
+// 管理员查询设计师申请列表
+export function getDesignerApplicationList(params) {
   return request({
-    url: '/api/material-supplier/application/' + applicationId,
-    method: 'delete'
-  })
-}
-
-// 获取申请列表
-export function getApplicationList(params) {
-  return request({
-    url: '/api/material-supplier/applications',
+    url: '/api/designer/admin/list',
     method: 'get',
     params: params
   })
 }
 
-// 下载申请材料模板
-export function downloadTemplate() {
+// 管理员审核申请
+export function reviewDesignerApplication(reviewDTO) {
   return request({
-    url: '/api/material-supplier/template',
-    headers: {
-      isToken: false
-    },
+    url: '/api/designer/admin/review',
+    method: 'post',
+    data: reviewDTO
+  })
+}
+
+// 管理员获取申请详情
+export function getDesignerApplicationDetailForAdmin(designersId) {
+  return request({
+    url: `/api/designer/admin/detail/${designersId}`,
     method: 'get'
   })
 }
@@ -70,6 +151,9 @@ export function downloadTemplate() {
 // 图片上传接口
 export function uploadImage(file, relatedType, relatedId, description, stage, sequence) {
   return new Promise((resolve, reject) => {
+    console.log('🔍 DEBUG UPLOAD - Starting upload process')
+    console.log('🔍 DEBUG UPLOAD - File:', file)
+    
     // 构建 formData
     const formData = {
       relatedType: Number(relatedType),
@@ -79,10 +163,17 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
       stage: stage || ''
     }
 
-    // 检查文件是否存在
+    console.log('🔍 DEBUG UPLOAD - FormData:', formData)
+
+    // 首先检查文件是否存在
     uni.getFileInfo({
       filePath: file,
       success: (fileInfo) => {
+        console.log('✅ DEBUG UPLOAD - File info:', {
+          size: fileInfo.size,
+          exists: true
+        })
+
         // 开始上传
         const uploadTask = uni.uploadFile({
           url: getBaseUrl() + '/api/media/upload',
@@ -93,11 +184,16 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
             'Authorization': 'Bearer ' + getToken(),
           },
           success: (res) => {
+            console.log('📡 DEBUG UPLOAD - Upload response received')
+            console.log('📡 DEBUG UPLOAD - Status code:', res.statusCode)
+
             if (res.statusCode === 200) {
               try {
                 const data = JSON.parse(res.data)
+                console.log('📡 DEBUG UPLOAD - Parsed response:', data)
                 
                 if (data.code === 200) {
+                  console.log('✅ DEBUG UPLOAD - Upload successful')
                   // 提取图片URL信息
                   const result = {
                     ...data,
@@ -114,12 +210,15 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
                   }
                   resolve(result)
                 } else {
+                  console.error('❌ DEBUG UPLOAD - Business logic error:', data.msg)
                   reject(new Error(data.msg || '上传失败'))
                 }
               } catch (e) {
+                console.error('❌ DEBUG UPLOAD - JSON parse error:', e)
                 reject(new Error('服务器响应格式错误'))
               }
             } else {
+              console.error('❌ DEBUG UPLOAD - HTTP error, status:', res.statusCode)
               let errorMessage = `上传失败，状态码: ${res.statusCode}`
               try {
                 const errorData = JSON.parse(res.data)
@@ -131,182 +230,18 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
             }
           },
           fail: (error) => {
+            console.error('❌ DEBUG UPLOAD - Upload request failed:', error)
             reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
           }
         })
 
         // 监听上传进度
         uploadTask.onProgressUpdate((res) => {
-          console.log('上传进度:', res.progress + '%')
+          console.log('📊 DEBUG UPLOAD - Upload progress:', res.progress + '%')
         })
-
       },
       fail: (fileError) => {
-        reject(new Error('文件不存在或无法访问: ' + fileError.errMsg))
-      }
-    })
-  })
-}
-
-// 视频上传接口
-export function uploadVideo(file, relatedType, relatedId, description, stage, sequence) {
-  return new Promise((resolve, reject) => {
-    // 构建 formData
-    const formData = {
-      relatedType: Number(relatedType),
-      relatedId: Number(relatedId),
-      sequence: Number(sequence || 0),
-      description: description || '',
-      stage: stage || ''
-    }
-
-    // 检查文件是否存在
-    uni.getFileInfo({
-      filePath: file,
-      success: (fileInfo) => {
-        // 开始上传
-        const uploadTask = uni.uploadFile({
-          url: getBaseUrl() + '/api/media/upload/video',
-          filePath: file,
-          name: 'file',
-          formData: formData,
-          header: {
-            'Authorization': 'Bearer ' + getToken(),
-          },
-          success: (res) => {
-            if (res.statusCode === 200) {
-              try {
-                const data = JSON.parse(res.data)
-                
-                if (data.code === 200) {
-                  // 提取视频URL信息
-                  const result = {
-                    ...data,
-                    videoUrl: data.data?.fileUrl,
-                    videoInfo: {
-                      filename: data.data?.filename,
-                      size: data.data?.size,
-                      sequence: data.data?.sequence,
-                      relatedType: data.data?.relatedType,
-                      relatedId: data.data?.relatedId,
-                      stage: data.data?.stage,
-                      description: data.data?.description,
-                      mediaType: data.data?.mediaType,
-                      mediaTypeName: data.data?.mediaTypeName || '视频'
-                    }
-                  }
-                  resolve(result)
-                } else {
-                  reject(new Error(data.msg || '视频上传失败'))
-                }
-              } catch (e) {
-                reject(new Error('服务器响应格式错误'))
-              }
-            } else {
-              let errorMessage = `视频上传失败，状态码: ${res.statusCode}`
-              try {
-                const errorData = JSON.parse(res.data)
-                errorMessage = errorData.message || errorData.error || errorMessage
-              } catch (parseError) {
-                // 忽略解析错误
-              }
-              reject(new Error(errorMessage))
-            }
-          },
-          fail: (error) => {
-            reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
-          }
-        })
-
-        // 监听上传进度
-        uploadTask.onProgressUpdate((res) => {
-          console.log('视频上传进度:', res.progress + '%')
-        })
-
-      },
-      fail: (fileError) => {
-        reject(new Error('视频文件不存在或无法访问: ' + fileError.errMsg))
-      }
-    })
-  })
-}
-
-// 通用文件上传接口（自动识别类型）
-export function uploadFile(file, relatedType, relatedId, description, stage, sequence) {
-  return new Promise((resolve, reject) => {
-    // 构建 formData
-    const formData = {
-      relatedType: Number(relatedType || 0),
-      relatedId: Number(relatedId || 0),
-      sequence: Number(sequence || 0),
-      description: description || '',
-      stage: stage || ''
-    }
-
-    // 检查文件是否存在
-    uni.getFileInfo({
-      filePath: file,
-      success: (fileInfo) => {
-        // 开始上传
-        const uploadTask = uni.uploadFile({
-          url: getBaseUrl() + '/api/media/upload/file',
-          filePath: file,
-          name: 'file',
-          formData: formData,
-          header: {
-            'Authorization': 'Bearer ' + getToken(),
-          },
-          success: (res) => {
-            if (res.statusCode === 200) {
-              try {
-                const data = JSON.parse(res.data)
-                
-                if (data.code === 200) {
-                  const result = {
-                    ...data,
-                    fileUrl: data.data?.fileUrl,
-                    fileInfo: {
-                      filename: data.data?.filename,
-                      size: data.data?.size,
-                      mediaType: data.data?.mediaType,
-                      mediaTypeName: data.data?.mediaTypeName,
-                      sequence: data.data?.sequence,
-                      relatedType: data.data?.relatedType,
-                      relatedId: data.data?.relatedId,
-                      stage: data.data?.stage,
-                      description: data.data?.description
-                    }
-                  }
-                  resolve(result)
-                } else {
-                  reject(new Error(data.msg || '文件上传失败'))
-                }
-              } catch (e) {
-                reject(new Error('服务器响应格式错误'))
-              }
-            } else {
-              let errorMessage = `文件上传失败，状态码: ${res.statusCode}`
-              try {
-                const errorData = JSON.parse(res.data)
-                errorMessage = errorData.message || errorData.error || errorMessage
-              } catch (parseError) {
-                // 忽略解析错误
-              }
-              reject(new Error(errorMessage))
-            }
-          },
-          fail: (error) => {
-            reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
-          }
-        })
-
-        // 监听上传进度
-        uploadTask.onProgressUpdate((res) => {
-          console.log('文件上传进度:', res.progress + '%')
-        })
-
-      },
-      fail: (fileError) => {
+        console.error('❌ DEBUG UPLOAD - File check failed:', fileError)
         reject(new Error('文件不存在或无法访问: ' + fileError.errMsg))
       }
     })
@@ -315,6 +250,8 @@ export function uploadFile(file, relatedType, relatedId, description, stage, seq
 
 // 批量图片上传接口
 export function batchUploadImages(files, relatedType, relatedId, stage) {
+  console.log('🔍 DEBUG BATCH - Starting batch upload, file count:', files.length)
+  
   // 逐个上传文件
   const uploadPromises = files.map((file, index) => {
     return uploadImage(
@@ -340,33 +277,6 @@ export function batchUploadImages(files, relatedType, relatedId, stage) {
   })
 }
 
-// 批量视频上传接口
-export function batchUploadVideos(files, relatedType, relatedId, stage) {
-  // 逐个上传视频文件
-  const uploadPromises = files.map((file, index) => {
-    return uploadVideo(
-      file,
-      relatedType,
-      relatedId,
-      `视频${index + 1}`,
-      stage,
-      index
-    )
-  })
-  
-  return Promise.all(uploadPromises).then(results => {
-    return {
-      code: 200,
-      msg: '批量视频上传成功',
-      data: results.map(result => result.data),
-      videos: results.map(result => ({
-        videoUrl: result.videoUrl,
-        videoInfo: result.videoInfo
-      }))
-    }
-  })
-}
-
 // 根据关联信息查询图片列表
 export function getImagesByRelatedInfo(relatedType, relatedId) {
   return request({
@@ -379,72 +289,26 @@ export function getImagesByRelatedInfo(relatedType, relatedId) {
   })
 }
 
-// 根据关联信息查询视频列表
-export function getVideosByRelatedInfo(relatedType, relatedId) {
-  return request({
-    url: '/api/media/videos',
-    method: 'get',
-    params: {
-      relatedType: Number(relatedType),
-      relatedId: Number(relatedId)
-    }
-  })
-}
-
-// 根据媒体类型获取列表
-export function getMediaByType(relatedType, relatedId, mediaType) {
-  return request({
-    url: '/api/media/list/type',
-    method: 'get',
-    params: {
-      relatedType: Number(relatedType),
-      relatedId: Number(relatedId),
-      mediaType: Number(mediaType)
-    }
-  })
-}
-
-// 获取所有媒体列表
-export function getAllMedia(relatedType, relatedId) {
-  return request({
-    url: '/api/media/list',
-    method: 'get',
-    params: {
-      relatedType: Number(relatedType),
-      relatedId: Number(relatedId)
-    }
-  })
-}
-
-// 删除媒体资源
-export function deleteMedia(mediaId) {
+// 删除图片
+export function deleteImage(mediaId) {
   return request({
     url: '/api/media/image/' + mediaId,
     method: 'delete'
   })
 }
 
-// 批量删除媒体资源
-export function batchDeleteMedia(mediaIds) {
+// 获取图片详情
+export function getImageDetail(mediaId) {
   return request({
-    url: '/api/media/batch',
-    method: 'delete',
-    data: mediaIds
-  })
-}
-
-// 获取媒体详情
-export function getMediaDetail(mediaId) {
-  return request({
-    url: '/api/media/detail/' + mediaId,
+    url: '/api/media/image/' + mediaId,
     method: 'get'
   })
 }
 
-// 更新媒体信息
-export function updateMediaInfo(mediaId, updateData) {
+// 更新图片信息
+export function updateImageInfo(mediaId, updateData) {
   return request({
-    url: '/api/media/update/' + mediaId,
+    url: '/api/media/image/' + mediaId,
     method: 'put',
     data: updateData
   })
@@ -486,14 +350,6 @@ export function getUserInfo() {
   })
 }
 
-// 获取用户路由
-export function getRouters() {
-  return request({
-    url: '/api/users/routers',
-    method: 'get'
-  })
-}
-
 // 退出登录
 export function logout() {
   return request({
@@ -514,216 +370,42 @@ export function register(registryForm) {
   })
 }
 
-// 获取图形验证码
-export function getCodeImg() {
-  return request({
-    url: '/captchaImage',
-    headers: {
-      isToken: false
-    },
-    method: 'get',
-    timeout: 20000
-  })
-}
+// ==================== 导出所有内容 ====================
 
-// ==================== 工具函数和常量 ====================
-
-// 获取基础URL
-function getBaseUrl() {
-  try {
-    const config = require('@/config')
-    const baseUrl = config.baseUrl || 'http://localhost:8080'
-    return baseUrl
-  } catch (error) {
-    return 'https://your-api-domain.com'
-  }
-}
-
-// 支持的视频格式
-export const VIDEO_FORMATS = {
-  MP4: 'mp4',
-  MOV: 'mov',
-  AVI: 'avi',
-  FLV: 'flv',
-  WEBM: 'webm',
-  '3GP': '3gp',
-  OGG: 'ogg',
-  WMV: 'wmv',
-  MKV: 'mkv'
-}
-
-// 视频最大大小限制（50MB）
-export const VIDEO_MAX_SIZE = 50 * 1024 * 1024
-
-// 视频最大时长限制（5分钟）
-export const VIDEO_MAX_DURATION = 300
-
-export const RELATED_TYPES = {
-  MATERIAL_SUPPLIER: 1,      // 物料供应商
-  MERCHANT_APPLICATION: 2,   // 商户申请
-  SHOP: 3,                   // 店铺
-  PRODUCT: 4,                // 商品
-  ID_CARD: 5,                // 身份证
-  BUSINESS_LICENSE: 6,       // 营业执照
-  STORE_PHOTO: 7,            // 门店照片
-  USER_AVATAR: 8,            // 用户头像
-  VIDEO_CONTENT: 9,          // 视频内容
-  TEST: 99                   // 测试
-}
-
-export const MEDIA_TYPES = {
-  IMAGE: 1,      // 图片
-  VIDEO: 3,      // 视频（注意：后端定义中视频是3）
-  DOCUMENT: 5,   // 文档
-  OTHER: 4       // 其他
-}
-
-export const UPLOAD_STAGES = {
-  APPLICATION: 'APPLICATION',        // 申请阶段
-  VERIFICATION: 'VERIFICATION',      // 验证阶段
-  APPROVAL: 'APPROVAL',             // 审批阶段
-  COMPLETED: 'COMPLETED',           // 完成阶段
-  VIDEO: 'VIDEO'                    // 视频阶段
-}
-
-// 工具函数：获取文件描述
-export function getFileDescription(fileType) {
-  const descriptions = {
-    store: '门店照片',
-    idCardHand: '手持身份证照片',
-    idCardFront: '身份证正面照片',
-    idCardBack: '身份证反面照片',
-    businessLicense: '营业执照',
-    legalPersonIdCard: '法人身份证',
-    bankAccount: '银行账户证明',
-    video: '视频文件',
-    other: '其他申请材料'
-  }
-  return descriptions[fileType] || '申请材料'
-}
-
-// 工具函数：生成文件序列号
-export function getFileSequence(fileType) {
-  const sequences = {
-    store: 1,
-    idCardFront: 2,
-    idCardBack: 3,
-    idCardHand: 4,
-    businessLicense: 5,
-    legalPersonIdCard: 6,
-    bankAccount: 7,
-    video: 10,
-    other: 99
-  }
-  return sequences[fileType] || 0
-}
-
-// 工具函数：根据文件类型获取 relatedType
-export function getRelatedTypeByFileType(fileType) {
-  const typeMapping = {
-    store: RELATED_TYPES.STORE_PHOTO,
-    idCardHand: RELATED_TYPES.ID_CARD,
-    idCardFront: RELATED_TYPES.ID_CARD,
-    idCardBack: RELATED_TYPES.ID_CARD,
-    businessLicense: RELATED_TYPES.BUSINESS_LICENSE,
-    legalPersonIdCard: RELATED_TYPES.ID_CARD,
-    bankAccount: RELATED_TYPES.MERCHANT_APPLICATION,
-    video: RELATED_TYPES.VIDEO_CONTENT,
-    other: RELATED_TYPES.MERCHANT_APPLICATION
-  }
-  return typeMapping[fileType] || RELATED_TYPES.MERCHANT_APPLICATION
-}
-
-// 工具函数：格式化文件大小
-export function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-// 工具函数：验证视频文件
-export function validateVideoFile(file, maxSize = VIDEO_MAX_SIZE, maxDuration = VIDEO_MAX_DURATION) {
-  return new Promise((resolve, reject) => {
-    // 检查文件大小
-    uni.getFileInfo({
-      filePath: file,
-      success: (fileInfo) => {
-        if (fileInfo.size > maxSize) {
-          reject(new Error(`视频文件大小不能超过 ${formatFileSize(maxSize)}`));
-          return;
-        }
-        
-        // 检查文件格式
-        const fileExt = file.split('.').pop().toLowerCase();
-        const supportedFormats = Object.values(VIDEO_FORMATS);
-        if (!supportedFormats.includes(fileExt)) {
-          reject(new Error(`不支持的视频格式，支持的格式: ${supportedFormats.join(', ')}`));
-          return;
-        }
-        
-        resolve({
-          size: fileInfo.size,
-          format: fileExt,
-          isValid: true
-        });
-      },
-      fail: (error) => {
-        reject(new Error('无法获取视频文件信息: ' + error.errMsg));
-      }
-    });
-  });
-}
-
-// ==================== 默认导出 ====================
-
+// 只使用默认导出，避免重复导出问题
 export default {
-  // 物料供应商申请
-  submitApplication,
-  getApplicationStatus,
-  getApplicationDetail,
-  updateApplication,
-  cancelApplication,
-  getApplicationList,
-  downloadTemplate,
-  
-  // 媒体上传
-  uploadImage,
-  uploadVideo,
-  uploadFile,
-  batchUploadImages,
-  batchUploadVideos,
-  
-  // 媒体查询和管理
-  getImagesByRelatedInfo,
-  getVideosByRelatedInfo,
-  getMediaByType,
-  getAllMedia,
-  deleteMedia,
-  batchDeleteMedia,
-  getMediaDetail,
-  updateMediaInfo,
-  
-  // 用户认证
-  login,
-  sendCode,
-  getUserInfo,
-  getRouters,
-  logout,
-  register,
-  getCodeImg,
-  
-  // 常量和工具函数
+  // 常量
   RELATED_TYPES,
   MEDIA_TYPES,
   UPLOAD_STAGES,
-  VIDEO_FORMATS,
-  VIDEO_MAX_SIZE,
-  VIDEO_MAX_DURATION,
+  
+  // 工具函数
   getFileDescription,
   getFileSequence,
   getRelatedTypeByFileType,
   formatFileSize,
-  validateVideoFile
+  
+  // 设计师API
+  submitDesignerApplication,
+  getDesignerApplicationStatus,
+  getDesignerApplicationDetail,
+  updateDesignerApplication,
+  getDesignerApplicationList,
+  reviewDesignerApplication,
+  getDesignerApplicationDetailForAdmin,
+  
+  // 媒体上传API
+  uploadImage,
+  batchUploadImages,
+  getImagesByRelatedInfo,
+  deleteImage,
+  getImageDetail,
+  updateImageInfo,
+  
+  // 用户认证API
+  login,
+  sendCode,
+  getUserInfo,
+  logout,
+  register
 }
