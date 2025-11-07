@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <view class="page-header">
       <text class="title">设计师入驻</text>
-      <text class="subtitle">入驻装修设计app，展示您的设计才华</text>
+      <text class="subtitle">入驻装修设计平台，提供专业设计服务</text>
     </view>
     
     <!-- 入驻流程步骤 -->
@@ -23,34 +23,33 @@
     </view>
     
     <!-- 表单区域 -->
-    <view class="form-container">
-      <uni-forms ref="form" :model="formData" :rules="rules" labelWidth="180rpx">
+    <view class="example">
+      <uni-forms ref="form" :model="formData" labelWidth="180rpx">
         <!-- 设计师信息 -->
-        <uni-forms-item label="设计师名称" name="designerName" required>
+        <uni-forms-item label="设计师名称" name="merchantName" required>
           <uni-easyinput 
-            v-model="formData.designerName" 
-            placeholder="请输入设计师名称或工作室名称" 
+            v-model="formData.merchantName" 
+            placeholder="请输入设计师名称或团队名称" 
             type="text"
-            @input="onInput('designerName')"
+            @input="filterChinese('merchantName')"
           />
         </uni-forms-item>
         
-        <uni-forms-item label="设计师姓名" name="identity" required>
+        <uni-forms-item label="所在城市" name="city" required>
           <uni-easyinput 
-            v-model="formData.identity" 
-            placeholder="请输入设计师真实姓名" 
+            v-model="formData.city" 
+            placeholder="请输入所在城市" 
             type="text"
-            @input="onInput('identity')"
+            @input="filterChinese('city')"
           />
         </uni-forms-item>
         
-        <uni-forms-item label="手机号" name="phone" required>
+        <uni-forms-item label="备注" name="remark">
           <uni-easyinput 
-            v-model="formData.phone" 
-            placeholder="请填写联系方式" 
-            type="text"
-            @input="onInput('phone')"
-            maxlength="11"
+            v-model="formData.remark" 
+            placeholder="请输入备注信息" 
+            type="textarea"
+            maxlength="500"
           />
         </uni-forms-item>
         
@@ -60,11 +59,11 @@
           
           <!-- 上传区域垂直布局 -->
           <view class="upload-vertical">
-            <!-- 资格证书 -->
+            <!-- 设计资格证书 -->
             <view class="upload-item">
               <view class="upload-item-header">
-                <text class="upload-item-title">资格证书</text>
-                <text class="upload-item-subtitle">设计师资格证等</text>
+                <text class="upload-item-title">设计</text>
+                <text class="upload-item-subtitle">资格证</text>
               </view>
               
               <view class="upload-item-content">
@@ -86,9 +85,12 @@
                   </view>
                 </view>
                 
-                <!-- 上传状态 -->
-                <view v-if="uploadStatus.qualificationCertificate" class="upload-status" :class="uploadStatus.qualificationCertificate">
-                  {{ getUploadStatusText(uploadStatus.qualificationCertificate) }}
+                <!-- 上传进度 -->
+                <view v-if="uploadProgress.qualificationCertificate > 0 && uploadProgress.qualificationCertificate < 100" class="upload-progress">
+                  <text class="progress-text">上传中 {{uploadProgress.qualificationCertificate}}%</text>
+                  <view class="progress-bar">
+                    <view class="progress-inner" :style="{width: uploadProgress.qualificationCertificate + '%'}"></view>
+                  </view>
                 </view>
               </view>
             </view>
@@ -96,8 +98,8 @@
             <!-- 手持身份证 -->
             <view class="upload-item">
               <view class="upload-item-header">
-                <text class="upload-item-title">手持身份证</text>
-                <text class="upload-item-subtitle">本人手持身份证照片</text>
+                <text class="upload-item-title">手持</text>
+                <text class="upload-item-subtitle">身份证</text>
               </view>
               
               <view class="upload-item-content">
@@ -119,9 +121,12 @@
                   </view>
                 </view>
                 
-                <!-- 上传状态 -->
-                <view v-if="uploadStatus.handheldIdPhoto" class="upload-status" :class="uploadStatus.handheldIdPhoto">
-                  {{ getUploadStatusText(uploadStatus.handheldIdPhoto) }}
+                <!-- 上传进度 -->
+                <view v-if="uploadProgress.handheldIdPhoto > 0 && uploadProgress.handheldIdPhoto < 100" class="upload-progress">
+                  <text class="progress-text">上传中 {{uploadProgress.handheldIdPhoto}}%</text>
+                  <view class="progress-bar">
+                    <view class="progress-inner" :style="{width: uploadProgress.handheldIdPhoto + '%'}"></view>
+                  </view>
                 </view>
               </view>
             </view>
@@ -129,11 +134,12 @@
             <!-- 身份证正反面 -->
             <view class="upload-item">
               <view class="upload-item-header">
-                <text class="upload-item-title">身份证正反面</text>
-                <text class="upload-item-subtitle">身份证正面和反面照片</text>
+                <text class="upload-item-title">身份证</text>
+                <text class="upload-item-subtitle">正反面</text>
               </view>
               
               <view class="upload-item-content">
+                <!-- 预览区域 -->
                 <view class="id-card-preview">
                   <!-- 身份证正面 -->
                   <view class="id-card-side">
@@ -153,9 +159,12 @@
                       </view>
                     </view>
                     
-                    <!-- 上传状态 -->
-                    <view v-if="uploadStatus.idCardFrontPhoto" class="upload-status" :class="uploadStatus.idCardFrontPhoto">
-                      {{ getUploadStatusText(uploadStatus.idCardFrontPhoto) }}
+                    <!-- 上传进度 -->
+                    <view v-if="uploadProgress.idCardFrontPhoto > 0 && uploadProgress.idCardFrontPhoto < 100" class="upload-progress">
+                      <text class="progress-text">上传中 {{uploadProgress.idCardFrontPhoto}}%</text>
+                      <view class="progress-bar">
+                        <view class="progress-inner" :style="{width: uploadProgress.idCardFrontPhoto + '%'}"></view>
+                      </view>
                     </view>
                   </view>
                   
@@ -177,9 +186,12 @@
                       </view>
                     </view>
                     
-                    <!-- 上传状态 -->
-                    <view v-if="uploadStatus.idCardBackPhoto" class="upload-status" :class="uploadStatus.idCardBackPhoto">
-                      {{ getUploadStatusText(uploadStatus.idCardBackPhoto) }}
+                    <!-- 上传进度 -->
+                    <view v-if="uploadProgress.idCardBackPhoto > 0 && uploadProgress.idCardBackPhoto < 100" class="upload-progress">
+                      <text class="progress-text">上传中 {{uploadProgress.idCardBackPhoto}}%</text>
+                      <view class="progress-bar">
+                        <view class="progress-inner" :style="{width: uploadProgress.idCardBackPhoto + '%'}"></view>
+                      </view>
                     </view>
                   </view>
                 </view>
@@ -191,7 +203,7 @@
         </view>
       </uni-forms>
       
-      <button type="primary" @click="submit" :disabled="isSubmitting" class="submit-btn">
+      <button type="primary" @click="submit" :disabled="isSubmitting">
         {{ isSubmitting ? '提交中...' : '下一步' }}
       </button>
     </view>
@@ -200,14 +212,15 @@
 
 <script>
 import { 
-  submitDesignerApplication, 
-  uploadImage, 
-  deleteImage,
-  RELATED_TYPES,
-  UPLOAD_STAGES,
-  getFileDescription,
-  getFileSequence,
-  getRelatedTypeByFileType
+  submitDesignerApplication,
+  getDesignerApplicationStatus,
+  getDesignerApplicationDetail,
+  updateDesignerApplication,
+  getDesignerApplicationList,
+  reviewDesignerApplication,
+  getDesignerApplicationDetailForAdmin,
+  uploadImage,
+  deleteImage
 } from '@/api/design.js';
 
 export default {
@@ -217,34 +230,34 @@ export default {
       isSubmitting: false,
       applicationId: null,
       
-      // 上传状态
-      uploadStatus: {
-        qualificationCertificate: '',
-        handheldIdPhoto: '',
-        idCardFrontPhoto: '',
-        idCardBackPhoto: ''
+      // 上传进度
+      uploadProgress: {
+        qualificationCertificate: 0,
+        handheldIdPhoto: 0,
+        idCardFrontPhoto: 0,        // 改回 idCardFrontPhoto
+        idCardBackPhoto: 0          // 改回 idCardBackPhoto
       },
       
       formData: {
-        designerName: '',
-        identity: '',
-        phone: '',
-        qualificationCertificate: '',
-        handheldIdPhoto: '',
-        idCardFrontPhoto: '',
-        idCardBackPhoto: ''
+        merchantName: '',           // 设计师名称
+        city: '',                   // 所在城市
+        qualificationCertificate: '', // 设计资格证书
+        remark: '',                 // 备注
+        handheldIdPhoto: '',        // 手持身份证
+        idCardFrontPhoto: '',       // 身份证正面 - 改回 idCardFrontPhoto
+        idCardBackPhoto: ''         // 身份证反面 - 改回 idCardBackPhoto
       },
       
       // 存储上传后的文件ID
       uploadedFiles: {
         qualificationCertificate: null,
         handheldIdPhoto: null,
-        idCardFrontPhoto: null,
-        idCardBackPhoto: null
+        idCardFrontPhoto: null,     // 改回 idCardFrontPhoto
+        idCardBackPhoto: null       // 改回 idCardBackPhoto
       },
       
       rules: {
-        designerName: {
+        merchantName: {
           rules: [{
             required: true,
             errorMessage: '设计师名称不能为空'
@@ -252,35 +265,29 @@ export default {
             minLength: 2,
             errorMessage: '设计师名称至少2个字符'
           }, {
-            maxLength: 200,
-            errorMessage: '设计师名称长度不能超过200个字符'
+            maxLength: 255,
+            errorMessage: '设计师名称长度不能超过255个字符'
           }]
         },
-        identity: {
+        city: {
           rules: [{
             required: true,
-            errorMessage: '设计师姓名不能为空'
-          }, {
-            minLength: 2,
-            errorMessage: '设计师姓名至少2个字符'
+            errorMessage: '所在城市不能为空'
           }, {
             maxLength: 255,
-            errorMessage: '设计师姓名长度不能超过255个字符'
+            errorMessage: '所在城市长度不能超过255个字符'
           }]
         },
-        phone: {
+        remark: {
           rules: [{
-            required: true,
-            errorMessage: '手机号码不能为空'
-          }, {
-            pattern: /^1[3-9]\d{9}$/,
-            errorMessage: '请输入正确的11位手机号码'
+            maxLength: 500,
+            errorMessage: '备注长度不能超过500个字符'
           }]
         },
         qualificationCertificate: {
           rules: [{
             required: true,
-            errorMessage: '请上传资格证书'
+            errorMessage: '请上传设计资格证书'
           }]
         },
         handheldIdPhoto: {
@@ -289,13 +296,13 @@ export default {
             errorMessage: '请上传手持身份证照片'
           }]
         },
-        idCardFrontPhoto: {
+        idCardFrontPhoto: {         // 改回 idCardFrontPhoto
           rules: [{
             required: true,
             errorMessage: '请上传身份证正面照片'
           }]
         },
-        idCardBackPhoto: {
+        idCardBackPhoto: {          // 改回 idCardBackPhoto
           rules: [{
             required: true,
             errorMessage: '请上传身份证反面照片'
@@ -306,7 +313,7 @@ export default {
   },
   
   onLoad() {
-    console.log('DesignerJoin1 page loaded')
+    console.log('🔄 DesignerJoin1 page loaded')
     this.loadApplicationData()
   },
   
@@ -315,44 +322,28 @@ export default {
   },
   
   methods: {
-    // 输入处理
-    onInput(fieldName) {
-      if (fieldName === 'phone') {
-        // 手机号只允许数字
-        this.formData[fieldName] = this.formData[fieldName].replace(/[^\d]/g, '');
+    loadApplicationData() {
+      const savedData = uni.getStorageSync('designer_application_data')
+      if (savedData) {
+        this.formData = { ...this.formData, ...savedData }
+        console.log('📥 Loaded saved designer application data')
       }
+    },
+    
+    saveApplicationData() {
+      uni.setStorageSync('designer_application_data', this.formData)
+      console.log('💾 Saved designer application data')
+    },
+    
+    filterChinese(fieldName) {
+      this.formData[fieldName] = this.formData[fieldName].replace(/[^\u4e00-\u9fa5]/g, '');
       this.saveApplicationData()
     },
     
-    // 加载保存的数据
-    loadApplicationData() {
-      try {
-        const savedData = uni.getStorageSync('designer_application_data')
-        if (savedData) {
-          this.formData = { ...this.formData, ...savedData }
-          console.log('Loaded saved designer application data')
-        }
-      } catch (error) {
-        console.error('Failed to load saved data:', error)
-      }
-    },
-    
-    // 保存数据到本地存储
-    saveApplicationData() {
-      try {
-        uni.setStorageSync('designer_application_data', this.formData)
-        console.log('Saved designer application data')
-      } catch (error) {
-        console.error('Failed to save data:', error)
-      }
-    },
-    
-    // 上传文件
     async uploadFile(type) {
       try {
-        console.log('Starting upload process for:', type)
+        console.log('🔄 Starting upload process for:', type)
         
-        // 选择图片
         const chooseResult = await new Promise((resolve, reject) => {
           uni.chooseImage({
             count: 1,
@@ -376,30 +367,25 @@ export default {
         const tempFilePath = chooseResult.tempFilePaths[0]
         const tempFile = chooseResult.tempFiles[0]
         
-        console.log('Selected file info:', {
+        console.log('📁 Selected file info:', {
           path: tempFilePath,
           size: tempFile.size,
           type: tempFile.type
         })
         
-        // 文件大小检查
         if (tempFile.size > 5 * 1024 * 1024) {
           throw new Error('图片大小不能超过5MB')
         }
         
-        // 设置上传状态
-        this.uploadStatus[type] = 'uploading'
+        this.uploadProgress[type] = 1
         
-        // 执行上传
         const result = await this.actualUploadFile(tempFilePath, type)
         
-        console.log('Upload API response:', result)
+        console.log('📤 Upload API response:', result)
         
         if (result.code === 200) {
-          // 上传成功
-          this.formData[type] = result.imageUrl || result.data?.fileUrl
-          this.uploadedFiles[type] = result.data?.mediaId
-          this.uploadStatus[type] = 'success'
+          this.formData[type] = result.data.fileUrl
+          this.uploadedFiles[type] = result.data.mediaId
           
           this.saveApplicationData()
           
@@ -413,29 +399,39 @@ export default {
         }
         
       } catch (error) {
-        console.error('Upload process failed:', error)
-        this.uploadStatus[type] = 'error'
+        console.error('❌ Upload process failed:', error)
         
         uni.showToast({
           title: error.message || '上传失败',
           icon: 'none',
           duration: 3000
         })
+      } finally {
+        this.uploadProgress[type] = 0
       }
     },
     
-    // 实际执行上传
+    getUploadTypeName(type) {
+      const mapping = {
+        qualificationCertificate: '设计资格证书',
+        handheldIdPhoto: '手持身份证',
+        idCardFrontPhoto: '身份证正面',    // 改回 idCardFrontPhoto
+        idCardBackPhoto: '身份证反面'      // 改回 idCardBackPhoto
+      }
+      return mapping[type] || type
+    },
+    
     async actualUploadFile(filePath, fileType) {
       try {
-        console.log('Starting actual file upload...')
+        console.log('🚀 Starting actual file upload...')
         
-        const relatedType = getRelatedTypeByFileType(fileType)
+        const relatedType = this.getRelatedTypeByFileType(fileType)
         const relatedId = this.applicationId ? Number(this.applicationId) : 0
-        const description = getFileDescription(fileType)
-        const stage = UPLOAD_STAGES.APPLICATION
-        const sequence = getFileSequence(fileType)
+        const description = this.getFileDescription(fileType)
+        const stage = 'APPLICATION'
+        const sequence = this.getFileSequence(fileType)
         
-        console.log('Upload parameters:', {
+        console.log('📋 Upload parameters:', {
           filePath,
           relatedType,
           relatedId,
@@ -453,16 +449,61 @@ export default {
           sequence
         )
         
-        console.log('Upload API response received:', response)
+        console.log('✅ Upload API response received:', response)
+        
+        if (response.code === 200 && response.data) {
+          return {
+            ...response,
+            data: {
+              fileUrl: response.data.fileUrl,
+              mediaId: response.data.mediaId,
+              fileName: response.data.fileName,
+              fileSize: response.data.fileSize
+            }
+          }
+        }
+        
         return response
         
       } catch (error) {
-        console.error('Upload API call failed:', error)
+        console.error('❌ Upload API call failed:', error)
         throw error
       }
     },
     
-    // 预览图片
+    // 根据文件类型获取 relatedType
+    getRelatedTypeByFileType(fileType) {
+      const typeMapping = {
+        qualificationCertificate: 5, // ID_CARD
+        handheldIdPhoto: 5,          // ID_CARD
+        idCardFrontPhoto: 5,         // ID_CARD - 改回 idCardFrontPhoto
+        idCardBackPhoto: 5           // ID_CARD - 改回 idCardBackPhoto
+      }
+      return typeMapping[fileType] || 2 // 默认 MERCHANT_APPLICATION
+    },
+    
+    // 获取文件描述
+    getFileDescription(fileType) {
+      const descriptions = {
+        qualificationCertificate: '设计资格证书',
+        handheldIdPhoto: '手持身份证照片',
+        idCardFrontPhoto: '身份证正面照片',    // 改回 idCardFrontPhoto
+        idCardBackPhoto: '身份证反面照片'      // 改回 idCardBackPhoto
+      }
+      return descriptions[fileType] || '申请材料'
+    },
+    
+    // 生成文件序列号
+    getFileSequence(fileType) {
+      const sequences = {
+        qualificationCertificate: 1,
+        idCardFrontPhoto: 2,           // 改回 idCardFrontPhoto
+        idCardBackPhoto: 3,            // 改回 idCardBackPhoto
+        handheldIdPhoto: 4
+      }
+      return sequences[fileType] || 0
+    },
+    
     previewImage(type) {
       const url = this.formData[type]
       if (url) {
@@ -473,7 +514,6 @@ export default {
       }
     },
     
-    // 删除图片
     async removeImage(type) {
       try {
         uni.showModal({
@@ -483,14 +523,12 @@ export default {
             if (res.confirm) {
               const mediaId = this.uploadedFiles[type]
               if (mediaId) {
-                console.log('Deleting image from server, mediaId:', mediaId)
+                console.log('🗑️ Deleting image from server, mediaId:', mediaId)
                 await deleteImage(mediaId)
               }
               
-              // 清除本地数据
               this.formData[type] = ''
               this.uploadedFiles[type] = null
-              this.uploadStatus[type] = ''
               
               this.saveApplicationData()
               
@@ -512,48 +550,40 @@ export default {
       }
     },
     
-    // 获取上传状态文本
-    getUploadStatusText(status) {
-      const statusMap = {
-        uploading: '上传中...',
-        success: '上传成功',
-        error: '上传失败'
-      }
-      return statusMap[status] || ''
-    },
-    
-    // 构建申请数据
+    // 构建申请数据 - 更新字段名以匹配后端 DTO
     buildApplicationData() {
       const applicationData = {
-        designerName: this.formData.designerName,
-        identity: this.formData.identity,
-        phone: this.formData.phone,
+        merchantName: this.formData.merchantName,
+        city: this.formData.city,
+        remark: this.formData.remark,
         qualificationCertificate: this.formData.qualificationCertificate,
         handheldIdPhoto: this.formData.handheldIdPhoto,
-        idCardFrontPhoto: this.formData.idCardFrontPhoto,
-        idCardBackPhoto: this.formData.idCardBackPhoto
+        idCardFrontPhoto: this.formData.idCardFrontPhoto,     // 改回 idCardFrontPhoto
+        idCardBackPhoto: this.formData.idCardBackPhoto        // 改回 idCardBackPhoto
       }
       
-      console.log('Built designer application data:', applicationData)
+      console.log('📦 Built designer application data:', applicationData)
       return applicationData
     },
     
-    // 提交表单
     async submit() {
       if (this.isSubmitting) return
+      
+      // 先隐藏可能存在的loading
+      uni.hideLoading()
       
       let isLoadingShown = false
       
       try {
         this.isSubmitting = true
         
-        console.log('Starting form submission...')
+        console.log('🔄 Starting form submission...')
         
         // 表单验证
         await this.$refs.form.validate()
-        console.log('Form validation passed')
+        console.log('✅ Form validation passed')
         
-        // 检查必填图片
+        // 检查必填图片 - 更新字段名
         const requiredImages = ['qualificationCertificate', 'handheldIdPhoto', 'idCardFrontPhoto', 'idCardBackPhoto']
         const missingImages = requiredImages.filter(type => !this.formData[type])
         
@@ -570,11 +600,11 @@ export default {
         
         const applicationData = this.buildApplicationData()
         
-        console.log('Sending application data to server...')
+        console.log('📨 Sending application data to server...')
         const response = await submitDesignerApplication(applicationData)
-        console.log('Server response:', response)
+        console.log('📨 Server response:', response)
         
-        // 隐藏loading
+        // 先隐藏loading再处理结果
         if (isLoadingShown) {
           uni.hideLoading()
           isLoadingShown = false
@@ -587,18 +617,13 @@ export default {
             duration: 2000
           })
           
-          // 根据后端返回的数据结构调整
-          this.applicationId = response.data?.applicationId || response.data?.id || response.data?.designersId
+          this.applicationId = response.data.applicationId || response.data.id
+          console.log('🎉 Designer application created successfully, ID:', this.applicationId)
           
-          console.log('Designer application created successfully, ID:', this.applicationId)
-          
-          // 清除本地存储
           uni.removeStorageSync('designer_application_data')
           
-          // 更新临时图片的关联ID
           await this.updateTempImagesRelatedId()
           
-          // 跳转到下一步
           setTimeout(() => {
             uni.navigateTo({
               url: `/pages/join/DesignerJoin2?applicationId=${this.applicationId}`
@@ -606,11 +631,13 @@ export default {
           }, 1500)
           
         } else {
+          // 处理400等错误状态
           let errorMsg = response.msg || response.message || '提交失败'
           
-          if (response.code === 400) {
-            errorMsg = '数据格式错误，请检查填写的信息'
-            console.error('400 Bad Request:', {
+          // 如果是500错误，可能是数据验证失败
+          if (response.code === 500) {
+            errorMsg = '服务器内部错误，请稍后重试'
+            console.error('❌ 500 Internal Server Error - 可能的原因:', {
               formData: applicationData,
               response: response
             })
@@ -620,12 +647,13 @@ export default {
         }
         
       } catch (error) {
-        // 隐藏loading
+        // 确保隐藏loading
         if (isLoadingShown) {
           uni.hideLoading()
+          isLoadingShown = false
         }
         
-        console.error('Form submission failed:', error)
+        console.error('❌ Form submission failed:', error)
         
         let errorMessage = '提交失败'
         if (error.message) {
@@ -641,15 +669,17 @@ export default {
         })
       } finally {
         this.isSubmitting = false
+        // 最终确保loading被隐藏
+        if (isLoadingShown) {
+          uni.hideLoading()
+        }
       }
     },
     
-    // 更新临时图片的关联ID
     async updateTempImagesRelatedId() {
       if (!this.applicationId) return
       
-      console.log('Updating temporary images with application ID:', this.applicationId)
-      // 这里可以实现更新图片关联ID的逻辑
+      console.log('🔄 Updating temporary images with application ID:', this.applicationId)
     }
   }
 }
@@ -710,6 +740,7 @@ export default {
   color: #fff;
   margin-bottom: 16rpx;
   font-weight: bold;
+  flex-shrink: 0;
 }
 
 .step-item.active .step-icon {
@@ -721,6 +752,11 @@ export default {
   color: #999;
   text-align: center;
   line-height: 1.4;
+  min-height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .step-item.active .step-text {
@@ -728,7 +764,7 @@ export default {
   font-weight: 500;
 }
 
-.form-container {
+.example {
   padding: 30rpx;
   background-color: #fff;
   margin: 0 20rpx;
@@ -811,4 +847,144 @@ export default {
 
 .id-card-label {
   font-size: 24rpx;
-  color
+  color: #666;
+  text-align: center;
+}
+
+.upload-btn-container {
+  margin-top: 0;
+}
+
+.upload-btn {
+  width: 120rpx;
+  height: 120rpx;
+  background-color: #fff;
+  border: 2rpx dashed #007AFF;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.upload-btn:active {
+  background-color: #f0f7ff;
+  border-style: solid;
+}
+
+.upload-btn-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.upload-btn-icon {
+  font-size: 40rpx;
+  color: #007AFF;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.upload-tips {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  text-align: center;
+  margin-top: 20rpx;
+}
+
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.preview-image {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #e8e8e8;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 15rpx;
+  margin-top: 10rpx;
+}
+
+.preview-action {
+  font-size: 20rpx;
+  color: #007AFF;
+  padding: 6rpx 12rpx;
+  border-radius: 4rpx;
+  background-color: rgba(0, 122, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.preview-action:active {
+  background-color: rgba(0, 122, 255, 0.2);
+}
+
+.preview-action.delete {
+  color: #ff4d4f;
+  background-color: rgba(255, 77, 79, 0.1);
+}
+
+.preview-action.delete:active {
+  background-color: rgba(255, 77, 79, 0.2);
+}
+
+.upload-progress {
+  margin-top: 10rpx;
+  width: 100%;
+  max-width: 200rpx;
+}
+
+.progress-text {
+  font-size: 20rpx;
+  color: #007AFF;
+  text-align: center;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6rpx;
+  background-color: #e0e0e0;
+  border-radius: 3rpx;
+  overflow: hidden;
+}
+
+.progress-inner {
+  height: 100%;
+  background-color: #007AFF;
+  border-radius: 3rpx;
+  transition: width 0.3s ease;
+}
+
+button[type="primary"] {
+  width: 100%;
+  margin-top: 40rpx;
+  background-color: #007AFF;
+  color: #fff;
+  border: none;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  padding: 25rpx 0;
+  box-shadow: 0 4rpx 12rpx rgba(0, 122, 255, 0.3);
+}
+
+button[type="primary"]:active {
+  background-color: #0056b3;
+  transform: translateY(2rpx);
+}
+
+button[type="primary"]:disabled {
+  background-color: #ccc;
+  box-shadow: none;
+  transform: none;
+}
+</style>
