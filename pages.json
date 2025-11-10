@@ -209,6 +209,12 @@
     "style": {
       "navigationBarTitleText": "商品展示页面"
     }
+  },
+  {
+    "path": "pages/post/order",
+    "style": {
+      "navigationBarTitleText": "发布总订单页面"
+    }
   }
   ],
   "tabBar": {
