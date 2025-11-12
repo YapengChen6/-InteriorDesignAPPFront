@@ -203,6 +203,18 @@
     "style": {
       "navigationBarTitleText": "角色切换"
     }
+  },
+  {
+    "path": "pages/chat/chatList",
+    "style": {
+      "navigationBarTitleText": "聊天列表"
+    }
+  },
+  {
+    "path": "pages/chat/chatDetail",
+    "style": {
+      "navigationBarTitleText": "聊天详情"
+    }
   }
   ],
   "tabBar": {
