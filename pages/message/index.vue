@@ -6,9 +6,14 @@
         <view class="navbar-content">
           <view class="navbar-title">
             <text class="title-text">消息中心</text>
-            <button @click="markAllAsRead" class="mark-all-read-btn" :disabled="!hasUnreadMessages">
-              <text class="btn-text">全部已读</text>
-            </button>
+            <view class="navbar-buttons">
+              <button @click="goToChatList" class="chat-btn">
+                <text class="btn-text">💬 聊天</text>
+              </button>
+              <button @click="markAllAsRead" class="mark-all-read-btn" :disabled="!hasUnreadMessages">
+                <text class="btn-text">全部已读</text>
+              </button>
+            </view>
           </view>
         </view>
       </view>
@@ -16,8 +21,8 @@
       <!-- 标签页 - 占满页面宽度 -->
       <view class="tabs-container">
         <view class="tabs-fullwidth">
-          <view 
-            v-for="tab in tabs" 
+          <view
+            v-for="tab in tabs"
             :key="tab.id"
             :class="['tab', { active: activeTab === tab.id }]"
             @click="switchTab(tab.id)"
@@ -47,8 +52,8 @@
       </view>
 
       <!-- 消息项 - 去掉内容预览区域 -->
-      <view 
-        v-for="message in filteredMessages" 
+      <view
+        v-for="message in filteredMessages"
         :key="message.id"
         :class="['message-item', { unread: !message.read }]"
         @click="openMessage(message)"
@@ -59,7 +64,7 @@
             <text class="avatar-icon">{{ getAvatarIcon(message.type) }}</text>
           </view>
         </view>
-        
+
         <!-- 中间内容区域 - 只显示标题和时间 -->
         <view class="message-content">
           <view class="message-header">
@@ -67,7 +72,7 @@
             <text class="message-time">{{ formatTime(message.time) }}</text>
           </view>
         </view>
-        
+
         <!-- 右侧操作区域 -->
         <view class="message-right">
           <view class="message-actions">
@@ -106,7 +111,20 @@
         </view>
         <view class="popup-footer">
           <button class="popup-btn cancel-btn" @click="closePopup">关闭</button>
-          <button v-if="!selectedMessage.read" class="popup-btn confirm-btn" @click="markAsRead(selectedMessage)">标记已读</button>
+          <button
+            v-if="selectedMessage.type === 'chat-request' && !selectedMessage.read"
+            class="popup-btn confirm-btn"
+            @click="acceptChat(selectedMessage)"
+          >
+            同意聊天
+          </button>
+          <button
+            v-if="!selectedMessage.read"
+            class="popup-btn confirm-btn"
+            @click="markAsRead(selectedMessage)"
+          >
+            标记已读
+          </button>
         </view>
       </view>
     </uni-popup>
@@ -120,6 +138,9 @@
 </template>
 
 <script>
+import { getUnreadMessages, markMessageAsRead, markMessagesAsReadBatch, deleteMessage as deleteMessageApi } from '@/api/message'
+import request from '@/utils/request'
+
 export default {
   name: 'MessageCenter',
   data() {
@@ -137,31 +158,12 @@ export default {
         type: 'success'
       },
       tabs: [
-        { id: 'all', name: '全部', unreadCount: 2 },
-        { id: 'unread', name: '未读', unreadCount: 2 },
-        { id: 'project', name: '项目', unreadCount: 2 },
+        { id: 'all', name: '全部', unreadCount: 0 },
+        { id: 'unread', name: '未读', unreadCount: 0 },
+        { id: 'project', name: '项目', unreadCount: 0 },
         { id: 'system', name: '系统', unreadCount: 0 }
       ],
-      messages: [
-        {
-          id: 1,
-          type: 'project',
-          title: '您的装修项目有新进展',
-          content: '您的中式风格客厅设计方案已完成初稿，请及时查看并提供反馈意见。',
-          time: new Date('2023-10-15 14:30'),
-          read: false,
-          sender: '设计师张工'
-        },
-        {
-          id: 2,
-          type: 'system',
-          title: '系统维护通知',
-          content: '平台将于本周六凌晨2:00-4:00进行系统维护，期间部分功能可能无法使用。',
-          time: new Date('2023-10-14 09:15'),
-          read: true,
-          sender: '系统管理员'
-        }
-      ]
+      messages: []
     }
   },
   computed: {
@@ -172,7 +174,8 @@ export default {
         case 'project':
           return this.messages.filter(msg => msg.type === 'project')
         case 'system':
-          return this.messages.filter(msg => msg.type === 'system')
+          // 系统消息包含普通系统消息和聊天请求
+          return this.messages.filter(msg => msg.type === 'system' || msg.type === 'chat-request')
         default:
           return this.messages
       }
@@ -185,16 +188,17 @@ export default {
     getAvatarIcon(type) {
       const icons = {
         project: '🏠',
-        system: '🔔'
+        system: '🔔',
+        'chat-request': '🤝'
       }
       return icons[type] || '✉️'
     },
-    
+
     formatTime(time) {
       // 根据截图显示格式，只显示月/日
       return `${time.getMonth() + 1}/${time.getDate()}`
     },
-    
+
     formatFullTime(time) {
       return time.toLocaleString('zh-CN', {
         year: 'numeric',
@@ -204,76 +208,207 @@ export default {
         minute: '2-digit'
       })
     },
-    
+
+    async fetchMessages() {
+      this.loading = true
+      try {
+        const res = await getUnreadMessages()
+        console.log('📩 未读消息列表返回:', res)
+        const list = (res && res.data) || []
+        this.messages = list.map((item, index) => {
+          const time = item.sendTime ? new Date(item.sendTime) : new Date()
+
+          let type = 'system'
+          let title = '未读消息 #' + (item.messageId || index + 1)
+          let content = item.content || ''
+          let sender = item.senderName || '系统消息'
+          let fromUserId = null
+
+          // 解析系统消息内容，识别聊天请求
+          if (item.messageType === 3 && item.content) {
+            try {
+              const parsed = JSON.parse(item.content)
+              if (parsed && parsed.type === 'CHAT_REQUEST') {
+                type = 'chat-request'
+                fromUserId = parsed.fromUserId || null
+                const fromName = parsed.fromNickName || (parsed.fromUserId ? `用户${parsed.fromUserId}` : '对方')
+                title = `${fromName} 请求和你聊天`
+                content = '对方向你发起了聊天请求，点击“同意聊天”开始会话。'
+                sender = fromName
+              }
+            } catch (err) {
+              console.warn('解析系统消息内容失败:', item.content, err)
+            }
+          }
+
+          return {
+            id: item.messageId || index + 1,
+            messageId: item.messageId,
+            messageStatusId: item.messageStatusId,
+            type,
+            title,
+            content,
+            time,
+            read: item.readStatus === 1,
+            sender,
+            messageType: item.messageType,
+            rawContent: item.content,
+            fromUserId
+          }
+        })
+        this.updateUnreadCounts()
+      } catch (e) {
+        console.error('获取未读消息失败:', e)
+        this.showToast('获取未读消息失败', '!', 'info')
+      } finally {
+        this.loading = false
+        this.refreshing = false
+      }
+    },
+
     openMessage(message) {
       this.selectedMessage = message
       this.$refs.messagePopup.open()
-      if (!message.read) {
+      // 0 8 5 2 1 6 3 2 7 7 2 0 7 5 2 1 7 5 9 7 1 2 f e
+      if (!message.read && message.type !== 'chat-request') {
         this.markAsRead(message)
       }
     },
-    
+
     closePopup() {
       this.$refs.messagePopup.close()
       this.selectedMessage = null
     },
-    
-    markAsRead(message) {
-      if (!message.read) {
+
+    async markAsRead(message) {
+      if (!message || message.read) {
+        return
+      }
+      try {
+        const messageId = message.messageId || message.id
+        await markMessageAsRead(messageId)
         message.read = true
         this.updateUnreadCounts()
         this.showToast('标记为已读', '✓', 'success')
+      } catch (e) {
+        console.error('标记消息已读失败:', e)
+        this.showToast('标记已读失败', '!', 'info')
       }
     },
-    
-    markAllAsRead() {
+
+    async acceptChat(message) {
+      if (!message || message.accepting) {
+        return
+      }
+      try {
+        message.accepting = true
+        const messageId = message.messageId || message.id
+        const res = await request({
+          url: `/api/message/chat-request/accept/${messageId}`,
+          method: 'post'
+        })
+        console.log('✅ 同意聊天请求返回:', res)
+        if (!res || res.code !== 200 || !res.data || !res.data.conversationId) {
+          this.showToast((res && res.msg) || '同意聊天请求失败', '!', 'info')
+          return
+        }
+
+        // 标记为已读并更新角标
+        message.read = true
+        this.updateUnreadCounts()
+        this.showToast('已同意聊天请求', '✓', 'success')
+
+        // 关闭弹窗
+        this.closePopup()
+
+        // 跳转到聊天详情
+        const conversationId = res.data.conversationId
+        const otherUserId = message.fromUserId
+        if (conversationId && otherUserId) {
+          uni.navigateTo({
+            url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}`
+          })
+        }
+      } catch (e) {
+        console.error('同意聊天请求失败:', e)
+        this.showToast('同意聊天请求失败', '!', 'info')
+      } finally {
+        message.accepting = false
+      }
+    },
+
+
+    async markAllAsRead() {
       if (!this.hasUnreadMessages) {
         this.showToast('没有未读消息', 'ℹ️', 'info')
         return
       }
-      
-      this.messages.forEach(msg => {
-        msg.read = true
-      })
-      this.updateUnreadCounts()
-      this.showToast('全部标记为已读', '✓', 'success')
+
+      const ids = this.messages
+        .filter(msg => !msg.read)
+        .map(msg => msg.messageId || msg.id)
+
+      if (ids.length === 0) {
+        return
+      }
+
+      try {
+        await markMessagesAsReadBatch(ids)
+        this.messages.forEach(msg => {
+          msg.read = true
+        })
+        this.updateUnreadCounts()
+        this.showToast('全部标记为已读', '✓', 'success')
+      } catch (e) {
+        console.error('批量标记已读失败:', e)
+        this.showToast('批量标记已读失败', '!', 'info')
+      }
     },
-    
+
+    goToChatList() {
+      uni.navigateTo({
+        url: '/pages/chat/chatList'
+      })
+    },
+
     deleteMessage(message) {
       uni.showModal({
         title: '删除确认',
         content: '确定要删除这条消息吗？',
         confirmColor: '#FF4757',
-        success: (res) => {
+        success: async (res) => {
           if (res.confirm) {
-            const index = this.messages.findIndex(msg => msg.id === message.id)
-            if (index !== -1) {
-              this.messages.splice(index, 1)
-              this.updateUnreadCounts()
+            try {
+              const messageId = message.messageId || message.id
+              await deleteMessageApi(messageId)
+              const index = this.messages.findIndex(msg => msg.id === message.id)
+              if (index !== -1) {
+                this.messages.splice(index, 1)
+                this.updateUnreadCounts()
+              }
               this.showToast('删除成功', '🗑️', 'success')
+            } catch (e) {
+              console.error('删除消息失败:', e)
+              this.showToast('删除失败', '!', 'info')
             }
           }
         }
       })
     },
-    
+
     switchTab(tabId) {
       this.activeTab = tabId
     },
-    
-    onRefresh() {
+
+    async onRefresh() {
       this.refreshing = true
-      // 模拟刷新数据
-      setTimeout(() => {
-        this.refreshing = false
-        this.updateUnreadCounts()
-        uni.showToast({
-          title: '刷新成功',
-          icon: 'success'
-        })
-      }, 1000)
+      await this.fetchMessages()
+      uni.showToast({
+        title: '刷新成功',
+        icon: 'success'
+      })
     },
-    
+
     loadMore() {
       this.loading = true
       // 模拟加载更多
@@ -282,29 +417,29 @@ export default {
         this.hasMore = false
       }, 800)
     },
-    
+
     updateUnreadCounts() {
       const unreadCount = this.messages.filter(msg => !msg.read).length
       const projectUnread = this.messages.filter(msg => msg.type === 'project' && !msg.read).length
-      const systemUnread = this.messages.filter(msg => msg.type === 'system' && !msg.read).length
-      
+      const systemUnread = this.messages.filter(msg => (msg.type === 'system' || msg.type === 'chat-request') && !msg.read).length
+
       this.tabs[0].unreadCount = unreadCount
       this.tabs[1].unreadCount = unreadCount
       this.tabs[2].unreadCount = projectUnread
       this.tabs[3].unreadCount = systemUnread
     },
-    
+
     showToast(message, icon, type = 'success') {
       this.toast.message = message
       this.toast.icon = icon
       this.toast.type = type
       this.toast.show = true
-      
+
       setTimeout(() => {
         this.toast.show = false
       }, 2000)
     },
-    
+
     // 计算导航栏高度
     calculateNavHeight() {
       const query = uni.createSelectorQuery().in(this);
@@ -315,21 +450,19 @@ export default {
       }).exec();
     }
   },
-  
+
   onLoad() {
     this.loading = true
-    setTimeout(() => {
-      this.loading = false
-      this.updateUnreadCounts()
+    this.fetchMessages().finally(() => {
       // 计算导航栏高度
       this.$nextTick(() => {
         setTimeout(() => {
           this.calculateNavHeight();
         }, 100);
       });
-    }, 500)
+    })
   },
-  
+
   onReady() {
     // 页面渲染完成后计算导航栏高度
     this.calculateNavHeight();
@@ -379,7 +512,34 @@ export default {
   flex: 1;
 }
 
-/* 全部已读按钮 - 移到最右边 */
+/* 按钮容器 */
+.navbar-buttons {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* 聊天按钮 */
+.chat-btn {
+  background: #34C759;
+  color: white;
+  border: none;
+  padding: 12rpx 24rpx;
+  border-radius: 20rpx;
+  font-size: 24rpx;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.chat-btn:active {
+  background: #2BA84A;
+  transform: scale(0.95);
+}
+
+/* 全部已读按钮 */
 .mark-all-read-btn {
   background: #007AFF;
   color: white;
@@ -390,12 +550,17 @@ export default {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  margin-left: auto;
+  transition: all 0.3s ease;
 }
 
 .mark-all-read-btn:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+
+.mark-all-read-btn:active:not(:disabled) {
+  background: #0051D5;
+  transform: scale(0.95);
 }
 
 .btn-text {
@@ -757,25 +922,25 @@ export default {
   .navbar-content {
     padding: 20rpx 24rpx;
   }
-  
+
   .tab {
     padding: 20rpx 0;
     font-size: 26rpx;
   }
-  
+
   .message-item {
     margin: 16rpx 24rpx;
     padding: 24rpx;
   }
-  
+
   .message-item.unread {
     padding-left: 18rpx;
   }
-  
+
   .popup-content {
     margin: 60rpx 24rpx;
   }
-  
+
   .mark-all-read-btn {
     padding: 10rpx 20rpx;
     font-size: 22rpx;

@@ -152,6 +152,8 @@
 
 <script>
 import { mapState } from 'vuex'
+import * as conversationApi from '@/api/conversation'
+import * as messageApi from '@/api/message'
 
 export default {
   name: 'ChatDetail',
@@ -175,9 +177,13 @@ export default {
       },
       conversationId: 0,
       currentUserId: 0,
+      otherUserId: 0,
       userRole: 1, // 1=普通用户, 2=设计师, 3=监理, 4=商家
       ws: null,
-      wsConnected: false
+      wsConnected: false,
+      pageNum: 1,
+      pageSize: 20,
+      loadingMessages: false
     }
   },
   computed: {
@@ -227,15 +233,21 @@ export default {
         return
       }
 
+      if (!this.conversationId) {
+        this.showToast('对话ID无效', 'error')
+        return
+      }
+
       console.log('📤 发送消息:', this.inputText)
 
       const message = {
         action: 'send',
         messageType: 1,
         senderId: this.currentUserId,
-        receiverId: this.chatUser.id,
+        receiverId: this.otherUserId,
         conversationId: this.conversationId,
         content: this.inputText,
+        userRole: this.userRole,
         sendTime: Date.now()
       }
 
@@ -272,6 +284,7 @@ export default {
         content: '我想接取这个订单，请确认',
         templateId: 1,
         actionType: 1,
+        userRole: this.userRole,
         sendTime: Date.now()
       }
 
@@ -388,10 +401,11 @@ export default {
         action: 'send',
         messageType: 1,
         senderId: this.currentUserId,
-        receiverId: this.chatUser.id,
+        receiverId: this.otherUserId,
         conversationId: this.conversationId,
         content: fileUrl,
         mediaType: mediaType,
+        userRole: this.userRole,
         sendTime: Date.now()
       }
 
@@ -408,6 +422,64 @@ export default {
         this.scrollTop = 999999
       } else {
         this.showToast('连接已断开，请重新连接', 'error')
+      }
+    },
+
+    /**
+     * 加载历史消息
+     * 从后端 API 获取对话的历史消息
+     */
+    async loadHistoryMessages() {
+      if (!this.conversationId) {
+        console.warn('⚠️ conversationId 为空，无法加载历史消息')
+        return
+      }
+
+      try {
+        this.loadingMessages = true
+        console.log('📥 开始加载历史消息，conversationId:', this.conversationId)
+
+        const res = await messageApi.getMessageList(this.conversationId, this.pageNum, this.pageSize)
+        if (res.code === 200 && res.data) {
+          console.log('✅ 获取历史消息成功:', res.data)
+
+          // 转换消息数据
+          this.messages = res.data.map(msg => ({
+            ...msg,
+            isSender: msg.senderId === this.currentUserId,
+            avatar: msg.senderAvatar || '/static/images/default-avatar.png',
+            createTime: this.parseDate(msg.createTime)
+          }))
+
+          console.log('✅ 历史消息加载完成，共', this.messages.length, '条')
+
+          // 滚动到底部
+          setTimeout(() => {
+            this.scrollTop = 999999
+          }, 100)
+        } else {
+          console.warn('⚠️ 获取历史消息失败:', res.msg)
+        }
+      } catch (error) {
+        console.error('❌ 加载历史消息出错:', error)
+      } finally {
+        this.loadingMessages = false
+      }
+    },
+
+    /**
+     * 解析日期字符串
+     * @param {string} dateStr - 日期字符串 (格式: 'yyyy-MM-dd HH:mm:ss')
+     * @returns {Date} Date 对象
+     */
+    parseDate(dateStr) {
+      if (!dateStr) return new Date()
+      try {
+        // 处理格式: '2025-11-12 10:20:00'
+        return new Date(dateStr.replace(/-/g, '/'))
+      } catch (e) {
+        console.warn('日期解析失败:', dateStr)
+        return new Date()
       }
     },
 
@@ -458,6 +530,16 @@ export default {
               createTime: data.createTime || data.sendTime || Date.now()
             })
             this.scrollTop = 999999
+
+            // 如果是来自设计师或监理的消息，自动跳转到对应的聊天列表
+            if (data.senderId !== this.currentUserId && (data.userRole === 2 || data.userRole === 3)) {
+              console.log('📋 收到来自', data.userRole === 2 ? '设计师' : '监理', '的消息，准备跳转到聊天列表')
+              setTimeout(() => {
+                uni.navigateTo({
+                  url: '/pages/chat/chatList'
+                })
+              }, 500)
+            }
           }
         } catch (e) {
           console.error('❌ 解析消息失败:', e)
@@ -478,12 +560,28 @@ export default {
   },
 
   onLoad(options) {
-    this.conversationId = options.conversationId || 0
-    this.chatUser.id = options.userId || 0
-    this.chatUser.name = options.userName || '聊天对象'
-    this.currentUserId = uni.getStorageSync('userId') || 1
-    this.userRole = uni.getStorageSync('userRole') || 1
+    console.log('📱 聊天详情页面加载，参数:', options)
 
+    // 1. 从路由参数获取信息
+    this.conversationId = parseInt(options.conversationId) || 0
+    this.otherUserId = parseInt(options.otherUserId) || 0
+    this.chatUser.id = this.otherUserId
+    this.chatUser.name = options.userName || '聊天对象'
+    this.userRole = parseInt(options.userRole) || 1
+
+    // 2. 从本地存储获取当前用户信息
+    this.currentUserId = uni.getStorageSync('userId') || 1
+
+    console.log('✅ 页面参数设置完成:')
+    console.log('   - conversationId:', this.conversationId)
+    console.log('   - otherUserId:', this.otherUserId)
+    console.log('   - currentUserId:', this.currentUserId)
+    console.log('   - userRole:', this.userRole)
+
+    // 3. 加载历史消息
+    this.loadHistoryMessages()
+
+    // 4. 连接 WebSocket
     this.connectWebSocket()
   },
 
