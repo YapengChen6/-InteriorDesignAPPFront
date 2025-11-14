@@ -6,36 +6,53 @@
         <view class="navbar-content">
           <view class="navbar-title">
             <text class="title-text">消息中心</text>
-            <view class="navbar-buttons">
-              <button @click="goToChatList" class="chat-btn">
-                <text class="btn-text">💬 聊天</text>
-              </button>
-              <button @click="markAllAsRead" class="mark-all-read-btn" :disabled="!hasUnreadMessages">
-                <text class="btn-text">全部已读</text>
-              </button>
-            </view>
+            <button @click="markAllAsRead" class="mark-all-read-btn" :disabled="!hasUnreadMessages || loading">
+              <text class="btn-text">{{ loading ? '处理中...' : '全部已读' }}</text>
+            </button>
           </view>
+        </view>
+      </view>
+
+      <!-- 搜索框 -->
+      <view class="search-container">
+        <view class="search-box">
+          <text class="search-icon">🔍</text>
+          <input 
+            v-model="searchKeyword" 
+            class="search-input" 
+            placeholder="搜索消息..." 
+            @input="onSearch"
+          />
+          <text v-if="searchKeyword" class="clear-icon" @click="clearSearch">×</text>
         </view>
       </view>
 
       <!-- 标签页 - 占满页面宽度 -->
       <view class="tabs-container">
         <view class="tabs-fullwidth">
-          <view
-            v-for="tab in tabs"
+          <view 
+            v-for="tab in tabs" 
             :key="tab.id"
             :class="['tab', { active: activeTab === tab.id }]"
             @click="switchTab(tab.id)"
           >
             <text class="tab-text">{{ tab.name }}</text>
-            <text v-if="tab.unreadCount > 0" class="badge">{{ tab.unreadCount }}</text>
+            <text v-if="tab.unreadCount > 0" class="badge">{{ tab.unreadCount > 99 ? '99+' : tab.unreadCount }}</text>
           </view>
         </view>
       </view>
     </view>
 
     <!-- 消息列表 - 添加顶部内边距避免被导航栏遮挡 -->
-    <scroll-view class="message-list" scroll-y="true" refresher-enabled="true" :refresher-triggered="refreshing" @refresherrefresh="onRefresh" :style="{ paddingTop: navHeight + 'px' }">
+    <scroll-view 
+      class="message-list" 
+      scroll-y="true" 
+      refresher-enabled="true" 
+      :refresher-triggered="refreshing" 
+      @refresherrefresh="onRefresh" 
+      @scrolltolower="loadMore"
+      :style="{ paddingTop: navHeight + 'px' }"
+    >
       <!-- 下拉刷新 -->
       <view class="refresher" v-if="refreshing">
         <view class="refresher-loading">
@@ -44,17 +61,26 @@
         </view>
       </view>
 
-      <!-- 空状态 -->
-      <view v-if="filteredMessages.length === 0 && !loading" class="empty-state">
-        <image class="empty-image" src="/static/images/empty-message.png" mode="aspectFit"></image>
-        <text class="empty-text">暂无消息</text>
-        <text class="empty-desc">当有新消息时，会在这里显示</text>
+      <!-- 加载状态 -->
+      <view v-if="loading && messages.length === 0" class="loading-state">
+        <view class="loading-spinner large"></view>
+        <text class="loading-text">加载中...</text>
       </view>
 
-      <!-- 消息项 - 去掉内容预览区域 -->
-      <view
-        v-for="message in filteredMessages"
-        :key="message.id"
+      <!-- 空状态 -->
+      <view v-else-if="filteredMessages.length === 0 && !loading" class="empty-state">
+        <image class="empty-image" src="/static/images/empty-message.png" mode="aspectFit"></image>
+        <text class="empty-text">{{ searchKeyword ? '未找到相关消息' : '暂无消息' }}</text>
+        <text class="empty-desc">{{ searchKeyword ? '尝试更换搜索关键词' : '当有新消息时，会在这里显示' }}</text>
+        <button v-if="searchKeyword" class="retry-btn" @click="clearSearch">
+          <text class="retry-text">清空搜索</text>
+        </button>
+      </view>
+
+      <!-- 消息项 -->
+      <view 
+        v-for="message in filteredMessages" 
+        :key="message.messageId"
         :class="['message-item', { unread: !message.read }]"
         @click="openMessage(message)"
       >
@@ -64,19 +90,22 @@
             <text class="avatar-icon">{{ getAvatarIcon(message.type) }}</text>
           </view>
         </view>
-
-        <!-- 中间内容区域 - 只显示标题和时间 -->
+        
+        <!-- 中间内容区域 -->
         <view class="message-content">
           <view class="message-header">
             <text class="message-title">{{ message.title }}</text>
             <text class="message-time">{{ formatTime(message.time) }}</text>
           </view>
+          <view class="message-preview">
+            <text class="preview-text">{{ message.content }}</text>
+          </view>
         </view>
-
+        
         <!-- 右侧操作区域 -->
         <view class="message-right">
           <view class="message-actions">
-            <button @click.stop="deleteMessage(message)" class="action-btn delete-btn">
+            <button @click.stop="deleteMessage(message)" class="action-btn delete-btn" :disabled="loading">
               <text class="btn-text">删除</text>
             </button>
           </view>
@@ -86,8 +115,13 @@
       <!-- 加载更多 -->
       <view v-if="hasMore && filteredMessages.length > 0" class="load-more">
         <view class="load-more-content" @click="loadMore">
-          <text class="load-more-text">加载更多</text>
+          <text class="load-more-text">{{ loadingMore ? '加载中...' : '加载更多' }}</text>
         </view>
+      </view>
+
+      <!-- 没有更多数据 -->
+      <view v-if="!hasMore && filteredMessages.length > 0" class="no-more">
+        <text class="no-more-text">没有更多消息了</text>
       </view>
     </scroll-view>
 
@@ -111,19 +145,8 @@
         </view>
         <view class="popup-footer">
           <button class="popup-btn cancel-btn" @click="closePopup">关闭</button>
-          <button
-            v-if="selectedMessage.type === 'chat-request' && !selectedMessage.read"
-            class="popup-btn confirm-btn"
-            @click="acceptChat(selectedMessage)"
-          >
-            同意聊天
-          </button>
-          <button
-            v-if="!selectedMessage.read"
-            class="popup-btn confirm-btn"
-            @click="markAsRead(selectedMessage)"
-          >
-            标记已读
+          <button v-if="!selectedMessage.read" class="popup-btn confirm-btn" @click="markAsRead(selectedMessage)">
+            {{ loading ? '处理中...' : '标记已读' }}
           </button>
         </view>
       </view>
@@ -138,8 +161,14 @@
 </template>
 
 <script>
-import { getUnreadMessages, markMessageAsRead, markMessagesAsReadBatch, deleteMessage as deleteMessageApi } from '@/api/message'
-import request from '@/utils/request'
+import { 
+  getMessageList, 
+  getUnreadCount, 
+  getUnreadMessages, 
+  markMessageAsRead, 
+  markMessagesAsReadBatch, 
+  deleteMessage 
+} from '@/api/message'
 
 export default {
   name: 'MessageCenter',
@@ -147,10 +176,12 @@ export default {
     return {
       activeTab: 'all',
       loading: false,
+      loadingMore: false,
       refreshing: false,
       hasMore: true,
       selectedMessage: null,
-      navHeight: 120, // 默认导航栏高度
+      searchKeyword: '',
+      navHeight: 160, // 增加高度适应搜索框
       toast: {
         show: false,
         message: '',
@@ -163,21 +194,43 @@ export default {
         { id: 'project', name: '项目', unreadCount: 0 },
         { id: 'system', name: '系统', unreadCount: 0 }
       ],
-      messages: []
+      messages: [],
+      pagination: {
+        pageNum: 1,
+        pageSize: 20,
+        total: 0
+      },
+      // 当前用户信息（从全局状态获取）
+      currentUser: {
+        userId: 1,
+        conversationId: 1
+      }
     }
   },
   computed: {
     filteredMessages() {
+      let filtered = this.messages;
+      
+      // 搜索过滤
+      if (this.searchKeyword) {
+        const keyword = this.searchKeyword.toLowerCase();
+        filtered = filtered.filter(msg => 
+          msg.title.toLowerCase().includes(keyword) || 
+          msg.content.toLowerCase().includes(keyword) ||
+          msg.sender.toLowerCase().includes(keyword)
+        );
+      }
+      
+      // 标签过滤
       switch (this.activeTab) {
         case 'unread':
-          return this.messages.filter(msg => !msg.read)
+          return filtered.filter(msg => !msg.read)
         case 'project':
-          return this.messages.filter(msg => msg.type === 'project')
+          return filtered.filter(msg => msg.type === 'project')
         case 'system':
-          // 系统消息包含普通系统消息和聊天请求
-          return this.messages.filter(msg => msg.type === 'system' || msg.type === 'chat-request')
+          return filtered.filter(msg => msg.type === 'system')
         default:
-          return this.messages
+          return filtered
       }
     },
     hasUnreadMessages() {
@@ -185,21 +238,67 @@ export default {
     }
   },
   methods: {
+    // 格式化消息数据
+    formatMessage(apiMessage) {
+      return {
+        messageId: apiMessage.messageId,
+        type: this.getMessageType(apiMessage.messageType),
+        title: apiMessage.title || '新消息',
+        content: apiMessage.content,
+        time: new Date(apiMessage.sendTime),
+        read: apiMessage.readStatus === 1, // 假设1为已读，0为未读
+        sender: apiMessage.senderName || '系统',
+        conversationId: apiMessage.conversationId
+      }
+    },
+    
+    getMessageType(messageType) {
+      const typeMap = {
+        'project': 'project',
+        'system': 'system',
+        'notification': 'system',
+        'chat': 'project'
+      }
+      return typeMap[messageType] || 'system'
+    },
+    
     getAvatarIcon(type) {
       const icons = {
         project: '🏠',
         system: '🔔',
-        'chat-request': '🤝'
+        chat: '💬'
       }
       return icons[type] || '✉️'
     },
-
+    
     formatTime(time) {
-      // 根据截图显示格式，只显示月/日
-      return `${time.getMonth() + 1}/${time.getDate()}`
+      if (!(time instanceof Date)) {
+        time = new Date(time)
+      }
+      const now = new Date()
+      const diff = now - time
+      const oneDay = 24 * 60 * 60 * 1000
+      
+      if (diff < oneDay) {
+        // 今天内的消息显示时间
+        return time.toLocaleTimeString('zh-CN', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
+      } else if (diff < 7 * oneDay) {
+        // 一周内的消息显示星期
+        const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+        return `周${weekdays[time.getDay()]}`
+      } else {
+        // 更早的消息显示日期
+        return `${time.getMonth() + 1}/${time.getDate()}`
+      }
     },
-
+    
     formatFullTime(time) {
+      if (!(time instanceof Date)) {
+        time = new Date(time)
+      }
       return time.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
@@ -208,170 +307,146 @@ export default {
         minute: '2-digit'
       })
     },
-
-    async fetchMessages() {
-      this.loading = true
+    
+    // 加载消息列表
+    async loadMessages(refresh = false) {
+      if (this.loading) return
+      
       try {
-        const res = await getUnreadMessages()
-        console.log('📩 未读消息列表返回:', res)
-        const list = (res && res.data) || []
-        this.messages = list.map((item, index) => {
-          const time = item.sendTime ? new Date(item.sendTime) : new Date()
-
-          let type = 'system'
-          let title = '未读消息 #' + (item.messageId || index + 1)
-          let content = item.content || ''
-          let sender = item.senderName || '系统消息'
-          let fromUserId = null
-
-          // 解析系统消息内容，识别聊天请求
-          if (item.messageType === 3 && item.content) {
-            try {
-              const parsed = JSON.parse(item.content)
-              if (parsed && parsed.type === 'CHAT_REQUEST') {
-                type = 'chat-request'
-                fromUserId = parsed.fromUserId || null
-                const fromName = parsed.fromNickName || (parsed.fromUserId ? `用户${parsed.fromUserId}` : '对方')
-                title = `${fromName} 请求和你聊天`
-                content = '对方向你发起了聊天请求，点击“同意聊天”开始会话。'
-                sender = fromName
-              }
-            } catch (err) {
-              console.warn('解析系统消息内容失败:', item.content, err)
-            }
+        this.loading = true
+        if (refresh) {
+          this.pagination.pageNum = 1
+          this.hasMore = true
+        }
+        
+        const params = {
+          conversationId: this.currentUser.conversationId,
+          pageNum: this.pagination.pageNum,
+          pageSize: this.pagination.pageSize
+        }
+        
+        const response = await getMessageList(params.conversationId, params.pageNum, params.pageSize)
+        
+        if (response.code === 200) {
+          const newMessages = response.data.map(msg => this.formatMessage(msg))
+          
+          if (refresh) {
+            this.messages = newMessages
+          } else {
+            this.messages = [...this.messages, ...newMessages]
           }
-
-          return {
-            id: item.messageId || index + 1,
-            messageId: item.messageId,
-            messageStatusId: item.messageStatusId,
-            type,
-            title,
-            content,
-            time,
-            read: item.readStatus === 1,
-            sender,
-            messageType: item.messageType,
-            rawContent: item.content,
-            fromUserId
-          }
-        })
-        this.updateUnreadCounts()
-      } catch (e) {
-        console.error('获取未读消息失败:', e)
-        this.showToast('获取未读消息失败', '!', 'info')
+          
+          // 更新分页信息
+          this.hasMore = newMessages.length === this.pagination.pageSize
+          this.pagination.pageNum++
+          
+          // 更新未读数量
+          await this.updateUnreadCounts()
+        } else {
+          this.showToast('加载消息失败', '❌', 'error')
+        }
+      } catch (error) {
+        console.error('加载消息异常:', error)
+        this.showToast('网络异常，请重试', '❌', 'error')
       } finally {
         this.loading = false
         this.refreshing = false
+        this.loadingMore = false
       }
     },
-
+    
+    // 更新未读数量
+    async updateUnreadCounts() {
+      try {
+        const response = await getUnreadCount(this.currentUser.userId)
+        if (response.code === 200) {
+          const totalUnread = response.data
+          
+          // 获取各类型未读数量（这里需要根据实际业务调整）
+          const projectUnread = this.messages.filter(msg => msg.type === 'project' && !msg.read).length
+          const systemUnread = this.messages.filter(msg => msg.type === 'system' && !msg.read).length
+          
+          this.tabs[0].unreadCount = totalUnread
+          this.tabs[1].unreadCount = totalUnread
+          this.tabs[2].unreadCount = projectUnread
+          this.tabs[3].unreadCount = systemUnread
+        }
+      } catch (error) {
+        console.error('获取未读数量异常:', error)
+      }
+    },
+    
     openMessage(message) {
       this.selectedMessage = message
       this.$refs.messagePopup.open()
-      // 0 8 5 2 1 6 3 2 7 7 2 0 7 5 2 1 7 5 9 7 1 2 f e
-      if (!message.read && message.type !== 'chat-request') {
+      if (!message.read) {
         this.markAsRead(message)
       }
     },
-
+    
     closePopup() {
       this.$refs.messagePopup.close()
       this.selectedMessage = null
     },
-
+    
+    // 标记单条消息为已读
     async markAsRead(message) {
-      if (!message || message.read) {
-        return
-      }
+      if (this.loading) return
+      
       try {
-        const messageId = message.messageId || message.id
-        await markMessageAsRead(messageId)
-        message.read = true
-        this.updateUnreadCounts()
-        this.showToast('标记为已读', '✓', 'success')
-      } catch (e) {
-        console.error('标记消息已读失败:', e)
-        this.showToast('标记已读失败', '!', 'info')
+        this.loading = true
+        const response = await markMessageAsRead(message.messageId, this.currentUser.userId)
+        
+        if (response.code === 200) {
+          message.read = true
+          await this.updateUnreadCounts()
+          this.showToast('标记为已读', '✓', 'success')
+        } else {
+          this.showToast('操作失败', '❌', 'error')
+        }
+      } catch (error) {
+        console.error('标记已读异常:', error)
+        this.showToast('网络异常', '❌', 'error')
+      } finally {
+        this.loading = false
       }
     },
-
-    async acceptChat(message) {
-      if (!message || message.accepting) {
-        return
-      }
+    
+    // 标记全部为已读
+    async markAllAsRead() {
+      if (this.loading || !this.hasUnreadMessages) return
+      
       try {
-        message.accepting = true
-        const messageId = message.messageId || message.id
-        const res = await request({
-          url: `/api/message/chat-request/accept/${messageId}`,
-          method: 'post'
-        })
-        console.log('✅ 同意聊天请求返回:', res)
-        if (!res || res.code !== 200 || !res.data || !res.data.conversationId) {
-          this.showToast((res && res.msg) || '同意聊天请求失败', '!', 'info')
+        this.loading = true
+        const unreadMessages = this.messages.filter(msg => !msg.read)
+        const messageIds = unreadMessages.map(msg => msg.messageId)
+        
+        if (messageIds.length === 0) {
+          this.showToast('没有未读消息', 'ℹ️', 'info')
           return
         }
-
-        // 标记为已读并更新角标
-        message.read = true
-        this.updateUnreadCounts()
-        this.showToast('已同意聊天请求', '✓', 'success')
-
-        // 关闭弹窗
-        this.closePopup()
-
-        // 跳转到聊天详情
-        const conversationId = res.data.conversationId
-        const otherUserId = message.fromUserId
-        if (conversationId && otherUserId) {
-          uni.navigateTo({
-            url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}`
+        
+        const response = await markMessagesAsReadBatch(messageIds, this.currentUser.userId)
+        
+        if (response.code === 200) {
+          this.messages.forEach(msg => {
+            if (!msg.read) msg.read = true
           })
+          await this.updateUnreadCounts()
+          this.showToast('全部标记为已读', '✓', 'success')
+        } else {
+          this.showToast('操作失败', '❌', 'error')
         }
-      } catch (e) {
-        console.error('同意聊天请求失败:', e)
-        this.showToast('同意聊天请求失败', '!', 'info')
+      } catch (error) {
+        console.error('批量标记已读异常:', error)
+        this.showToast('网络异常', '❌', 'error')
       } finally {
-        message.accepting = false
+        this.loading = false
       }
     },
-
-
-    async markAllAsRead() {
-      if (!this.hasUnreadMessages) {
-        this.showToast('没有未读消息', 'ℹ️', 'info')
-        return
-      }
-
-      const ids = this.messages
-        .filter(msg => !msg.read)
-        .map(msg => msg.messageId || msg.id)
-
-      if (ids.length === 0) {
-        return
-      }
-
-      try {
-        await markMessagesAsReadBatch(ids)
-        this.messages.forEach(msg => {
-          msg.read = true
-        })
-        this.updateUnreadCounts()
-        this.showToast('全部标记为已读', '✓', 'success')
-      } catch (e) {
-        console.error('批量标记已读失败:', e)
-        this.showToast('批量标记已读失败', '!', 'info')
-      }
-    },
-
-    goToChatList() {
-      uni.navigateTo({
-        url: '/pages/chat/chatList'
-      })
-    },
-
-    deleteMessage(message) {
+    
+    // 删除消息
+    async deleteMessage(message) {
       uni.showModal({
         title: '删除确认',
         content: '确定要删除这条消息吗？',
@@ -379,93 +454,110 @@ export default {
         success: async (res) => {
           if (res.confirm) {
             try {
-              const messageId = message.messageId || message.id
-              await deleteMessageApi(messageId)
-              const index = this.messages.findIndex(msg => msg.id === message.id)
-              if (index !== -1) {
-                this.messages.splice(index, 1)
-                this.updateUnreadCounts()
+              this.loading = true
+              const response = await deleteMessage(message.messageId, this.currentUser.userId)
+              
+              if (response.code === 200) {
+                const index = this.messages.findIndex(msg => msg.messageId === message.messageId)
+                if (index !== -1) {
+                  this.messages.splice(index, 1)
+                  await this.updateUnreadCounts()
+                  this.showToast('删除成功', '🗑️', 'success')
+                }
+              } else {
+                this.showToast('删除失败', '❌', 'error')
               }
-              this.showToast('删除成功', '🗑️', 'success')
-            } catch (e) {
-              console.error('删除消息失败:', e)
-              this.showToast('删除失败', '!', 'info')
+            } catch (error) {
+              console.error('删除消息异常:', error)
+              this.showToast('网络异常', '❌', 'error')
+            } finally {
+              this.loading = false
             }
           }
         }
       })
     },
-
+    
     switchTab(tabId) {
       this.activeTab = tabId
+      // 切换标签时重置搜索
+      this.searchKeyword = ''
     },
-
-    async onRefresh() {
+    
+    onRefresh() {
       this.refreshing = true
-      await this.fetchMessages()
-      uni.showToast({
-        title: '刷新成功',
-        icon: 'success'
-      })
+      this.loadMessages(true)
     },
-
-    loadMore() {
-      this.loading = true
-      // 模拟加载更多
-      setTimeout(() => {
-        this.loading = false
-        this.hasMore = false
-      }, 800)
+    
+    async loadMore() {
+      if (this.loadingMore || !this.hasMore) return
+      
+      this.loadingMore = true
+      await this.loadMessages(false)
     },
-
-    updateUnreadCounts() {
-      const unreadCount = this.messages.filter(msg => !msg.read).length
-      const projectUnread = this.messages.filter(msg => msg.type === 'project' && !msg.read).length
-      const systemUnread = this.messages.filter(msg => (msg.type === 'system' || msg.type === 'chat-request') && !msg.read).length
-
-      this.tabs[0].unreadCount = unreadCount
-      this.tabs[1].unreadCount = unreadCount
-      this.tabs[2].unreadCount = projectUnread
-      this.tabs[3].unreadCount = systemUnread
+    
+    onSearch() {
+      // 防抖搜索，可以添加防抖逻辑
+      // this.debouncedSearch()
     },
-
+    
+    clearSearch() {
+      this.searchKeyword = ''
+    },
+    
     showToast(message, icon, type = 'success') {
       this.toast.message = message
       this.toast.icon = icon
       this.toast.type = type
       this.toast.show = true
-
+      
       setTimeout(() => {
         this.toast.show = false
       }, 2000)
     },
-
+    
     // 计算导航栏高度
     calculateNavHeight() {
-      const query = uni.createSelectorQuery().in(this);
+      const query = uni.createSelectorQuery().in(this)
       query.select('.navbar-fixed').boundingClientRect(data => {
         if (data) {
-          this.navHeight = data.height;
+          this.navHeight = data.height
         }
-      }).exec();
+      }).exec()
+    },
+    
+    // 初始化用户信息（从全局状态或缓存获取）
+    initUserInfo() {
+      // 这里可以从 Vuex、缓存或登录信息中获取
+      // const userInfo = uni.getStorageSync('userInfo')
+      // if (userInfo) {
+      //   this.currentUser.userId = userInfo.userId
+      //   this.currentUser.conversationId = userInfo.conversationId
+      // }
     }
   },
-
+  
   onLoad() {
-    this.loading = true
-    this.fetchMessages().finally(() => {
-      // 计算导航栏高度
-      this.$nextTick(() => {
-        setTimeout(() => {
-          this.calculateNavHeight();
-        }, 100);
-      });
+    this.initUserInfo()
+    this.loadMessages(true)
+    
+    // 计算导航栏高度
+    this.$nextTick(() => {
+      setTimeout(() => {
+        this.calculateNavHeight()
+      }, 100)
     })
   },
-
+  
   onReady() {
-    // 页面渲染完成后计算导航栏高度
-    this.calculateNavHeight();
+    this.calculateNavHeight()
+  },
+  
+  onPullDownRefresh() {
+    this.onRefresh()
+    setTimeout(() => {
+      uni.stopPullDownRefresh()
+    }, 1000)
   }
 }
 </script>
@@ -512,33 +604,6 @@ export default {
   flex: 1;
 }
 
-/* 按钮容器 */
-.navbar-buttons {
-  display: flex;
-  gap: 12rpx;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-/* 聊天按钮 */
-.chat-btn {
-  background: #34C759;
-  color: white;
-  border: none;
-  padding: 12rpx 24rpx;
-  border-radius: 20rpx;
-  font-size: 24rpx;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
-}
-
-.chat-btn:active {
-  background: #2BA84A;
-  transform: scale(0.95);
-}
-
 /* 全部已读按钮 */
 .mark-all-read-btn {
   background: #007AFF;
@@ -550,7 +615,7 @@ export default {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: all 0.3s ease;
+  margin-left: auto;
 }
 
 .mark-all-read-btn:disabled {
@@ -558,16 +623,46 @@ export default {
   cursor: not-allowed;
 }
 
-.mark-all-read-btn:active:not(:disabled) {
-  background: #0051D5;
-  transform: scale(0.95);
-}
-
 .btn-text {
   font-size: 24rpx;
 }
 
-/* 标签页 - 占满页面宽度 */
+/* 搜索框 */
+.search-container {
+  padding: 20rpx 30rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #eee;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #f5f5f5;
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+}
+
+.search-icon {
+  font-size: 28rpx;
+  color: #999;
+  margin-right: 16rpx;
+}
+
+.search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.clear-icon {
+  font-size: 32rpx;
+  color: #999;
+  padding: 8rpx;
+  cursor: pointer;
+}
+
+/* 标签页 */
 .tabs-container {
   background: #fff;
   border-bottom: 1rpx solid #eee;
@@ -636,20 +731,40 @@ export default {
   color: #999;
 }
 
-/* 消息项 - 去掉内容预览区域 */
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+  background: #f5f5f5;
+}
+
+.loading-spinner.large {
+  width: 60rpx;
+  height: 60rpx;
+  border-width: 4rpx;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999;
+  margin-top: 20rpx;
+}
+
+/* 消息项 */
 .message-item {
   background: #fff;
   margin: 20rpx 30rpx;
   padding: 30rpx;
   border-radius: 16rpx;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
   position: relative;
-  min-height: 100rpx;
 }
 
-/* 移除未读消息的特殊背景色，只保留左侧标识 */
 .message-item.unread {
   background: #fff;
   border-left: 6rpx solid #007AFF;
@@ -680,20 +795,17 @@ export default {
   background: linear-gradient(135deg, #007AFF, #0056CC);
 }
 
-/* 中间内容区域 - 只显示标题和时间 */
+/* 中间内容区域 */
 .message-content {
   flex: 1;
   min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .message-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  width: 100%;
+  align-items: flex-start;
+  margin-bottom: 12rpx;
 }
 
 .message-title {
@@ -716,6 +828,20 @@ export default {
   white-space: nowrap;
 }
 
+.message-preview {
+  margin-top: 8rpx;
+}
+
+.preview-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* 右侧操作区域 */
 .message-right {
   margin-left: 24rpx;
@@ -736,6 +862,11 @@ export default {
   color: #666;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .delete-btn {
@@ -767,6 +898,22 @@ export default {
 .empty-desc {
   font-size: 26rpx;
   color: #ccc;
+  display: block;
+  margin-bottom: 32rpx;
+}
+
+.retry-btn {
+  background: #007AFF;
+  color: white;
+  border: none;
+  padding: 16rpx 32rpx;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+  cursor: pointer;
+}
+
+.retry-text {
+  font-size: 28rpx;
 }
 
 /* 加载更多 */
@@ -786,6 +933,18 @@ export default {
 .load-more-text {
   font-size: 26rpx;
   color: #007AFF;
+}
+
+/* 没有更多数据 */
+.no-more {
+  padding: 40rpx;
+  text-align: center;
+  background: #f5f5f5;
+}
+
+.no-more-text {
+  font-size: 26rpx;
+  color: #999;
 }
 
 /* 弹窗 */
@@ -867,6 +1026,11 @@ export default {
   border: none;
 }
 
+.popup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cancel-btn {
   background: #f5f5f5;
   color: #666;
@@ -902,6 +1066,10 @@ export default {
   background: rgba(0, 122, 255, 0.9);
 }
 
+.toast-message.error {
+  background: rgba(255, 59, 48, 0.9);
+}
+
 /* 加载动画 */
 .loading-spinner {
   width: 32rpx;
@@ -922,28 +1090,105 @@ export default {
   .navbar-content {
     padding: 20rpx 24rpx;
   }
-
+  
+  .search-container {
+    padding: 16rpx 24rpx;
+  }
+  
   .tab {
     padding: 20rpx 0;
     font-size: 26rpx;
   }
-
+  
   .message-item {
     margin: 16rpx 24rpx;
     padding: 24rpx;
   }
-
+  
   .message-item.unread {
     padding-left: 18rpx;
   }
-
+  
   .popup-content {
     margin: 60rpx 24rpx;
   }
-
+  
   .mark-all-read-btn {
     padding: 10rpx 20rpx;
     font-size: 22rpx;
+  }
+}
+
+/* 暗色模式支持 */
+@media (prefers-color-scheme: dark) {
+  .message-center {
+    background: #1c1c1e;
+  }
+  
+  .navbar-fixed {
+    background: #2c2c2e;
+  }
+  
+  .title-text {
+    color: #fff;
+  }
+  
+  .search-box {
+    background: #3a3a3c;
+  }
+  
+  .search-input {
+    color: #fff;
+  }
+  
+  .search-input::placeholder {
+    color: #8e8e93;
+  }
+  
+  .tabs-container {
+    background: #2c2c2e;
+  }
+  
+  .tab {
+    color: #8e8e93;
+  }
+  
+  .tab.active {
+    color: #0a84ff;
+  }
+  
+  .message-list {
+    background: #1c1c1e;
+  }
+  
+  .message-item {
+    background: #2c2c2e;
+  }
+  
+  .message-title {
+    color: #fff;
+  }
+  
+  .preview-text {
+    color: #8e8e93;
+  }
+  
+  .action-btn {
+    background: #3a3a3c;
+    border-color: #3a3a3c;
+    color: #8e8e93;
+  }
+  
+  .empty-state {
+    background: #1c1c1e;
+  }
+  
+  .empty-text {
+    color: #8e8e93;
+  }
+  
+  .empty-desc {
+    color: #636366;
   }
 }
 </style>

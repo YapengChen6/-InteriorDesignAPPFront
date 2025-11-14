@@ -18,42 +18,55 @@
     <!-- 身份提示 -->
     <view class="identity-hint">请选择要切换的身份：</view>
     
-    <!-- 身份选择列表 -->
-    <view class="menu-list">
-      <view 
-        class="list-cell" 
-        v-for="role in availableRoles" 
-        :key="role.roleType"
-        :class="{
-          'selected': selectedRoleType === role.roleType, 
-          'current': currentRoleType === role.roleType,
-          'disabled': !isRoleAvailable(role)
-        }"
-        @click="selectRole(role)"
-      >
-        <view class="menu-item-box">
-          <view class="menu-icon">{{ getRoleIcon(role.roleType) }}</view>
-          <view class="menu-text">
-            <text class="role-title">{{ role.roleTypeName }}</text>
-            <text class="role-subtitle">{{ getRoleDesc(role.roleType) }}</text>
-            <!-- 显示认证状态 -->
-            <text class="role-status-text" :class="getStatusClass(role.certificationStatus)">
-              {{ role.certificationStatusText }}
-            </text>
+    <!-- 身份选择列表 - 添加滚动容器 -->
+    <scroll-view 
+      class="menu-scroll-container"
+      scroll-y
+      :style="{height: `${scrollViewHeight}px`}"
+      @scroll="onScroll"
+    >
+      <view class="menu-list">
+        <view 
+          class="list-cell" 
+          v-for="role in availableRoles" 
+          :key="role.roleType"
+          :class="{
+            'selected': selectedRoleType === role.roleType, 
+            'current': currentRoleType === role.roleType,
+            'disabled': !isRoleAvailable(role)
+          }"
+          @click="selectRole(role)"
+        >
+          <view class="menu-item-box">
+            <view class="menu-icon">{{ getRoleIcon(role.roleType) }}</view>
+            <view class="menu-text">
+              <text class="role-title">{{ role.roleTypeName }}</text>
+              <text class="role-subtitle">{{ getRoleDesc(role.roleType) }}</text>
+              <!-- 显示认证状态 -->
+              <text class="role-status-text" :class="getStatusClass(role.certificationStatus)">
+                {{ role.certificationStatusText }}
+              </text>
+            </view>
+          </view>
+          <view class="role-status" v-if="currentRoleType === role.roleType">
+            <text class="status-text">当前身份</text>
+          </view>
+          <view class="role-check" v-else-if="selectedRoleType === role.roleType && isRoleAvailable(role)">
+            <text class="check-icon">✓</text>
+          </view>
+          <!-- 不可用状态的提示 -->
+          <view class="role-unavailable" v-if="!isRoleAvailable(role) && currentRoleType !== role.roleType">
+            <text class="unavailable-icon">🔒</text>
           </view>
         </view>
-        <view class="role-status" v-if="currentRoleType === role.roleType">
-          <text class="status-text">当前身份</text>
-        </view>
-        <view class="role-check" v-else-if="selectedRoleType === role.roleType && isRoleAvailable(role)">
-          <text class="check-icon">✓</text>
-        </view>
-        <!-- 不可用状态的提示 -->
-        <view class="role-unavailable" v-if="!isRoleAvailable(role) && currentRoleType !== role.roleType">
-          <text class="unavailable-icon">🔒</text>
+        
+        <!-- 滚动提示 -->
+        <view class="scroll-hint" v-if="showScrollHint">
+          <text class="scroll-hint-text">继续下滑查看全部身份</text>
+          <view class="scroll-arrow">↓</view>
         </view>
       </view>
-    </view>
+    </scroll-view>
     
     <!-- 确认按钮 -->
     <view class="confirm-btn-container">
@@ -124,7 +137,10 @@ export default {
       userInfo: {},
       availableRoles: [], // 可用的角色列表
       loading: false,
-      defaultAvatar: 'https://design.gemcoder.com/staticResource/echoAiSystemImages/378da9ddd57051faab2f02fd247494da.png'
+      defaultAvatar: 'https://design.gemcoder.com/staticResource/echoAiSystemImages/378da9ddd57051faab2f02fd247494da.png',
+      scrollViewHeight: 400, // 默认滚动区域高度
+      showScrollHint: true, // 是否显示滚动提示
+      hasScrolled: false // 用户是否已经滚动过
     }
   },
   computed: {
@@ -160,13 +176,62 @@ export default {
   },
   async onLoad() {
     await this.initPage()
+    this.calculateScrollHeight()
+  },
+  onReady() {
+    // 确保页面渲染完成后计算高度
+    setTimeout(() => {
+      this.calculateScrollHeight()
+    }, 100)
   },
   onPullDownRefresh() {
     this.initPage().finally(() => {
       uni.stopPullDownRefresh()
     })
   },
+  onResize() {
+    // 窗口尺寸变化时重新计算高度
+    this.calculateScrollHeight()
+  },
   methods: {
+    // 计算滚动区域高度
+    calculateScrollHeight() {
+      const systemInfo = uni.getSystemInfoSync()
+      const windowHeight = systemInfo.windowHeight
+      
+      // 计算其他元素的高度（估算值，可根据实际调整）
+      const currentRoleSectionHeight = 200 // 当前角色区域高度
+      const identityHintHeight = 40 // 提示文字高度
+      const confirmBtnHeight = 100 // 确认按钮区域高度
+      const paddingHeight = 80 // 上下内边距
+      
+      // 计算滚动区域可用高度
+      const scrollHeight = windowHeight - currentRoleSectionHeight - identityHintHeight - confirmBtnHeight - paddingHeight
+      
+      this.scrollViewHeight = Math.max(scrollHeight, 300) // 最小高度300px
+      console.log('滚动区域高度计算:', {
+        windowHeight,
+        scrollHeight,
+        finalHeight: this.scrollViewHeight
+      })
+    },
+
+    // 滚动事件处理
+    onScroll(event) {
+      if (!this.hasScrolled) {
+        this.hasScrolled = true
+        this.showScrollHint = false
+      }
+      
+      const { scrollTop, scrollHeight } = event.detail
+      const clientHeight = this.scrollViewHeight
+      
+      // 如果接近底部，隐藏滚动提示
+      if (scrollHeight - scrollTop - clientHeight < 50) {
+        this.showScrollHint = false
+      }
+    },
+
     // 初始化页面 - 修改为顺序执行，确保数据一致性
     async initPage() {
       try {
@@ -708,11 +773,18 @@ export default {
   font-weight: 500;
 }
 
+/* 新增滚动容器样式 */
+.menu-scroll-container {
+  flex: 1;
+  margin-bottom: 20rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
 .menu-list {
   background-color: #FFFFFF;
   border-radius: 16rpx;
   overflow: hidden;
-  margin-bottom: 80rpx;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
 }
 
@@ -828,6 +900,41 @@ export default {
 .unavailable-icon {
   font-size: 28rpx;
   opacity: 0.6;
+}
+
+/* 新增滚动提示样式 */
+.scroll-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 0;
+  background: linear-gradient(transparent, #f8f8f8);
+  position: sticky;
+  bottom: 0;
+}
+
+.scroll-hint-text {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 10rpx;
+}
+
+.scroll-arrow {
+  font-size: 28rpx;
+  color: #ccc;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10rpx);
+  }
+  60% {
+    transform: translateY(-5rpx);
+  }
 }
 
 .confirm-btn-container {
