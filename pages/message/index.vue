@@ -281,7 +281,21 @@ export default {
       this.loading = true
       if (refresh) this.refreshing = true
       try {
-        const res = await getUnreadMessages()
+        // 确保使用当前登录用户的 userId，而不是依赖全局缓存里的默认值
+        let userId = this.currentUser && this.currentUser.userId ? this.currentUser.userId : 0
+        if (!userId) {
+          try {
+            const storedId = uni.getStorageSync('userId')
+            if (storedId) {
+              userId = parseInt(storedId)
+              this.currentUser.userId = userId
+            }
+          } catch (e) {
+            console.warn('读取本地 userId 失败:', e)
+          }
+        }
+        console.log('📩 加载未读消息, userId =', userId)
+        const res = await getUnreadMessages(userId)
         const list = (res && res.data) || []
         this.messages = list.map((item, index) => {
           const time = item.sendTime ? new Date(item.sendTime) : new Date()
@@ -526,9 +540,10 @@ export default {
       uni.navigateTo({ url: '/pages/chat/chatList' })
     }
   },
-  onLoad() {
-    this.initUserInfo()
-    this.loadMessages(true)
+  async onLoad() {
+    // 先拿到用户信息里的 userId，再去拉未读消息，避免传 0
+    await this.initUserInfo()
+    await this.loadMessages(true)
     this.$nextTick(() => {
       setTimeout(() => {
         this.calculateNavHeight()
