@@ -211,7 +211,7 @@
     }
   },
   {
-    "path": "pages/post/order",
+    "path": "pages/post/post",
     "style": {
       "navigationBarTitleText": "发布总订单页面"
     }

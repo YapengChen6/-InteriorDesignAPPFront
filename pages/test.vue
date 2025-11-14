@@ -44,10 +44,11 @@
                   @change="onCategory1Change" 
                   :value="category1Index" 
                   :range="category1Options"
+                  range-key="name"
                   class="picker"
                 >
                   <view class="picker-text">
-                    {{ category1Options[category1Index] || '请选择' }}
+                    {{ category1Options[category1Index] ? category1Options[category1Index].name : '请选择一级分类' }}
                   </view>
                 </picker>
               </view>
@@ -57,11 +58,12 @@
                   @change="onCategory2Change" 
                   :value="category2Index" 
                   :range="category2Options"
+                  range-key="name"
                   :disabled="!category1Options[category1Index]"
                   class="picker"
                 >
                   <view class="picker-text" :class="{ disabled: !category1Options[category1Index] }">
-                    {{ category2Options[category2Index] || '请选择' }}
+                    {{ category2Options[category2Index] ? category2Options[category2Index].name : '请选择二级分类' }}
                   </view>
                 </picker>
               </view>
@@ -71,20 +73,29 @@
                   @change="onCategory3Change" 
                   :value="category3Index" 
                   :range="category3Options"
+                  range-key="name"
                   :disabled="!category2Options[category2Index]"
                   class="picker"
                 >
                   <view class="picker-text" :class="{ disabled: !category2Options[category2Index] }">
-                    {{ category3Options[category3Index] || '请选择' }}
+                    {{ category3Options[category3Index] ? category3Options[category3Index].name : '请选择三级分类' }}
                   </view>
                 </picker>
               </view>
+            </view>
+            
+            <!-- 分类选择状态显示 -->
+            <view class="category-status" v-if="selectedCategory3Id">
+              <text class="status-text">已选择分类：</text>
+              <text class="category-path">{{ productData.category }}</text>
             </view>
           </view>
           
           <view class="action-buttons">
             <view></view>
-            <button class="btn btn-primary" @tap="goToStep(2)">下一步</button>
+            <button class="btn btn-primary" @tap="goToStep(2)" :disabled="!selectedCategory3Id">
+              {{ selectedCategory3Id ? '下一步' : '请先选择完整分类' }}
+            </button>
           </view>
         </view>
         
@@ -112,49 +123,21 @@
           <view class="form-group">
             <text class="form-label">商品标题</text>
             <uni-easyinput
-              v-model="productData.title"
+              v-model="productData.productName"
               placeholder="请输入商品标题"
               :styles="inputStyles"
             />
           </view>
           
           <view class="form-group">
-            <text class="form-label">商品属性</text>
-            <view class="specification-container">
-              <view class="spec-body">
-                <view class="property-item">
-                  <text class="property-label">品牌</text>
-                  <view class="property-input">
-                    <uni-easyinput
-                      v-model="productData.brand"
-                      placeholder="请输入品牌"
-                      :styles="inputStyles"
-                    />
-                    <text class="brand-apply" @tap="applyBrand">没有的可以申请</text>
-                  </view>
-                </view>
-                <view class="property-item">
-                  <text class="property-label">材质</text>
-                  <view class="property-input">
-                    <uni-easyinput
-                      v-model="productData.material"
-                      placeholder="请输入材质"
-                      :styles="inputStyles"
-                    />
-                  </view>
-                </view>
-                <view class="property-item">
-                  <text class="property-label">详细描述</text>
-                  <view class="property-input">
-                    <uni-easyinput
-                      v-model="productData.description"
-                      type="textarea"
-                      placeholder="请输入详细描述"
-                      :styles="textareaStyles"
-                    />
-                  </view>
-                </view>
-              </view>
+            <text class="form-label">商品描述</text>
+            <view class="description-container">
+              <uni-easyinput
+                v-model="productData.productDetail"
+                type="textarea"
+                placeholder="请输入商品的详细描述，包括产品特点、材质、用途等信息"
+                :styles="textareaStyles"
+              />
             </view>
           </view>
           
@@ -236,12 +219,6 @@
                     </view>
                     <view class="table-header-cell required-field">库存</view>
                     <view class="table-header-cell required-field">单价(元)</view>
-                    <view 
-                      v-if="specifications.length > 0" 
-                      class="table-header-cell"
-                    >
-                      图片
-                    </view>
                     <view class="table-header-cell">状态</view>
                   </view>
                 </view>
@@ -276,12 +253,6 @@
                         :styles="tableInputStyles"
                         :clearable="false"
                       />
-                    </view>
-                    <view v-if="specifications.length > 0" class="table-cell preview-image-cell">
-                      <view class="preview-image-upload" @tap="uploadPreviewImage(index)">
-                        <text v-if="!item.previewImage" class="upload-text">上传</text>
-                        <image v-else :src="item.previewImage" class="preview-image" mode="aspectFill"></image>
-                      </view>
                     </view>
                     <view class="table-cell">
                       <text 
@@ -339,7 +310,9 @@
           
           <view class="action-buttons">
             <button class="btn btn-secondary" @tap="goToStep(2)">上一步</button>
-            <button class="btn btn-success" @tap="submitProduct">提交商品</button>
+            <button class="btn btn-success" :disabled="loading" @tap="submitProduct">
+              {{ loading ? '提交中...' : '提交商品' }}
+            </button>
           </view>
         </view>
       </scroll-view>
@@ -348,6 +321,8 @@
 </template>
 
 <script>
+import { getCategoryTree, createProduct } from '@/api/product.js'
+
 export default {
   data() {
     return {
@@ -357,19 +332,28 @@ export default {
       category1Index: 0,
       category2Index: 0,
       category3Index: 0,
-      category1Options: ['地板', '瓷砖', '涂料', '灯具', '家具'],
+      category1Options: [],
       category2Options: [],
       category3Options: [],
+      
+      // 存储选中的分类ID
+      selectedCategory1Id: null,
+      selectedCategory2Id: null,
+      selectedCategory3Id: null,
       
       // 商品图片
       productImages: [],
       
-      // 商品数据
+      // 商品数据 - 匹配后端 ProductSpuDTO
       productData: {
-        title: '',
-        brand: '',
-        material: '',
-        description: ''
+        productName: '',
+        productDetail: '',
+        categoryId: null, // 三级分类ID
+        productStatus: 0, // 0-下架，1-上架
+        specType: 0, // 0-单规格，2-多规格
+        marketPrice: 0,
+        costPrice: 0,
+        stock: 100
       },
       
       // 规格数据
@@ -377,11 +361,7 @@ export default {
       specCounter: 1,
       
       // 价格库存数据
-      priceStockData: [{
-        stock: '',
-        singlePrice: '',
-        status: 'on'  // 默认上架
-      }],
+      priceStockData: [],
       
       // 批量设置
       batchStock: '',
@@ -390,21 +370,8 @@ export default {
       // 参考价
       referencePrice: '',
       
-      // 分类映射数据
-      categoryMap: {
-        '地板': ['实木地板', '复合地板', '强化地板'],
-        '瓷砖': ['抛光砖', '釉面砖', '通体砖'],
-        '涂料': ['乳胶漆', '油漆', '防水涂料'],
-        '灯具': ['吊灯', '壁灯', '台灯'],
-        '家具': ['沙发', '床', '餐桌']
-      },
-      subCategoryMap: {
-        '实木地板': ['橡木实木地板', '柚木实木地板', '枫木实木地板'],
-        '复合地板': ['实木复合地板', '强化复合地板'],
-        '抛光砖': ['亮光抛光砖', '亚光抛光砖'],
-        '乳胶漆': ['内墙乳胶漆', '外墙乳胶漆'],
-        '吊灯': ['水晶吊灯', '现代吊灯', '欧式吊灯']
-      },
+      // 加载状态
+      loading: false,
       
       // uni-easyinput 样式配置
       inputStyles: {
@@ -416,34 +383,7 @@ export default {
         borderColor: '#e0e0e0',
         color: '#333',
         backgroundColor: '#fff',
-        minHeight: '160rpx'
-      },
-      specNameInputStyles: {
-        borderColor: 'transparent',
-        color: '#333',
-        backgroundColor: 'transparent',
-        fontSize: '30rpx',
-        fontWeight: '500'
-      },
-      tableInputStyles: {
-        borderColor: '#e0e0e0',
-        color: '#333',
-        backgroundColor: '#fff',
-        fontSize: '24rpx',
-        padding: '16rpx'
-      },
-      batchInputStyles: {
-        borderColor: '#e0e0e0',
-        color: '#333',
-        backgroundColor: '#fff',
-        fontSize: '26rpx',
-        padding: '20rpx'
-      },
-      priceInputStyles: {
-        borderColor: '#e0e0e0',
-        color: '#333',
-        backgroundColor: '#fff',
-        textAlign: 'right'
+        minHeight: '200rpx'
       }
     }
   },
@@ -451,56 +391,166 @@ export default {
   methods: {
     // 步骤切换
     goToStep(step) {
+      if (step === 2 && !this.selectedCategory3Id) {
+        uni.showToast({
+          title: '请先选择完整的三级分类',
+          icon: 'none'
+        })
+        return
+      }
       this.currentStep = step
       if (step === 3) {
         this.generatePriceStockTable()
       }
     },
     
-    // 分类选择
+    // 分类选择方法
     onCategory1Change(e) {
-      this.category1Index = e.detail.value
-      const selectedCategory = this.category1Options[this.category1Index]
-      this.category2Options = this.categoryMap[selectedCategory] || []
-      this.category2Index = 0
-      this.category3Options = []
-      this.category3Index = 0
+      const index = parseInt(e.detail.value)
+      this.category1Index = index
+      const selectedCategory = this.category1Options[index]
+      
+      if (selectedCategory) {
+        this.selectedCategory1Id = selectedCategory.id
+        // 根据一级分类查找二级分类
+        this.category2Options = this.getCategoriesByParentId(this.selectedCategory1Id)
+        this.category2Index = 0
+        this.category3Options = []
+        this.category3Index = 0
+        this.selectedCategory2Id = null
+        this.selectedCategory3Id = null
+        
+        this.updateCategoryData()
+      }
     },
     
     onCategory2Change(e) {
-      this.category2Index = e.detail.value
-      const selectedSubCategory = this.category2Options[this.category2Index]
-      this.category3Options = this.subCategoryMap[selectedSubCategory] || []
-      this.category3Index = 0
+      const index = parseInt(e.detail.value)
+      this.category2Index = index
+      const selectedCategory = this.category2Options[index]
+      
+      if (selectedCategory) {
+        this.selectedCategory2Id = selectedCategory.id
+        // 根据二级分类查找三级分类
+        this.category3Options = this.getCategoriesByParentId(this.selectedCategory2Id)
+        this.category3Index = 0
+        this.selectedCategory3Id = null
+        
+        this.updateCategoryData()
+      }
     },
     
     onCategory3Change(e) {
-      this.category3Index = e.detail.value
+      const index = parseInt(e.detail.value)
+      this.category3Index = index
+      const selectedCategory = this.category3Options[index]
+      
+      if (selectedCategory) {
+        this.selectedCategory3Id = selectedCategory.id
+        this.productData.categoryId = this.selectedCategory3Id
+        this.updateCategoryData()
+        
+        uni.showToast({
+          title: '分类选择完成',
+          icon: 'success',
+          duration: 1500
+        })
+      }
+    },
+    
+    // 根据父级ID获取分类
+    getCategoriesByParentId(parentId) {
+      if (!this.categoryTree || !Array.isArray(this.categoryTree)) {
+        return []
+      }
+      return this.categoryTree.filter(category => category.parentId === parentId)
+    },
+    
+    // 更新分类数据
+    updateCategoryData() {
+      const category1 = this.category1Options[this.category1Index]
+      const category2 = this.category2Options[this.category2Index]
+      const category3 = this.category3Options[this.category3Index]
+      
+      let categoryPath = ''
+      if (category1) categoryPath += category1.name
+      if (category2) categoryPath += ' / ' + category2.name
+      if (category3) categoryPath += ' / ' + category3.name
+      
+      this.productData.category = categoryPath
+    },
+    
+    // 加载分类数据
+    async loadCategoryTree() {
+      try {
+        uni.showLoading({
+          title: '加载分类中...',
+          mask: true
+        })
+        
+        const response = await getCategoryTree()
+        
+        if (response.code === 200 || response.success) {
+          this.categoryTree = response.data || []
+          
+          // 设置一级分类 (parentId=0)
+          this.category1Options = this.getCategoriesByParentId(0)
+          
+          console.log('分类数据加载成功:', {
+            '总分类数量': this.categoryTree.length,
+            '一级分类数量': this.category1Options.length
+          })
+          
+        } else {
+          throw new Error(response.message || '加载分类失败')
+        }
+        
+      } catch (error) {
+        console.error('加载分类数据失败:', error)
+        uni.showToast({
+          title: '分类加载失败',
+          icon: 'none'
+        })
+      } finally {
+        uni.hideLoading()
+      }
     },
     
     // 图片上传
-    chooseImages() {
-      uni.chooseImage({
-        count: 10,
-        sizeType: ['compressed'],
-        sourceType: ['album', 'camera'],
-        success: (res) => {
-          this.productImages = [...this.productImages, ...res.tempFilePaths]
-        }
-      })
+    async chooseImages() {
+      if (this.productImages.length >= 10) {
+        uni.showToast({
+          title: '最多只能上传10张图片',
+          icon: 'none'
+        })
+        return
+      }
+      
+      try {
+        const res = await uni.chooseImage({
+          count: 10 - this.productImages.length,
+          sizeType: ['compressed'],
+          sourceType: ['album', 'camera']
+        })
+        
+        this.productImages = this.productImages.concat(res.tempFilePaths)
+        
+        uni.showToast({
+          title: '图片添加成功',
+          icon: 'success'
+        })
+        
+      } catch (error) {
+        console.error('图片选择失败:', error)
+        uni.showToast({
+          title: '图片选择失败',
+          icon: 'none'
+        })
+      }
     },
     
     removeImage(index) {
       this.productImages.splice(index, 1)
-    },
-    
-    // 品牌申请
-    applyBrand() {
-      uni.showModal({
-        title: '品牌申请',
-        content: '请联系客服申请品牌',
-        showCancel: false
-      })
     },
     
     // 规格管理
@@ -515,7 +565,7 @@ export default {
       
       const spec = {
         id: 'spec_' + Date.now(),
-        name: '',  // 初始为空，让用户输入
+        name: '',
         values: [],
         newValue: ''
       }
@@ -523,6 +573,9 @@ export default {
       this.specifications.push(spec)
       this.specCounter++
       this.generatePriceStockTable()
+      
+      // 更新规格类型
+      this.productData.specType = this.specifications.length > 0 ? 2 : 0
     },
     
     removeSpecification(specId) {
@@ -533,29 +586,25 @@ export default {
           if (res.confirm) {
             this.specifications = this.specifications.filter(spec => spec.id !== specId)
             this.generatePriceStockTable()
+            this.productData.specType = this.specifications.length > 0 ? 2 : 0
           }
         }
       })
     },
     
-    updateSpecName(specId, newName) {
-      const spec = this.specifications.find(s => s.id === specId)
-      if (spec) {
-        // 如果名称为空，给一个默认名称
-        if (!newName || newName.trim() === '') {
-          spec.name = `规格${this.specCounter}`
-        }
-        this.generatePriceStockTable()
-      }
-    },
-    
     addSpecValue(specId) {
       const spec = this.specifications.find(s => s.id === specId)
-      if (spec && spec.newValue.trim()) {
-        if (!spec.values.includes(spec.newValue.trim())) {
-          spec.values.push(spec.newValue.trim())
+      if (spec && spec.newValue && spec.newValue.trim()) {
+        const value = spec.newValue.trim()
+        if (!spec.values.includes(value)) {
+          spec.values.push(value)
           spec.newValue = ''
           this.generatePriceStockTable()
+        } else {
+          uni.showToast({
+            title: '规格值已存在',
+            icon: 'none'
+          })
         }
       }
     },
@@ -572,23 +621,21 @@ export default {
     generatePriceStockTable() {
       if (this.specifications.length === 0) {
         this.priceStockData = [{
+          values: [],
           stock: '',
           singlePrice: '',
-          status: 'on'  // 默认上架
+          status: 'on'
         }]
         return
       }
       
-      // 生成所有规格组合
       const combinations = this.generateCombinations()
-      // 保留原有的数据
       combinations.forEach((combination, index) => {
         const existingData = this.priceStockData[index]
         if (existingData) {
           combination.stock = existingData.stock || ''
           combination.singlePrice = existingData.singlePrice || ''
-          combination.status = existingData.status || 'on'  // 默认上架
-          combination.previewImage = existingData.previewImage || ''
+          combination.status = existingData.status || 'on'
         }
       })
       this.priceStockData = combinations
@@ -601,7 +648,7 @@ export default {
         if (specIndex >= this.specifications.length) {
           return [{
             ...currentCombination,
-            status: 'on'  // 默认上架
+            status: 'on'
           }]
         }
         
@@ -611,7 +658,7 @@ export default {
         for (const value of spec.values) {
           const newCombination = {
             ...currentCombination,
-            values: [...(currentCombination.values || []), value]
+            values: (currentCombination.values || []).concat([value])
           }
           combinations = combinations.concat(generate(specIndex + 1, newCombination))
         }
@@ -619,18 +666,7 @@ export default {
         return combinations
       }
       
-      return generate(0, {})
-    },
-    
-    uploadPreviewImage(index) {
-      uni.chooseImage({
-        count: 1,
-        sizeType: ['compressed'],
-        sourceType: ['album', 'camera'],
-        success: (res) => {
-          this.$set(this.priceStockData[index], 'previewImage', res.tempFilePaths[0])
-        }
-      })
+      return generate(0, { values: [] })
     },
     
     toggleStatus(index) {
@@ -641,6 +677,14 @@ export default {
     },
     
     batchSetValues() {
+      if (!this.batchStock && !this.batchSinglePrice) {
+        uni.showToast({
+          title: '请填写要批量设置的值',
+          icon: 'none'
+        })
+        return
+      }
+      
       this.priceStockData.forEach((item) => {
         if (this.batchStock) {
           item.stock = this.batchStock
@@ -649,6 +693,7 @@ export default {
           item.singlePrice = this.batchSinglePrice
         }
       })
+      
       uni.showToast({
         title: '批量设置成功',
         icon: 'success'
@@ -657,74 +702,231 @@ export default {
       this.batchSinglePrice = ''
     },
     
-    // 提交商品
-    submitProduct() {
-      // 验证必填字段
-      if (!this.productData.title) {
-        uni.showToast({
-          title: '请输入商品标题',
-          icon: 'none'
-        })
-        return
-      }
-      
-      if (!this.productImages.length) {
-        uni.showToast({
-          title: '请上传商品图片',
-          icon: 'none'
-        })
-        return
-      }
-      
-      // 验证规格名称是否填写
-      for (let spec of this.specifications) {
-        if (!spec.name || spec.name.trim() === '') {
-          uni.showToast({
-            title: '请填写规格名称',
-            icon: 'none'
+    // 构建SKU列表 - 匹配后端 ProductSkuDTO
+    buildSkuList() {
+      if (this.specifications.length === 0) {
+        // 单规格商品
+        return [{
+          stockQuantity: parseInt(this.priceStockData[0].stock) || 0,
+          salePrice: parseFloat(this.priceStockData[0].singlePrice) || 0,
+          costPrice: this.productData.costPrice || 0,
+          skuStatus: this.priceStockData[0].status === 'on' ? 1 : 0, // 1-上架，0-下架
+          skuDetail: JSON.stringify({
+            type: 'single',
+            productName: this.productData.productName
           })
-          return
+        }]
+      } else {
+        // 多规格商品
+        return this.priceStockData.map(item => {
+          const specValues = item.values || []
+          const specCombination = this.specifications.map((spec, index) => ({
+            name: spec.name,
+            value: specValues[index] || ''
+          }))
+          
+          const specDescription = specCombination.map(spec => `${spec.name}:${spec.value}`).join(' ')
+          
+          return {
+            stockQuantity: parseInt(item.stock) || 0,
+            salePrice: parseFloat(item.singlePrice) || 0,
+            costPrice: this.productData.costPrice || 0,
+            skuStatus: item.status === 'on' ? 1 : 0, // 1-上架，0-下架
+            skuDetail: JSON.stringify({
+              type: 'multi',
+              combination: specCombination,
+              description: specDescription
+            })
+          }
+        })
+      }
+    },
+    
+    // 验证表单
+    validateForm() {
+      if (!this.productData.productName || this.productData.productName.trim() === '') {
+        throw new Error('请输入商品标题')
+      }
+      
+      if (!this.selectedCategory3Id) {
+        throw new Error('请选择完整的三级分类')
+      }
+      
+      if (this.productImages.length === 0) {
+        throw new Error('请上传商品图片')
+      }
+      
+      // 验证规格
+      for (let i = 0; i < this.specifications.length; i++) {
+        const spec = this.specifications[i]
+        if (!spec.name || spec.name.trim() === '') {
+          throw new Error('请填写规格名称')
         }
         
         if (spec.values.length === 0) {
-          uni.showToast({
-            title: `请为${spec.name}添加规格值`,
-            icon: 'none'
-          })
-          return
+          throw new Error('请为' + spec.name + '添加规格值')
         }
       }
       
-      const productData = {
-        category: {
-          level1: this.category1Options[this.category1Index],
-          level2: this.category2Options[this.category2Index],
-          level3: this.category3Options[this.category3Index]
-        },
-        images: this.productImages,
-        ...this.productData,
-        specifications: this.specifications,
-        priceStock: this.priceStockData,
-        referencePrice: this.referencePrice
+      // 验证价格库存
+      for (let i = 0; i < this.priceStockData.length; i++) {
+        const item = this.priceStockData[i]
+        if (!item.stock || parseInt(item.stock) <= 0) {
+          throw new Error('请填写有效的库存数量')
+        }
+        
+        if (!item.singlePrice || parseFloat(item.singlePrice) <= 0) {
+          throw new Error('请填写有效的价格')
+        }
       }
+    },
+    
+    // 提交商品 - 匹配后端 ProductSpuDTO 结构
+    async submitProduct() {
+      if (this.loading) return
       
-      console.log('提交的商品数据:', productData)
-      uni.showToast({
-        title: '商品提交成功！',
-        icon: 'success'
-      })
+      try {
+        this.validateForm()
+        
+        this.loading = true
+        uni.showLoading({
+          title: '提交中...',
+          mask: true
+        })
+        
+        // 构建商品数据 - 匹配后端 ProductSpuDTO
+        const submitData = {
+          productName: this.productData.productName,
+          productDetail: this.productData.productDetail,
+          categoryId: this.selectedCategory3Id,
+          productStatus: 0, // 默认下架，创建后手动上架
+          specType: this.productData.specType,
+          marketPrice: parseFloat(this.referencePrice) || 0,
+          costPrice: this.productData.costPrice || 0,
+          stock: this.productData.stock || 100,
+          skuList: this.buildSkuList()
+        }
+        
+        console.log('提交的商品数据:', JSON.stringify(submitData, null, 2))
+        
+        const response = await createProduct(submitData)
+        
+        console.log('创建商品响应:', response)
+        
+        if (response.code === 200 || response.success) {
+          const productSpuId = response.data || response.data?.productSpuId
+          
+          console.log('创建商品成功，商品ID:', productSpuId)
+          
+          // 上传商品图片
+          if (this.productImages.length > 0 && productSpuId) {
+            await this.uploadProductImages(productSpuId)
+          }
+          
+          uni.hideLoading()
+          uni.showToast({
+            title: '商品创建成功！',
+            icon: 'success',
+            duration: 2000
+          })
+          
+          setTimeout(() => {
+            uni.navigateBack()
+          }, 1500)
+          
+        } else {
+          throw new Error(response.message || response.msg || '创建商品失败')
+        }
+        
+      } catch (error) {
+        uni.hideLoading()
+        console.error('提交商品失败:', error)
+        uni.showToast({
+          title: error.message || '提交失败，请重试',
+          icon: 'none',
+          duration: 3000
+        })
+      } finally {
+        this.loading = false
+      }
+    },
+    
+    // 上传商品图片
+    async uploadProductImages(productSpuId) {
+      try {
+        uni.showLoading({
+          title: '上传图片中...',
+          mask: true
+        })
+        
+        const uploadPromises = this.productImages.map(async (imagePath, index) => {
+          try {
+            const uploadResult = await uni.uploadFile({
+              url: `${this.$baseURL || 'http://localhost:8081'}/api/media/upload`,
+              filePath: imagePath,
+              name: 'file',
+              formData: {
+                relatedType: '5', // 商品类型
+                relatedId: productSpuId.toString(),
+                description: '商品主图',
+                stage: 'MAIN',
+                sequence: index.toString()
+              },
+              header: {
+                'Authorization': 'Bearer ' + (uni.getStorageSync('token') || '')
+              }
+            })
+            
+            const result = typeof uploadResult.data === 'string' ? JSON.parse(uploadResult.data) : uploadResult.data
+            return result
+          } catch (error) {
+            console.error(`第${index + 1}张图片上传失败:`, error)
+            return null
+          }
+        })
+        
+        const results = await Promise.all(uploadPromises)
+        const successResults = results.filter(result => result && (result.code === 200 || result.success))
+        
+        console.log('图片上传完成:', {
+          总数量: results.length,
+          成功数量: successResults.length
+        })
+        
+      } catch (error) {
+        console.error('图片上传过程出错:', error)
+      } finally {
+        uni.hideLoading()
+      }
     }
   },
   
-  onLoad() {
-    // 默认从第一步开始
-    this.currentStep = 1
+  async onLoad() {
+    await this.loadCategoryTree()
+  },
+  
+  watch: {
+    priceStockData: {
+      handler(newVal) {
+        if (newVal && newVal.length > 0) {
+          const prices = newVal
+            .map(item => parseFloat(item.singlePrice) || 0)
+            .filter(price => price > 0)
+          
+          if (prices.length > 0) {
+            this.productData.marketPrice = Math.max.apply(null, prices)
+            this.productData.costPrice = Math.min.apply(null, prices)
+            this.referencePrice = (this.productData.marketPrice * 1.2).toFixed(2)
+          }
+        }
+      },
+      deep: true
+    }
   }
 }
 </script>
-
 <style scoped>
-/* 这里保持之前的所有样式不变 */
+/* 样式保持不变 */
 .container {
   background-color: #f8f9fa;
   min-height: 100vh;
@@ -846,6 +1048,27 @@ export default {
   color: #c0c4cc;
 }
 
+/* 新增分类状态显示样式 */
+.category-status {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background-color: #f8f9fa;
+  border-radius: 12rpx;
+  border: 1rpx solid #e0e0e0;
+}
+
+.status-text {
+  color: #666;
+  font-size: 26rpx;
+}
+
+.category-path {
+  color: #007AFF;
+  font-size: 28rpx;
+  font-weight: 500;
+  margin-left: 12rpx;
+}
+
 .upload-area {
   border: 2rpx dashed #e0e0e0;
   border-radius: 16rpx;
@@ -908,31 +1131,6 @@ export default {
   align-items: center;
   justify-content: center;
   font-size: 24rpx;
-}
-
-.property-item {
-  margin-bottom: 30rpx;
-}
-
-.property-label {
-  display: block;
-  margin-bottom: 16rpx;
-  color: #333;
-  font-size: 28rpx;
-}
-
-.property-input {
-  position: relative;
-}
-
-.brand-apply {
-  position: absolute;
-  right: 24rpx;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #007AFF;
-  font-size: 26rpx;
-  z-index: 2;
 }
 
 .specification-container {
@@ -1014,6 +1212,11 @@ export default {
   border-radius: 12rpx;
   font-size: 28rpx;
   border: none;
+}
+
+.btn:disabled {
+  background-color: #c0c4cc !important;
+  color: #fff !important;
 }
 
 .btn-primary {
@@ -1113,28 +1316,6 @@ export default {
   content: "*";
   color: #ff4757;
   margin-right: 4rpx;
-}
-
-.preview-image-cell {
-  justify-content: center;
-}
-
-.preview-image-upload {
-  width: 80rpx;
-  height: 80rpx;
-  border: 1rpx dashed #e0e0e0;
-  border-radius: 8rpx;
-  background-color: #fafafa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20rpx;
-  color: #999;
-}
-
-.preview-image-upload .upload-text {
-  font-size: 20rpx;
-  margin: 0;
 }
 
 .status-badge {

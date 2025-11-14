@@ -1,719 +1,537 @@
 <template>
 	<view class="container">
-		<view class="page-body uni-content-info">
-			<view class='cropper-content'>
-				<view v-if="isShowImg" class="uni-corpper" :style="'width:'+cropperInitW+'px;height:'+cropperInitH+'px;background:#000'">
-					<view class="uni-corpper-content" :style="'width:'+cropperW+'px;height:'+cropperH+'px;left:'+cropperL+'px;top:'+cropperT+'px'">
-						<image :src="imageSrc" :style="'width:'+cropperW+'px;height:'+cropperH+'px'"></image>
-						<view class="uni-corpper-crop-box" @touchstart.stop="contentStartMove" @touchmove.stop="contentMoveing" @touchend.stop="contentTouchEnd"
-						    :style="'left:'+cutL+'px;top:'+cutT+'px;right:'+cutR+'px;bottom:'+cutB+'px'">
-							<view class="uni-cropper-view-box">
-								<view class="uni-cropper-dashed-h"></view>
-								<view class="uni-cropper-dashed-v"></view>
-								<view class="uni-cropper-line-t" data-drag="top" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-line-r" data-drag="right" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-line-b" data-drag="bottom" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-line-l" data-drag="left" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-point point-t" data-drag="top" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-point point-tr" data-drag="topTight"></view>
-								<view class="uni-cropper-point point-r" data-drag="right" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-point point-rb" data-drag="rightBottom" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-point point-b" data-drag="bottom" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-point point-bl" data-drag="bottomLeft"></view>
-								<view class="uni-cropper-point point-l" data-drag="left" @touchstart.stop="dragStart" @touchmove.stop="dragMove"></view>
-								<view class="uni-cropper-point point-lt" data-drag="leftTop"></view>
-							</view>
-						</view>
+		<!-- 头部 -->
+		<view class="header">
+			<text class="header-title">收货地址</text>
+			<button class="btn-add" @tap="openAddModal">+ 新增地址</button>
+		</view>
+		
+		<!-- 地址列表 -->
+		<view class="address-list" v-if="addresses.length > 0">
+			<view 
+				class="address-card" 
+				:class="{ 'default': address.isDefault }" 
+				v-for="address in addresses" 
+				:key="address.id"
+			>
+				<view class="default-tag" v-if="address.isDefault">默认地址</view>
+				<view class="address-info">
+					<view class="address-name">{{ address.name }} {{ address.phone }}</view>
+					<view class="address-detail">{{ address.region }} {{ address.detail }}</view>
+				</view>
+				<view class="address-actions">
+					<view>
+						<text 
+							class="action-btn" 
+							@tap="setDefaultAddress(address.id)"
+							v-if="!address.isDefault"
+						>设为默认</text>
+					</view>
+					<view>
+						<text class="action-btn" @tap="editAddress(address.id)">编辑</text>
+						<text class="action-btn" @tap="deleteAddress(address.id)">删除</text>
 					</view>
 				</view>
 			</view>
-			<view class='cropper-config'>
-				<button type="primary reverse" @click="getImage" style='margin-top: 30rpx;'> 选择头像 </button>
-				<button type="warn" @click="getImageInfo" style='margin-top: 30rpx;'> 提交 </button>
+		</view>
+		
+		<!-- 空状态 -->
+		<view class="empty-state" v-else>
+			<text class="empty-text">您还没有添加收货地址</text>
+			<button class="btn-add-first" @tap="openAddModal">添加收货地址</button>
+		</view>
+		
+		<!-- 添加/编辑地址模态框 -->
+		<view class="modal" v-if="showModal">
+			<view class="modal-mask" @tap="closeModal"></view>
+			<view class="modal-content">
+				<view class="modal-header">
+					<text class="modal-title">{{ isEditing ? '编辑收货地址' : '新增收货地址' }}</text>
+					<text class="close-btn" @tap="closeModal">×</text>
+				</view>
+				<view class="modal-body">
+					<view class="form-row">
+						<view class="form-group">
+							<label class="form-label">收货人</label>
+							<input 
+								type="text" 
+								class="editor-input"
+								v-model="formData.name" 
+								placeholder="请输入收货人姓名"
+								placeholder-class="placeholder"
+								maxlength="20"
+								confirm-type="done"
+								@focus="onInputFocus"
+								@blur="onInputBlur"
+							/>
+						</view>
+						<view class="form-group">
+							<label class="form-label">手机号码</label>
+							<input 
+								type="number" 
+								class="editor-input"
+								v-model="formData.phone" 
+								placeholder="请输入手机号码"
+								placeholder-class="placeholder"
+								maxlength="11"
+								confirm-type="done"
+								@focus="onInputFocus"
+								@blur="onInputBlur"
+							/>
+						</view>
+					</view>
+					<view class="form-group">
+						<label class="form-label">所在地区</label>
+						<input 
+							type="text" 
+							class="editor-input"
+							v-model="formData.region" 
+							placeholder="省 市 区"
+							placeholder-class="placeholder"
+							maxlength="50"
+							confirm-type="done"
+							@focus="onInputFocus"
+							@blur="onInputBlur"
+						/>
+					</view>
+					<view class="form-group">
+						<label class="form-label">详细地址</label>
+						<input 
+							type="text" 
+							class="editor-input"
+							v-model="formData.detail" 
+							placeholder="街道、楼牌号等"
+							placeholder-class="placeholder"
+							maxlength="100"
+							confirm-type="done"
+							@focus="onInputFocus"
+							@blur="onInputBlur"
+						/>
+					</view>
+					<view class="checkbox-group">
+						<label class="checkbox-label">
+							<checkbox 
+								:checked="formData.isDefault" 
+								@tap="toggleDefault" 
+								style="transform:scale(0.7)"
+							/>
+							<text>设为默认地址</text>
+						</label>
+					</view>
+					<view class="modal-footer">
+						<button class="btn-cancel" @tap="closeModal">取消</button>
+						<button class="btn-submit" @tap="handleFormSubmit">保存</button>
+					</view>
+				</view>
 			</view>
-			<canvas canvas-id="myCanvas" :style="'position:absolute;border: 1px solid red; width:'+imageW+'px;height:'+imageH+'px;top:-9999px;left:-9999px;'"></canvas>
 		</view>
 	</view>
 </template>
 
 <script>
-import config from '@/config'
-import store from "@/store"
-import { uploadImage } from "@/api/users.js"
-
-// 删除这行：const { getApp } = uni
-
-let sysInfo = uni.getSystemInfoSync()
-let SCREEN_WIDTH = sysInfo.screenWidth
-let PAGE_X, // 手按下的x位置
-	PAGE_Y, // 手按下y的位置 
-	PR = sysInfo.pixelRatio, // dpi
-	T_PAGE_X, // 手移动的时候x的位置
-	T_PAGE_Y, // 手移动的时候Y的位置
-	CUT_L, // 初始化拖拽元素的left值
-	CUT_T, // 初始化拖拽元素的top值
-	CUT_R, // 初始化拖拽元素的
-	CUT_B, // 初始化拖拽元素的
-	CUT_W, // 初始化拖拽元素的宽度
-	CUT_H, //  初始化拖拽元素的高度
-	IMG_RATIO, // 图片比例
-	IMG_REAL_W, // 图片实际的宽度
-	IMG_REAL_H, // 图片实际的高度
-	DRAFG_MOVE_RATIO = 1, //移动时候的比例,
-	INIT_DRAG_POSITION = 100, // 初始化屏幕宽度和裁剪区域的宽度之差，用于设置初始化裁剪的宽度
-	DRAW_IMAGE_W = sysInfo.screenWidth // 设置生成的图片宽度
-
-export default {
-	/**
-	 * 页面的初始数据
-	 */
-	data() {
-		return {
-			imageSrc: store.getters.avatar,
-			isShowImg: false,
-			// 初始化的宽高
-			cropperInitW: SCREEN_WIDTH,
-			cropperInitH: SCREEN_WIDTH,
-			// 动态的宽高
-			cropperW: SCREEN_WIDTH,
-			cropperH: SCREEN_WIDTH,
-			// 动态的left top值
-			cropperL: 0,
-			cropperT: 0,
-
-			transL: 0,
-			transT: 0,
-
-			// 图片缩放值
-			scaleP: 0,
-			imageW: 0,
-			imageH: 0,
-
-			// 裁剪框 宽高
-			cutL: 0,
-			cutT: 0,
-			cutB: SCREEN_WIDTH,
-			cutR: '100%',
-			qualityWidth: DRAW_IMAGE_W,
-			innerAspectRadio: DRAFG_MOVE_RATIO
-		}
-	},
-	/**
-	 * 生命周期函数--监听页面初次渲染完成
-	 */
-	onReady: function () {
-		this.loadImage()
-	},
-	methods: {
-		setData: function (obj) {
-			let that = this
-			Object.keys(obj).forEach(function (key) {
-				that.$set(that.$data, key, obj[key])
-			})
-		},
-		getImage: function () {
-			var _this = this
-			uni.chooseImage({
-				count: 1,
-				sizeType: ['compressed'],
-				sourceType: ['album', 'camera'],
-				success: function (res) {
-					_this.setData({
-						imageSrc: res.tempFilePaths[0],
-					})
-					_this.loadImage()
-				},
-				fail: function (error) {
-					console.error('选择图片失败:', error)
-					uni.showToast({
-						title: '选择图片失败',
-						icon: 'none'
-					})
-				}
-			})
-		},
-		loadImage: function () {
-			var _this = this
-
-			uni.showLoading({
-				title: '加载中...'
-			})
-
-			uni.getImageInfo({
-				src: _this.imageSrc,
-				success: function success(res) {
-					IMG_RATIO = 1 / 1
-					if (IMG_RATIO >= 1) {
-						IMG_REAL_W = SCREEN_WIDTH
-						IMG_REAL_H = SCREEN_WIDTH / IMG_RATIO
-					} else {
-						IMG_REAL_W = SCREEN_WIDTH * IMG_RATIO
-						IMG_REAL_H = SCREEN_WIDTH
-					}
-					let minRange = IMG_REAL_W > IMG_REAL_H ? IMG_REAL_W : IMG_REAL_H
-					INIT_DRAG_POSITION = minRange > INIT_DRAG_POSITION ? INIT_DRAG_POSITION : minRange
-					// 根据图片的宽高显示不同的效果   保证图片可以正常显示
-					if (IMG_RATIO >= 1) {
-						let cutT = Math.ceil((SCREEN_WIDTH / IMG_RATIO - (SCREEN_WIDTH / IMG_RATIO - INIT_DRAG_POSITION)) / 2)
-						let cutB = cutT
-						let cutL = Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH + INIT_DRAG_POSITION) / 2)
-						let cutR = cutL
-						_this.setData({
-							cropperW: SCREEN_WIDTH,
-							cropperH: SCREEN_WIDTH / IMG_RATIO,
-							// 初始化left right
-							cropperL: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH) / 2),
-							cropperT: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH / IMG_RATIO) / 2),
-							cutL: cutL,
-							cutT: cutT,
-							cutR: cutR,
-							cutB: cutB,
-							// 图片缩放值
-							imageW: IMG_REAL_W,
-							imageH: IMG_REAL_H,
-							scaleP: IMG_REAL_W / SCREEN_WIDTH,
-							qualityWidth: DRAW_IMAGE_W,
-							innerAspectRadio: IMG_RATIO
-						})
-					} else {
-						let cutL = Math.ceil((SCREEN_WIDTH * IMG_RATIO - (SCREEN_WIDTH * IMG_RATIO)) / 2)
-						let cutR = cutL
-						let cutT = Math.ceil((SCREEN_WIDTH - INIT_DRAG_POSITION) / 2)
-						let cutB = cutT
-						_this.setData({
-							cropperW: SCREEN_WIDTH * IMG_RATIO,
-							cropperH: SCREEN_WIDTH,
-							// 初始化left right
-							cropperL: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH * IMG_RATIO) / 2),
-							cropperT: Math.ceil((SCREEN_WIDTH - SCREEN_WIDTH) / 2),
-
-							cutL: cutL,
-							cutT: cutT,
-							cutR: cutR,
-							cutB: cutB,
-							// 图片缩放值
-							imageW: IMG_REAL_W,
-							imageH: IMG_REAL_H,
-							scaleP: IMG_REAL_W / SCREEN_WIDTH,
-							qualityWidth: DRAW_IMAGE_W,
-							innerAspectRadio: IMG_RATIO
-						})
-					}
-					_this.setData({
-						isShowImg: true
-					})
-					uni.hideLoading()
-				},
-				fail: function (error) {
-					console.error('获取图片信息失败:', error)
-					uni.hideLoading()
-					uni.showToast({
-						title: '图片加载失败',
-						icon: 'none'
-					})
-				}
-			})
-		},
-		// 拖动时候触发的touchStart事件
-		contentStartMove(e) {
-			PAGE_X = e.touches[0].pageX
-			PAGE_Y = e.touches[0].pageY
-		},
-
-		// 拖动时候触发的touchMove事件
-		contentMoveing(e) {
-			var _this = this
-			var dragLengthX = (PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-			var dragLengthY = (PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-			// 左移
-			if (dragLengthX > 0) {
-				if (this.cutL - dragLengthX < 0) dragLengthX = this.cutL
-			} else {
-				if (this.cutR + dragLengthX < 0) dragLengthX = -this.cutR
-			}
-
-			if (dragLengthY > 0) {
-				if (this.cutT - dragLengthY < 0) dragLengthY = this.cutT
-			} else {
-				if (this.cutB + dragLengthY < 0) dragLengthY = -this.cutB
-			}
-			this.setData({
-				cutL: this.cutL - dragLengthX,
-				cutT: this.cutT - dragLengthY,
-				cutR: this.cutR + dragLengthX,
-				cutB: this.cutB + dragLengthY
-			})
-
-			PAGE_X = e.touches[0].pageX
-			PAGE_Y = e.touches[0].pageY
-		},
-
-		contentTouchEnd() {
-
-		},
-
-		// 获取图片
-		getImageInfo() {
-			var _this = this
-			uni.showLoading({
-				title: '图片生成中...',
-			})
-			
-			// 获取全局用户信息 - 使用全局的 getApp() 函数
-			const app = getApp()
-			const userInfo = app.globalData.userInfo || {}
-			const userId = userInfo.userId || userInfo.id || 0
-			
-			console.log('🔍 AVATAR UPLOAD - User info from globalData:', userInfo)
-			console.log('🔍 AVATAR UPLOAD - User ID:', userId)
-			
-			if (!userId) {
-				uni.hideLoading()
-				uni.showToast({ 
-					title: '未获取到用户信息，请重新登录', 
-					icon: 'none',
-					duration: 3000
-				})
-				return
-			}
-			
-			// 将图片写入画布
-			const ctx = uni.createCanvasContext('myCanvas')
-			ctx.drawImage(_this.imageSrc, 0, 0, IMG_REAL_W, IMG_REAL_H)
-			ctx.draw(true, () => {
-				// 获取画布要裁剪的位置和宽度   均为百分比 * 画布中图片的宽度    保证了在微信小程序中裁剪的图片模糊  位置不对的问题 canvasT = (_this.cutT / _this.cropperH) * (_this.imageH / pixelRatio)
-				var canvasW = ((_this.cropperW - _this.cutL - _this.cutR) / _this.cropperW) * IMG_REAL_W
-				var canvasH = ((_this.cropperH - _this.cutT - _this.cutB) / _this.cropperH) * IMG_REAL_H
-				var canvasL = (_this.cutL / _this.cropperW) * IMG_REAL_W
-				var canvasT = (_this.cutT / _this.cropperH) * IMG_REAL_H
-				uni.canvasToTempFilePath({
-					x: canvasL,
-					y: canvasT,
-					width: canvasW,
-					height: canvasH,
-					destWidth: canvasW,
-					destHeight: canvasH,
-					quality: 0.5,
-					canvasId: 'myCanvas',
-					success: function (res) {
-						uni.hideLoading()
-						
-						// 使用新的 uploadImage API 上传头像
-						const tempFilePath = res.tempFilePath
-						
-						console.log('🔍 AVATAR UPLOAD - Starting avatar upload process')
-						console.log('🔍 AVATAR UPLOAD - Temp file path:', tempFilePath)
-						
-						// 调用 uploadImage 接口
-						uploadImage(
-							tempFilePath,
-							8, // relatedType: 8 表示用户头像
-							userId, // relatedId: 从全局数据获取的用户ID
-							'用户头像', // description
-							'AVATAR', // stage
-							0 // sequence
-						).then(response => {
-							console.log('✅ AVATAR UPLOAD - Upload successful:', response)
-							
-							// 根据你的 API 响应结构调整
-							if (response.code === 200) {
-								const avatarUrl = response.imageUrl || response.data?.fileUrl
-								
-								if (avatarUrl) {
-									// 更新 store 中的头像
-									store.commit('SET_AVATAR', avatarUrl)
-									
-									// 同时更新全局数据中的头像
-									if (app.globalData.userInfo) {
-										app.globalData.userInfo.avatar = avatarUrl
-									}
-									
-									uni.showToast({ 
-										title: "头像修改成功", 
-										icon: 'success',
-										duration: 2000
-									})
-									
-									// 延迟返回，让用户看到成功提示
-									setTimeout(() => {
-										uni.navigateBack()
-									}, 1500)
-								} else {
-									throw new Error('未获取到头像URL')
-								}
-							} else {
-								throw new Error(response.msg || '上传失败')
-							}
-						}).catch(error => {
-							console.error('❌ AVATAR UPLOAD - Upload failed:', error)
-							uni.showToast({ 
-								title: error.message || '头像上传失败', 
-								icon: 'none',
-								duration: 3000
-							})
-						})
+	export default {
+		data() {
+			return {
+				addresses: [
+					{
+						id: 1,
+						name: '张三',
+						phone: '13800138000',
+						region: '北京市 朝阳区 望京街道',
+						detail: '阜通东大街6号院',
+						isDefault: true
 					},
-					fail: (error) => {
-						uni.hideLoading()
-						console.error('❌ AVATAR UPLOAD - Canvas to temp file failed:', error)
-						uni.showToast({ 
-							title: '图片生成失败', 
-							icon: 'none',
-							duration: 3000
-						})
+					{
+						id: 2,
+						name: '李四',
+						phone: '13900139000',
+						region: '上海市 浦东新区 陆家嘴街道',
+						detail: '世纪大道100号环球金融中心',
+						isDefault: false
 					}
-				})
-			})
+				],
+				formData: {
+					name: '',
+					phone: '',
+					region: '',
+					detail: '',
+					isDefault: false
+				},
+				currentEditId: null,
+				isEditing: false,
+				showModal: false
+			}
 		},
-		// 设置大小的时候触发的touchStart事件
-		dragStart(e) {
-			T_PAGE_X = e.touches[0].pageX
-			T_PAGE_Y = e.touches[0].pageY
-			CUT_L = this.cutL
-			CUT_R = this.cutR
-			CUT_B = this.cutB
-			CUT_T = this.cutT
-		},
-
-		// 设置大小的时候触发的touchMove事件
-		dragMove(e) {
-			var _this = this
-			var dragType = e.target.dataset.drag
-			switch (dragType) {
-				case 'right':
-					var dragLength = (T_PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-					if (CUT_R + dragLength < 0) dragLength = -CUT_R
-					this.setData({
-						cutR: CUT_R + dragLength
-					})
-					break
-				case 'left':
-					var dragLength = (T_PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-					if (CUT_L - dragLength < 0) dragLength = CUT_L
-					if ((CUT_L - dragLength) > (this.cropperW - this.cutR)) dragLength = CUT_L - (this.cropperW - this.cutR)
-					this.setData({
-						cutL: CUT_L - dragLength
-					})
-					break
-				case 'top':
-					var dragLength = (T_PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-					if (CUT_T - dragLength < 0) dragLength = CUT_T
-					if ((CUT_T - dragLength) > (this.cropperH - this.cutB)) dragLength = CUT_T - (this.cropperH - this.cutB)
-					this.setData({
-						cutT: CUT_T - dragLength
-					})
-					break
-				case 'bottom':
-					var dragLength = (T_PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-					if (CUT_B + dragLength < 0) dragLength = -CUT_B
-					this.setData({
-						cutB: CUT_B + dragLength
-					})
-					break
-				case 'rightBottom':
-					var dragLengthX = (T_PAGE_X - e.touches[0].pageX) * DRAFG_MOVE_RATIO
-					var dragLengthY = (T_PAGE_Y - e.touches[0].pageY) * DRAFG_MOVE_RATIO
-
-					if (CUT_B + dragLengthY < 0) dragLengthY = -CUT_B
-					if (CUT_R + dragLengthX < 0) dragLengthX = -CUT_R
-					let cutB = CUT_B + dragLengthY
-					let cutR = CUT_R + dragLengthX
-
-					this.setData({
-						cutB: cutB,
-						cutR: cutR
-					})
-					break
-				default:
-					break
+		methods: {
+			// 输入框聚焦事件
+			onInputFocus() {
+				console.log('输入框聚焦');
+			},
+			
+			// 输入框失焦事件
+			onInputBlur() {
+				console.log('输入框失焦');
+			},
+			
+			// 打开添加地址模态框
+			openAddModal() {
+				this.currentEditId = null;
+				this.isEditing = false;
+				this.resetForm();
+				this.showModal = true;
+			},
+			
+			// 打开编辑地址模态框
+			editAddress(id) {
+				const address = this.addresses.find(addr => addr.id === id);
+				if (!address) return;
+				
+				this.currentEditId = id;
+				this.isEditing = true;
+				this.formData = { ...address };
+				this.showModal = true;
+			},
+			
+			// 关闭模态框
+			closeModal() {
+				this.showModal = false;
+			},
+			
+			// 重置表单
+			resetForm() {
+				this.formData = {
+					name: '',
+					phone: '',
+					region: '',
+					detail: '',
+					isDefault: false
+				};
+			},
+			
+			// 切换默认地址状态
+			toggleDefault() {
+				this.formData.isDefault = !this.formData.isDefault;
+			},
+			
+			// 设置默认地址
+			setDefaultAddress(id) {
+				this.addresses = this.addresses.map(address => ({
+					...address,
+					isDefault: address.id === id
+				}));
+				uni.showToast({
+					title: '设置成功',
+					icon: 'success'
+				});
+			},
+			
+			// 删除地址
+			deleteAddress(id) {
+				uni.showModal({
+					title: '提示',
+					content: '确定要删除这个地址吗？',
+					success: (res) => {
+						if (res.confirm) {
+							this.addresses = this.addresses.filter(address => address.id !== id);
+							uni.showToast({
+								title: '删除成功',
+								icon: 'success'
+							});
+						}
+					}
+				});
+			},
+			
+			// 处理表单提交
+			handleFormSubmit() {
+				if (!this.formData.name || !this.formData.phone || !this.formData.region || !this.formData.detail) {
+					uni.showToast({
+						title: '请填写完整信息',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				// 手机号验证
+				const phoneRegex = /^1[3-9]\d{9}$/;
+				if (!phoneRegex.test(this.formData.phone)) {
+					uni.showToast({
+						title: '请输入正确的手机号码',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				if (this.isEditing) {
+					// 编辑现有地址
+					this.addresses = this.addresses.map(address => 
+						address.id === this.currentEditId 
+							? { ...address, ...this.formData } 
+							: { 
+								...address, 
+								isDefault: this.formData.isDefault ? false : address.isDefault 
+							}
+					);
+				} else {
+					// 添加新地址
+					const newAddress = {
+						id: Date.now(), // 使用时间戳作为ID
+						...this.formData
+					};
+					
+					if (this.formData.isDefault) {
+						// 如果新地址设为默认，取消其他地址的默认状态
+						this.addresses = this.addresses.map(address => ({
+							...address,
+							isDefault: false
+						}));
+					}
+					
+					this.addresses.push(newAddress);
+				}
+				
+				this.closeModal();
+				uni.showToast({
+					title: '保存成功',
+					icon: 'success'
+				});
 			}
 		}
 	}
-}
 </script>
 
-<style scoped>
-	/* 样式保持不变，与之前相同 */
-	.cropper-config {
-		padding: 20rpx 40rpx;
+<style>
+	.container {
+		padding: 20rpx;
+		background-color: #f4f4f4;
+		min-height: 100vh;
 	}
-
-	.cropper-content {
-		min-height: 750rpx;
-		width: 100%;
+	
+	.header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 30rpx;
+		padding-bottom: 20rpx;
+		border-bottom: 1rpx solid #e0e0e0;
 	}
-
-	.uni-corpper {
+	
+	.header-title {
+		font-size: 36rpx;
+		color: #1890ff;
+	}
+	
+	.btn-add {
+		background-color: #1890ff;
+		color: white;
+		border: none;
+		padding: 16rpx 32rpx;
+		border-radius: 8rpx;
+		font-size: 28rpx;
+	}
+	
+	.address-list {
+		display: flex;
+		flex-direction: column;
+		gap: 20rpx;
+	}
+	
+	.address-card {
+		background-color: white;
+		border-radius: 16rpx;
+		padding: 30rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
 		position: relative;
-		overflow: hidden;
-		-webkit-user-select: none;
-		-moz-user-select: none;
-		-ms-user-select: none;
-		user-select: none;
-		-webkit-tap-highlight-color: transparent;
-		-webkit-touch-callout: none;
-		box-sizing: border-box;
+		border: 2rpx solid #e0e0e0;
 	}
-
-	.uni-corpper-content {
-		position: relative;
+	
+	.address-card.default {
+		border-color: #1890ff;
 	}
-
-	.uni-corpper-content image {
-		display: block;
-		width: 100%;
-		min-width: 0 !important;
-		max-width: none !important;
-		height: 100%;
-		min-height: 0 !important;
-		max-height: none !important;
-		image-orientation: 0deg !important;
-		margin: 0 auto;
-	}
-
-	/* 移动图片效果 */
-	.uni-cropper-drag-box {
+	
+	.default-tag {
 		position: absolute;
 		top: 0;
 		right: 0;
-		bottom: 0;
+		background-color: #1890ff;
+		color: white;
+		padding: 8rpx 16rpx;
+		font-size: 24rpx;
+		border-radius: 0 16rpx 0 16rpx;
+	}
+	
+	.address-info {
+		margin-bottom: 20rpx;
+	}
+	
+	.address-name {
+		font-weight: bold;
+		margin-bottom: 10rpx;
+		font-size: 32rpx;
+	}
+	
+	.address-detail {
+		color: #666;
+		font-size: 28rpx;
+		line-height: 1.5;
+	}
+	
+	.address-actions {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 20rpx;
+		padding-top: 20rpx;
+		border-top: 1rpx solid #f0f0f0;
+	}
+	
+	.action-btn {
+		color: #1890ff;
+		font-size: 28rpx;
+		margin-left: 20rpx;
+	}
+	
+	.action-btn:first-child {
+		margin-left: 0;
+	}
+	
+	.empty-state {
+		text-align: center;
+		padding: 80rpx 40rpx;
+		color: #999;
+	}
+	
+	.empty-text {
+		display: block;
+		margin-bottom: 40rpx;
+		font-size: 32rpx;
+	}
+	
+	.btn-add-first {
+		background-color: #1890ff;
+		color: white;
+		border: none;
+		padding: 20rpx 40rpx;
+		border-radius: 8rpx;
+		font-size: 28rpx;
+	}
+	
+	/* 模态框样式 */
+	.modal {
+		position: fixed;
+		top: 0;
 		left: 0;
-		cursor: move;
-		background: rgba(0, 0, 0, 0.6);
-		z-index: 1;
+		width: 100%;
+		height: 100%;
+		z-index: 999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
-
-	/* 内部的信息 */
-	.uni-corpper-crop-box {
+	
+	.modal-mask {
 		position: absolute;
-		background: rgba(255, 255, 255, 0.3);
-		z-index: 2;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background-color: rgba(0, 0, 0, 0.5);
 	}
-
-	.uni-corpper-crop-box .uni-cropper-view-box {
+	
+	.modal-content {
+		background-color: white;
+		width: 90%;
+		max-width: 600rpx;
+		border-radius: 16rpx;
+		padding: 40rpx;
 		position: relative;
+		z-index: 1000;
+	}
+	
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 30rpx;
+		padding-bottom: 20rpx;
+		border-bottom: 1rpx solid #e0e0e0;
+	}
+	
+	.modal-title {
+		font-size: 36rpx;
+		font-weight: normal;
+	}
+	
+	.close-btn {
+		font-size: 48rpx;
+		color: #999;
+	}
+	
+	.form-row {
+		display: flex;
+		gap: 20rpx;
+	}
+	
+	.form-group {
+		flex: 1;
+		margin-bottom: 30rpx;
+	}
+	
+	.form-label {
 		display: block;
+		margin-bottom: 10rpx;
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	/* 输入框样式 */
+	.editor-input {
 		width: 100%;
-		height: 100%;
-		overflow: visible;
-		outline: 1rpx solid #69f;
-		outline-color: rgba(102, 153, 255, .75)
+		padding: 20rpx;
+		border: 1rpx solid #ddd;
+		border-radius: 8rpx;
+		font-size: 28rpx;
+		background-color: #fff;
+		height: 80rpx;
+		line-height: 80rpx;
 	}
-
-	/* 横向虚线 */
-	.uni-cropper-dashed-h {
-		position: absolute;
-		top: 33.33333333%;
-		left: 0;
-		width: 100%;
-		height: 33.33333333%;
-		border-top: 1rpx dashed rgba(255, 255, 255, 0.5);
-		border-bottom: 1rpx dashed rgba(255, 255, 255, 0.5);
+	
+	.placeholder {
+		color: #999;
+		font-size: 28rpx;
 	}
-
-	/* 纵向虚线 */
-	.uni-cropper-dashed-v {
-		position: absolute;
-		left: 33.33333333%;
-		top: 0;
-		width: 33.33333333%;
-		height: 100%;
-		border-left: 1rpx dashed rgba(255, 255, 255, 0.5);
-		border-right: 1rpx dashed rgba(255, 255, 255, 0.5);
+	
+	.checkbox-group {
+		margin-top: 20rpx;
 	}
-
-	/* 四个方向的线  为了之后的拖动事件*/
-	.uni-cropper-line-t {
-		position: absolute;
-		display: block;
-		width: 100%;
-		background-color: #69f;
-		top: 0;
-		left: 0;
-		height: 1rpx;
-		opacity: 0.1;
-		cursor: n-resize;
+	
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		font-size: 28rpx;
 	}
-
-	.uni-cropper-line-t::before {
-		content: '';
-		position: absolute;
-		top: 50%;
-		right: 0rpx;
-		width: 100%;
-		-webkit-transform: translate3d(0, -50%, 0);
-		transform: translate3d(0, -50%, 0);
-		bottom: 0;
-		height: 41rpx;
-		background: transparent;
-		z-index: 11;
+	
+	.modal-footer {
+		display: flex;
+		justify-content: flex-end;
+		gap: 20rpx;
+		margin-top: 40rpx;
 	}
-
-	.uni-cropper-line-r {
-		position: absolute;
-		display: block;
-		background-color: #69f;
-		top: 0;
-		right: 0rpx;
-		width: 1rpx;
-		opacity: 0.1;
-		height: 100%;
-		cursor: e-resize;
+	
+	.btn-cancel {
+		background-color: #f4f4f4;
+		color: #333;
+		border: none;
+		padding: 20rpx 40rpx;
+		border-radius: 8rpx;
+		font-size: 28rpx;
 	}
-
-	.uni-cropper-line-r::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 50%;
-		width: 41rpx;
-		-webkit-transform: translate3d(-50%, 0, 0);
-		transform: translate3d(-50%, 0, 0);
-		bottom: 0;
-		height: 100%;
-		background: transparent;
-		z-index: 11;
-	}
-
-	.uni-cropper-line-b {
-		position: absolute;
-		display: block;
-		width: 100%;
-		background-color: #69f;
-		bottom: 0;
-		left: 0;
-		height: 1rpx;
-		opacity: 0.1;
-		cursor: s-resize;
-	}
-
-	.uni-cropper-line-b::before {
-		content: '';
-		position: absolute;
-		top: 50%;
-		right: 0rpx;
-		width: 100%;
-		-webkit-transform: translate3d(0, -50%, 0);
-		transform: translate3d(0, -50%, 0);
-		bottom: 0;
-		height: 41rpx;
-		background: transparent;
-		z-index: 11;
-	}
-
-	.uni-cropper-line-l {
-		position: absolute;
-		display: block;
-		background-color: #69f;
-		top: 0;
-		left: 0;
-		width: 1rpx;
-		opacity: 0.1;
-		height: 100%;
-		cursor: w-resize;
-	}
-
-	.uni-cropper-line-l::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 50%;
-		width: 41rpx;
-		-webkit-transform: translate3d(-50%, 0, 0);
-		transform: translate3d(-50%, 0, 0);
-		bottom: 0;
-		height: 100%;
-		background: transparent;
-		z-index: 11;
-	}
-
-	.uni-cropper-point {
-		width: 5rpx;
-		height: 5rpx;
-		background-color: #69f;
-		opacity: .75;
-		position: absolute;
-		z-index: 3;
-	}
-
-	.point-t {
-		top: -3rpx;
-		left: 50%;
-		margin-left: -3rpx;
-		cursor: n-resize;
-	}
-
-	.point-tr {
-		top: -3rpx;
-		left: 100%;
-		margin-left: -3rpx;
-		cursor: n-resize;
-	}
-
-	.point-r {
-		top: 50%;
-		left: 100%;
-		margin-left: -3rpx;
-		margin-top: -3rpx;
-		cursor: n-resize;
-	}
-
-	.point-rb {
-		left: 100%;
-		top: 100%;
-		-webkit-transform: translate3d(-50%, -50%, 0);
-		transform: translate3d(-50%, -50%, 0);
-		cursor: n-resize;
-		width: 36rpx;
-		height: 36rpx;
-		background-color: #69f;
-		position: absolute;
-		z-index: 1112;
-		opacity: 1;
-	}
-
-	.point-b {
-		left: 50%;
-		top: 100%;
-		margin-left: -3rpx;
-		margin-top: -3rpx;
-		cursor: n-resize;
-	}
-
-	.point-bl {
-		left: 0%;
-		top: 100%;
-		margin-left: -3rpx;
-		margin-top: -3rpx;
-		cursor: n-resize;
-	}
-
-	.point-l {
-		left: 0%;
-		top: 50%;
-		margin-left: -3rpx;
-		margin-top: -3rpx;
-		cursor: n-resize;
-	}
-
-	.point-lt {
-		left: 0%;
-		top: 0%;
-		margin-left: -3rpx;
-		margin-top: -3rpx;
-		cursor: n-resize;
-	}
-
-	/* 裁剪框预览内容 */
-	.uni-cropper-viewer {
-		position: relative;
-		width: 100%;
-		height: 100%;
-		overflow: hidden;
-	}
-
-	.uni-cropper-viewer image {
-		position: absolute;
-		z-index: 2;
+	
+	.btn-submit {
+		background-color: #1890ff;
+		color: white;
+		border: none;
+		padding: 20rpx 40rpx;
+		border-radius: 8rpx;
+		font-size: 28rpx;
 	}
 </style>
