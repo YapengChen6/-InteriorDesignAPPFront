@@ -20,7 +20,9 @@
 		
 		<!-- 主菜单 -->
 		<view class="main-menu">
-			<view class="menu-item" :class="{ active: activeMainMenu === 0 }" @click="activeMainMenu = 0">
+			<view class="menu-item" 
+			      :class="{ active: activeMainMenu === 0 }" 
+			      @click="goToOrderHall()">
 				<view class="menu-icon">📋</view>
 				<text>订单大厅</text>
 			</view>
@@ -218,6 +220,13 @@
 			}
 		},
 		methods: {
+			// 跳转到订单大厅页面
+			goToOrderHall() {
+				uni.navigateTo({
+					url: '/pages/order-hall/order-hall'
+				});
+			},
+			
 			// 跳转到定位页面
 			goToLocationPage() {
 				uni.navigateTo({

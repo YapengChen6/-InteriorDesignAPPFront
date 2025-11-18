@@ -1,0 +1,900 @@
+<template>
+	<view class="order-detail-container">
+		<!-- 页面头部 -->
+		<view class="page-header">
+			<view class="header-left" @click="goBack">
+				<text class="back-icon">‹</text>
+				<text class="back-text">返回</text>
+			</view>
+			<view class="header-title">项目详情</view>
+			<view class="header-right">
+				<text class="share-icon" @click="shareProject">分享</text>
+			</view>
+		</view>
+
+		<!-- 项目基本信息 -->
+		<view class="basic-info-section">
+			<view class="project-status" :class="getStatusClass(projectDetail.status)">
+				{{ getStatusText(projectDetail.status) }}
+			</view>
+			
+			<view class="project-title">{{ projectDetail.title || '加载中...' }}</view>
+			
+			<view class="project-meta">
+				<view class="meta-item">
+					<text class="meta-icon">📍</text>
+					<text class="meta-text">{{ projectDetail.address || '未指定地区' }}</text>
+				</view>
+				<view class="meta-item">
+					<text class="meta-icon">⏰</text>
+					<text class="meta-text">{{ formatDate(projectDetail.deadline) }}</text>
+				</view>
+				<view class="meta-item">
+					<text class="meta-icon">💰</text>
+					<text class="meta-text budget">{{ formatBudget(projectDetail.budget) }}</text>
+				</view>
+			</view>
+		</view>
+
+		<!-- 项目详情卡片 -->
+		<view class="detail-card">
+			<view class="card-header">
+				<text class="card-title">项目详情</text>
+			</view>
+			<view class="card-content">
+				<text class="project-description">
+					{{ projectDetail.description || '暂无项目描述' }}
+				</text>
+				
+				<!-- 项目图片 -->
+				<view class="project-images" v-if="projectDetail.images && projectDetail.images.length > 0">
+					<view class="images-title">相关图片</view>
+					<scroll-view class="images-scroll" scroll-x="true">
+						<view class="image-list">
+							<view 
+								class="image-item" 
+								v-for="(image, index) in projectDetail.images" 
+								:key="index"
+								@click="previewImage(image, index)"
+							>
+								<image :src="image" mode="aspectFill" class="project-image" />
+							</view>
+						</view>
+					</scroll-view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 项目要求 -->
+		<view class="detail-card">
+			<view class="card-header">
+				<text class="card-title">项目要求</text>
+			</view>
+			<view class="card-content">
+				<view class="requirement-item">
+					<text class="requirement-label">所需角色：</text>
+					<text class="requirement-value">{{ getRoleText(projectDetail.requiredRoles) }}</text>
+				</view>
+				<view class="requirement-item">
+					<text class="requirement-label">项目面积：</text>
+					<text class="requirement-value">{{ projectDetail.area || '未指定' }}㎡</text>
+				</view>
+				<view class="requirement-item">
+					<text class="requirement-label">项目类型：</text>
+					<text class="requirement-value">{{ getProjectTypeText(projectDetail.projectType) }}</text>
+				</view>
+				<view class="requirement-item">
+					<text class="requirement-label">风格偏好：</text>
+					<text class="requirement-value">{{ projectDetail.style || '不限' }}</text>
+				</view>
+				<view class="requirement-item" v-if="projectDetail.specialRequirements">
+					<text class="requirement-label">特殊要求：</text>
+					<text class="requirement-value">{{ projectDetail.specialRequirements }}</text>
+				</view>
+			</view>
+		</view>
+
+		<!-- 发布者信息 -->
+		<view class="detail-card">
+			<view class="card-header">
+				<text class="card-title">发布者信息</text>
+			</view>
+			<view class="card-content">
+				<view class="publisher-info">
+					<view class="publisher-avatar">
+						<image 
+							:src="projectDetail.avatar || '/static/images/default-avatar.png'" 
+							class="avatar-image" 
+							mode="aspectFill"
+						/>
+					</view>
+					<view class="publisher-details">
+						<text class="publisher-name">{{ projectDetail.createBy || '匿名用户' }}</text>
+						<text class="publisher-meta">发布于 {{ formatTime(projectDetail.createTime) }}</text>
+					</view>
+				</view>
+				
+				<!-- 发布者其他信息 -->
+				<view class="publisher-stats" v-if="publisherStats">
+					<view class="stat-item">
+						<text class="stat-number">{{ publisherStats.projectCount || 0 }}</text>
+						<text class="stat-label">发布项目</text>
+					</view>
+					<view class="stat-item">
+						<text class="stat-number">{{ publisherStats.completionRate || '0%' }}</text>
+						<text class="stat-label">完成率</text>
+					</view>
+					<view class="stat-item">
+						<text class="stat-number">{{ publisherStats.rating || '0' }}</text>
+						<text class="stat-label">评分</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- 底部操作栏 - 简化版本 -->
+		<view class="bottom-actions">
+			<view class="action-buttons">
+				<button class="btn contact-btn" @click="contactPublisher">联系用户</button>
+				<button class="btn accept-btn" @click="acceptOrder">接取订单</button>
+			</view>
+		</view>
+
+		<!-- 接单确认对话框 -->
+		<uni-popup ref="acceptPopup" type="dialog">
+			<view class="accept-dialog">
+				<view class="dialog-header">
+					<text class="dialog-title">确认接单</text>
+				</view>
+				<view class="dialog-content">
+					<text class="dialog-message">确定要接取这个订单吗？接单后您将负责此项目的{{ getRoleText(projectDetail.requiredRoles) }}工作。</text>
+				</view>
+				<view class="dialog-actions">
+					<button class="dialog-btn cancel" @click="closeAcceptDialog">取消</button>
+					<button class="dialog-btn confirm" @click="confirmAcceptOrder">确认接单</button>
+				</view>
+			</view>
+		</uni-popup>
+
+		<!-- 加载状态 -->
+		<view class="loading-state" v-if="loading">
+			<text class="loading-text">加载中...</text>
+		</view>
+
+		<!-- 错误状态 -->
+		<view class="error-state" v-if="error">
+			<text class="error-icon">😕</text>
+			<text class="error-text">加载失败</text>
+			<text class="error-desc">{{ errorMessage }}</text>
+			<button class="retry-btn" @click="loadProjectDetail">重新加载</button>
+		</view>
+	</view>
+</template>
+
+<script>
+import { projectService } from '@/api/project.js'
+
+export default {
+	data() {
+		return {
+			// 项目ID
+			projectId: '',
+			
+			// 项目详情
+			projectDetail: {},
+			
+			// 发布者统计信息
+			publisherStats: null,
+			
+			// 加载状态
+			loading: false,
+			error: false,
+			errorMessage: '',
+			
+			// 状态映射
+			statusMap: {
+				0: { text: '待审核', class: 'pending' },
+				1: { text: '招标中', class: 'bidding' },
+				2: { text: '进行中', class: 'in-progress' },
+				3: { text: '已完成', class: 'completed' },
+				4: { text: '已取消', class: 'cancelled' }
+			},
+			
+			roleMap: {
+				1: '设计师',
+				2: '施工队',
+				3: '设计+施工'
+			},
+			
+			projectTypeMap: {
+				1: '住宅装修',
+				2: '商业空间',
+				3: '办公室装修',
+				4: '其他'
+			}
+		}
+	},
+	
+	onLoad(options) {
+		if (options.id) {
+			this.projectId = options.id
+			this.loadProjectDetail()
+		} else {
+			this.error = true
+			this.errorMessage = '项目ID不存在'
+		}
+	},
+	
+	onPullDownRefresh() {
+		this.loadProjectDetail().finally(() => {
+			uni.stopPullDownRefresh()
+		})
+	},
+	
+	methods: {
+		// 加载项目详情
+		async loadProjectDetail() {
+			this.loading = true
+			this.error = false
+			
+			try {
+				console.log('开始加载项目详情，项目ID:', this.projectId)
+				
+				const result = await projectService.getProjectDetail(this.projectId)
+				console.log('项目详情数据:', result)
+				
+				if (result && result.projectId) {
+					this.projectDetail = result
+					
+					// 加载发布者统计信息
+					await this.loadPublisherStats(result.createBy)
+				} else {
+					throw new Error('项目不存在或已被删除')
+				}
+				
+			} catch (error) {
+				console.error('加载项目详情失败:', error)
+				this.error = true
+				this.errorMessage = error.message || '加载失败，请重试'
+				uni.showToast({
+					title: this.errorMessage,
+					icon: 'none'
+				})
+			} finally {
+				this.loading = false
+			}
+		},
+		
+		// 加载发布者统计信息
+		async loadPublisherStats(userId) {
+			if (!userId) return
+			
+			try {
+				// 模拟数据 - 可以根据实际情况调用用户统计接口
+				this.publisherStats = {
+					projectCount: Math.floor(Math.random() * 20) + 1,
+					completionRate: `${Math.floor(Math.random() * 30) + 70}%`,
+					rating: (Math.random() * 2 + 3).toFixed(1)
+				}
+			} catch (error) {
+				console.error('加载发布者统计信息失败:', error)
+			}
+		},
+		
+		// 联系发布者
+		contactPublisher() {
+			// 直接拨打电话，不弹出选择
+			this.makePhoneCall()
+		},
+		
+		// 拨打电话
+		makePhoneCall() {
+			if (this.projectDetail.contactPhone) {
+				uni.makePhoneCall({
+					phoneNumber: this.projectDetail.contactPhone
+				})
+			} else {
+				uni.showToast({
+					title: '暂无联系电话',
+					icon: 'none'
+				})
+			}
+		},
+		
+		// 接取订单
+		acceptOrder() {
+			// 检查用户是否登录
+			const token = uni.getStorageSync('token')
+			if (!token) {
+				uni.showModal({
+					title: '提示',
+					content: '请先登录后再接单',
+					confirmText: '去登录',
+					success: (res) => {
+						if (res.confirm) {
+							uni.navigateTo({
+								url: '/pages/login/login'
+							})
+						}
+					}
+				})
+				return
+			}
+			
+			// 直接跳转到设计订单页面
+			uni.navigateTo({
+				url: `/pages/post/post-designorder?projectId=${this.projectId}`
+			})
+		},
+		
+		// 确认接单（保留原有逻辑，但不再使用）
+		async confirmAcceptOrder() {
+			try {
+				this.loading = true
+				
+				// 调用接单接口
+				const result = await projectService.acceptProject(this.projectId)
+				
+				console.log('接单成功:', result)
+				
+				uni.showToast({
+					title: '接单成功',
+					icon: 'success',
+					duration: 2000
+				})
+				
+				// 关闭对话框
+				this.closeAcceptDialog()
+				
+				// 更新项目状态
+				this.projectDetail.status = 2 // 进行中
+				
+				// 延迟返回上一页
+				setTimeout(() => {
+					uni.navigateBack()
+				}, 1500)
+				
+			} catch (error) {
+				console.error('接单失败:', error)
+				uni.showToast({
+					title: error.message || '接单失败',
+					icon: 'none'
+				})
+			} finally {
+				this.loading = false
+			}
+		},
+		
+		// 关闭接单对话框
+		closeAcceptDialog() {
+			this.$refs.acceptPopup.close()
+		},
+		
+		// 分享项目
+		shareProject() {
+			uni.share({
+				provider: 'weixin',
+				scene: 'WXSceneSession',
+				type: 0,
+				title: this.projectDetail.title,
+				summary: this.projectDetail.description ? this.projectDetail.description.substring(0, 50) + '...' : '这是一个装修项目',
+				href: window.location.href,
+				success: function(res) {
+					console.log('分享成功:', res)
+					uni.showToast({
+						title: '分享成功',
+						icon: 'success'
+					})
+				},
+				fail: function(err) {
+					console.log('分享失败:', err)
+					uni.showToast({
+						title: '分享失败',
+						icon: 'none'
+					})
+				}
+			})
+		},
+		
+		// 预览图片
+		previewImage(image, index) {
+			const images = this.projectDetail.images || []
+			uni.previewImage({
+				urls: images,
+				current: image
+			})
+		},
+		
+		// 返回上一页
+		goBack() {
+			uni.navigateBack()
+		},
+		
+		// 获取状态样式类
+		getStatusClass(status) {
+			return this.statusMap[status]?.class || 'pending'
+		},
+		
+		// 获取状态文本
+		getStatusText(status) {
+			return this.statusMap[status]?.text || '未知状态'
+		},
+		
+		// 获取角色文本
+		getRoleText(role) {
+			return this.roleMap[role] || '未知角色'
+		},
+		
+		// 获取项目类型文本
+		getProjectTypeText(type) {
+			return this.projectTypeMap[type] || '其他'
+		},
+		
+		// 格式化日期
+		formatDate(date) {
+			if (!date) return '未设置'
+			if (date.includes(' ')) {
+				return date.split(' ')[0]
+			}
+			return date
+		},
+		
+		// 格式化预算
+		formatBudget(budget) {
+			if (!budget) return '面议'
+			if (typeof budget === 'number') {
+				if (budget >= 10000) {
+					return `¥${(budget / 10000).toFixed(1)}万`
+				}
+				return `¥${budget}元`
+			}
+			return `¥${budget}`
+		},
+		
+		// 格式化时间
+		formatTime(time) {
+			if (!time) return ''
+			
+			try {
+				const now = new Date()
+				const createTime = new Date(time)
+				
+				if (isNaN(createTime.getTime())) {
+					return '时间未知'
+				}
+				
+				const diff = now - createTime
+				const minutes = Math.floor(diff / (1000 * 60))
+				const hours = Math.floor(diff / (1000 * 60 * 60))
+				const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+				
+				if (minutes < 1) return '刚刚'
+				if (minutes < 60) return `${minutes}分钟前`
+				if (hours < 24) return `${hours}小时前`
+				if (days < 7) return `${days}天前`
+				
+				return `${createTime.getFullYear()}-${createTime.getMonth() + 1}-${createTime.getDate()}`
+			} catch (error) {
+				console.error('格式化时间错误:', error)
+				return '时间未知'
+			}
+		}
+	}
+}
+</script>
+
+<style scoped>
+.order-detail-container {
+	min-height: 100vh;
+	background-color: #f5f5f5;
+	/* 重要：为底部按钮留出足够空间 */
+	padding-bottom: 120rpx;
+}
+
+/* 页面头部 */
+.page-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 30rpx;
+	background-color: #fff;
+	border-bottom: 1rpx solid #f0f0f0;
+	position: sticky;
+	top: 0;
+	z-index: 100;
+}
+
+.header-left {
+	display: flex;
+	align-items: center;
+	flex: 1;
+}
+
+.back-icon {
+	font-size: 48rpx;
+	color: #333;
+	margin-right: 10rpx;
+}
+
+.back-text {
+	font-size: 32rpx;
+	color: #333;
+}
+
+.header-title {
+	flex: 2;
+	text-align: center;
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #333;
+}
+
+.header-right {
+	flex: 1;
+	text-align: right;
+}
+
+.share-icon {
+	font-size: 32rpx;
+	color: #ff6b00;
+}
+
+/* 基本信息区域 */
+.basic-info-section {
+	background: linear-gradient(135deg, #ff6b00, #ff8c00);
+	padding: 40rpx 30rpx;
+	color: white;
+}
+
+.project-status {
+	display: inline-block;
+	padding: 8rpx 24rpx;
+	background: rgba(255, 255, 255, 0.2);
+	border-radius: 24rpx;
+	font-size: 24rpx;
+	margin-bottom: 20rpx;
+}
+
+.project-title {
+	font-size: 40rpx;
+	font-weight: bold;
+	margin-bottom: 30rpx;
+	line-height: 1.4;
+}
+
+.project-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 16rpx;
+}
+
+.meta-item {
+	display: flex;
+	align-items: center;
+	font-size: 28rpx;
+}
+
+.meta-icon {
+	margin-right: 16rpx;
+	font-size: 32rpx;
+}
+
+.meta-text.budget {
+	font-weight: bold;
+	font-size: 32rpx;
+}
+
+/* 详情卡片 */
+.detail-card {
+	background-color: #fff;
+	margin: 20rpx 30rpx;
+	border-radius: 24rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+	overflow: hidden;
+}
+
+.card-header {
+	padding: 30rpx;
+	border-bottom: 1rpx solid #f0f0f0;
+}
+
+.card-title {
+	font-size: 32rpx;
+	font-weight: bold;
+	color: #333;
+}
+
+.card-content {
+	padding: 30rpx;
+}
+
+/* 项目描述 */
+.project-description {
+	font-size: 28rpx;
+	line-height: 1.6;
+	color: #666;
+}
+
+/* 项目图片 */
+.project-images {
+	margin-top: 30rpx;
+}
+
+.images-title {
+	font-size: 28rpx;
+	font-weight: 500;
+	color: #333;
+	margin-bottom: 20rpx;
+}
+
+.images-scroll {
+	white-space: nowrap;
+}
+
+.image-list {
+	display: flex;
+	gap: 20rpx;
+}
+
+.image-item {
+	width: 240rpx;
+	height: 180rpx;
+	border-radius: 16rpx;
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.project-image {
+	width: 100%;
+	height: 100%;
+}
+
+/* 项目要求 */
+.requirement-item {
+	display: flex;
+	align-items: flex-start;
+	margin-bottom: 24rpx;
+	font-size: 28rpx;
+}
+
+.requirement-item:last-child {
+	margin-bottom: 0;
+}
+
+.requirement-label {
+	color: #666;
+	min-width: 160rpx;
+	flex-shrink: 0;
+}
+
+.requirement-value {
+	color: #333;
+	flex: 1;
+	line-height: 1.5;
+}
+
+/* 发布者信息 */
+.publisher-info {
+	display: flex;
+	align-items: center;
+	margin-bottom: 30rpx;
+}
+
+.publisher-avatar {
+	width: 100rpx;
+	height: 100rpx;
+	border-radius: 50rpx;
+	overflow: hidden;
+	margin-right: 24rpx;
+	flex-shrink: 0;
+}
+
+.avatar-image {
+	width: 100%;
+	height: 100%;
+}
+
+.publisher-details {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+.publisher-name {
+	font-size: 32rpx;
+	font-weight: 500;
+	color: #333;
+	margin-bottom: 8rpx;
+}
+
+.publisher-meta {
+	font-size: 24rpx;
+	color: #999;
+}
+
+/* 发布者统计 */
+.publisher-stats {
+	display: flex;
+	justify-content: space-around;
+	padding: 30rpx 0;
+	border-top: 1rpx solid #f0f0f0;
+}
+
+.stat-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.stat-number {
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #ff6b00;
+	margin-bottom: 8rpx;
+}
+
+.stat-label {
+	font-size: 24rpx;
+	color: #999;
+}
+
+/* 底部操作栏 - 简化版本 */
+.bottom-actions {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background-color: #ffffff;
+	padding: 20rpx 30rpx;
+	border-top: 2rpx solid #e0e0e0;
+	box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.1);
+	z-index: 999;
+	/* 适配安全区域 */
+	padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+}
+
+.action-buttons {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 20rpx;
+	width: 100%;
+}
+
+.btn {
+	flex: 1;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	height: 80rpx;
+	border: none;
+	border-radius: 12rpx;
+	font-size: 32rpx;
+	font-weight: 600;
+	transition: all 0.2s;
+}
+
+.contact-btn {
+	background-color: #f8f9fa;
+	color: #666;
+	border: 1rpx solid #e9ecef;
+}
+
+.accept-btn {
+	background-color: #ff6b00;
+	color: white;
+	border: none;
+}
+
+.btn:active {
+	opacity: 0.8;
+	transform: scale(0.98);
+}
+
+/* 接单确认对话框 */
+.accept-dialog {
+	background-color: #fff;
+	border-radius: 24rpx;
+	padding: 40rpx;
+	margin: 0 40rpx;
+	max-width: 600rpx;
+}
+
+.dialog-header {
+	text-align: center;
+	margin-bottom: 30rpx;
+}
+
+.dialog-title {
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #333;
+}
+
+.dialog-content {
+	margin-bottom: 40rpx;
+}
+
+.dialog-message {
+	font-size: 28rpx;
+	line-height: 1.5;
+	color: #666;
+	text-align: center;
+}
+
+.dialog-actions {
+	display: flex;
+	gap: 20rpx;
+}
+
+.dialog-btn {
+	flex: 1;
+	padding: 20rpx;
+	border-radius: 12rpx;
+	font-size: 28rpx;
+	font-weight: 500;
+}
+
+.dialog-btn.cancel {
+	background-color: #f8f9fa;
+	color: #666;
+	border: 1rpx solid #e9ecef;
+}
+
+.dialog-btn.confirm {
+	background-color: #ff6b00;
+	color: white;
+	border: none;
+}
+
+/* 加载状态 */
+.loading-state {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	padding: 120rpx 40rpx;
+}
+
+.loading-text {
+	font-size: 28rpx;
+	color: #999;
+}
+
+/* 错误状态 */
+.error-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 160rpx 40rpx;
+	text-align: center;
+}
+
+.error-icon {
+	font-size: 128rpx;
+	margin-bottom: 40rpx;
+}
+
+.error-text {
+	font-size: 32rpx;
+	color: #666;
+	margin-bottom: 16rpx;
+}
+
+.error-desc {
+	font-size: 28rpx;
+	color: #999;
+	margin-bottom: 40rpx;
+}
+
+.retry-btn {
+	background-color: #ff6b00;
+	color: white;
+	border: none;
+	border-radius: 16rpx;
+	padding: 20rpx 40rpx;
+	font-size: 28rpx;
+}
+</style>

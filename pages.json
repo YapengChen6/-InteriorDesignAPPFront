@@ -18,7 +18,7 @@
   }, {
     "path": "pages/work/index",
     "style": {
-      "navigationBarTitleText": "工作台"
+      "navigationBarTitleText": "订单页面"
     }
   }, {
     "path": "pages/mine/index4",
@@ -214,6 +214,36 @@
     "path": "pages/post/order",
     "style": {
       "navigationBarTitleText": "发布总订单页面"
+    }
+  },
+  {
+    "path": "pages/order-hall/order-hall",
+    "style": {
+      "navigationBarTitleText": "订单大厅页面"
+    }
+  },
+  {
+    "path": "pages/mine/posted/order-posted",
+    "style": {
+      "navigationBarTitleText": "已发布需求页面"
+    }
+  },
+  {
+    "path": "pages/post/order-change",
+    "style": {
+      "navigationBarTitleText": "需求更改页面"
+    }
+  },
+  {
+    "path": "pages/order-hall/order-detail",
+    "style": {
+      "navigationBarTitleText": "订单详情页面"
+    }
+  },
+  {
+    "path": "pages/post/post-designorder",
+    "style": {
+      "navigationBarTitleText": "发起设计师订单页面"
     }
   }
   ],
