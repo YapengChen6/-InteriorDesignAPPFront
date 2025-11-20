@@ -213,7 +213,7 @@ export default {
       // 当前用户信息
       currentUser: null,
       
-      // 订单表单
+      // 订单表单 - 只包含必要的字段
       orderForm: {
         expectedEndTime: '',
         totalAmount: '',
@@ -280,14 +280,12 @@ export default {
     // 加载当前用户信息
     async loadCurrentUser() {
       try {
-        // 这里需要根据你的用户管理方式获取当前用户信息
         const userInfo = uni.getStorageSync('userInfo')
         if (userInfo && userInfo.userId) {
           this.currentUser = userInfo
           console.log('当前用户信息:', this.currentUser)
         } else {
           console.warn('未获取到当前用户信息')
-          // 可以跳转到登录页面
           uni.showModal({
             title: '提示',
             content: '请先登录',
@@ -318,12 +316,10 @@ export default {
         const result = await projectService.getProjectDetail(this.projectId)
         console.log('项目详情接口返回:', result)
         
-        // 直接使用返回的项目对象，不需要从data数组中获取
         if (result && result.projectId) {
           this.projectDetail = result
           console.log('解析后的项目详情:', this.projectDetail)
           
-          // 从项目数据中获取发布人ID并加载发布人信息
           if (this.projectDetail.userId) {
             console.log('从项目获取发布人ID:', this.projectDetail.userId)
             await this.loadPublisherInfo(this.projectDetail.userId)
@@ -357,26 +353,20 @@ export default {
           const result = await getUserProfile(userId)
           console.log('发布人信息接口返回:', result)
           
-          // 根据实际接口返回结构调整
           if (result) {
-            // 如果返回有data字段
             if (result.data) {
               this.publisherInfo = {
                 name: result.data.name || result.data.nickname || '匿名用户',
                 avatar: result.data.avatar || '',
                 phone: result.data.phone || result.data.mobile || ''
               }
-            } 
-            // 如果直接返回用户信息
-            else if (result.name || result.nickname) {
+            } else if (result.name || result.nickname) {
               this.publisherInfo = {
                 name: result.name || result.nickname || '匿名用户',
                 avatar: result.avatar || '',
                 phone: result.phone || result.mobile || ''
               }
-            }
-            // 如果返回格式不符合预期
-            else {
+            } else {
               console.warn('发布人信息接口返回数据格式不正确:', result)
               this.publisherInfo.name = '匿名用户'
             }
@@ -403,9 +393,7 @@ export default {
     // 金额输入处理
     onAmountInput(e) {
       let value = e.detail.value
-      // 限制只能输入数字和小数点
       value = value.replace(/[^\d.]/g, '')
-      // 限制小数点后两位
       if (value.includes('.')) {
         const parts = value.split('.')
         if (parts[1].length > 2) {
@@ -420,7 +408,7 @@ export default {
       this.orderForm.agreed = !this.orderForm.agreed
     },
     
-    // 提交订单
+    // 提交订单 - 修复版本
     async submitOrder() {
       if (!this.canSubmit) {
         uni.showToast({
@@ -430,7 +418,7 @@ export default {
         return
       }
 
-      // 添加数据验证
+      // 数据验证
       const amount = parseFloat(this.orderForm.totalAmount)
       if (isNaN(amount) || amount <= 0) {
         uni.showToast({
@@ -440,7 +428,6 @@ export default {
         return
       }
 
-      // 验证日期
       if (!this.orderForm.expectedEndTime) {
         uni.showToast({
           title: '请选择预计完成时间',
@@ -464,25 +451,35 @@ export default {
       try {
         this.loading = true
         
-        // 修复：将日期转换为 ISO 格式（后端期望的格式）
+        // 先检查所有可能的数据源
+        this.checkDataSources()
+        
         const expectedEndTime = this.orderForm.expectedEndTime 
-          ? `${this.orderForm.expectedEndTime}T23:59:59.000Z`  // ISO 格式
+          ? `${this.orderForm.expectedEndTime}T23:59:59.000Z`
           : ''
         
-        // 构建订单数据 - 对应后端OrderDTO字段
-        const orderData = {
-          projectId: this.projectId,
-          userId: this.projectDetail.userId, // 客户用户ID（发布人）
-          type: 1, // 设计订单
-          expectedEndTime: expectedEndTime, // 使用 ISO 格式
-          totalAmount: amount,
-          remark: this.orderForm.remark || ''
+        // 使用严格的数据构建方法
+        const orderData = this.buildStrictOrderData(expectedEndTime, amount)
+        
+        console.log('=== 最终提交数据检查 ===')
+        console.log('数据内容:', JSON.stringify(orderData, null, 2))
+        console.log('数据字段:', Object.keys(orderData))
+        
+        // 最终验证 - 确保没有 contractorId
+        if (orderData.contractorId !== undefined) {
+          console.error('❌ 最终数据中仍然存在 contractorId，强制删除')
+          delete orderData.contractorId
         }
         
-        console.log('提交订单数据:', orderData)
+        // 使用 JSON 序列化深度清理
+        const finalData = JSON.parse(JSON.stringify(orderData))
+        delete finalData.contractorId
+        
+        console.log('✅ 最终发送数据:', JSON.stringify(finalData, null, 2))
+        console.log('✅ 最终字段列表:', Object.keys(finalData))
         
         // 调用创建订单接口
-        const result = await orderService.createDesignOrder(orderData)
+        const result = await orderService.createDesignOrder(finalData)
         
         console.log('创建订单成功:', result)
         
@@ -492,22 +489,76 @@ export default {
           duration: 2000
         })
         
-        // 延迟返回上一页
         setTimeout(() => {
           uni.navigateBack({
-            delta: 2 // 返回两级页面（项目详情页和项目列表页）
+            delta: 2
           })
         }, 1500)
         
       } catch (error) {
         console.error('创建订单失败:', error)
-        uni.showToast({
-          title: error.message || '创建订单失败，请重试',
-          icon: 'none'
-        })
+        if (error.message && error.message.includes('contractorId')) {
+          uni.showToast({
+            title: '数据格式错误，请联系技术支持',
+            icon: 'none'
+          })
+        } else {
+          uni.showToast({
+            title: error.message || '创建订单失败，请重试',
+            icon: 'none'
+          })
+        }
       } finally {
         this.loading = false
       }
+    },
+    
+    // 严格构建订单数据
+    buildStrictOrderData(expectedEndTime, amount) {
+      console.log('🔧 严格构建订单数据...')
+      
+      // 使用 Object.create(null) 创建无原型的对象
+      const orderData = Object.create(null)
+      
+      // 明确设置每个字段
+      orderData.projectId = String(this.projectId)
+      orderData.userId = String(this.projectDetail.userId)
+      orderData.type = 1
+      orderData.expectedEndTime = expectedEndTime
+      orderData.totalAmount = amount
+      
+      if (this.orderForm.remark && this.orderForm.remark.trim()) {
+        orderData.remark = this.orderForm.remark.trim()
+      }
+      
+      console.log('严格构建的数据字段:', Object.keys(orderData))
+      return orderData
+    },
+    
+    // 检查数据源
+    checkDataSources() {
+      console.log('=== 数据源检查开始 ===')
+      
+      // 检查 projectDetail
+      if (this.projectDetail) {
+        console.log('projectDetail 字段:', Object.keys(this.projectDetail))
+        if (this.projectDetail.contractorId) {
+          console.warn('⚠️ projectDetail 包含 contractorId:', this.projectDetail.contractorId)
+        }
+      }
+      
+      // 检查 currentUser
+      if (this.currentUser) {
+        console.log('currentUser 字段:', Object.keys(this.currentUser))
+        if (this.currentUser.contractorId) {
+          console.warn('⚠️ currentUser 包含 contractorId:', this.currentUser.contractorId)
+        }
+      }
+      
+      // 检查 orderForm
+      console.log('orderForm 字段:', Object.keys(this.orderForm))
+      
+      console.log('=== 数据源检查结束 ===')
     },
     
     // 返回上一页

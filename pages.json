@@ -258,6 +258,30 @@
     "style": {
       "navigationBarTitleText": "发起设计师订单页面"
     }
+  },
+  {
+    "path": "pages/find-design/find-design",
+    "style": {
+      "navigationBarTitleText": "寻找设计师页面"
+    }
+  },
+  {
+    "path": "pages/find-supervisor/find-supervisor",
+    "style": {
+      "navigationBarTitleText": "寻找监理页面"
+    }
+  },
+  {
+    "path": "pages/find-supervisor/supervisor-detail",
+    "style": {
+      "navigationBarTitleText": "监理详情页面"
+    }
+  },
+  {
+    "path": "pages/find-design/design-detail",
+    "style": {
+      "navigationBarTitleText": "设计师详情页面"
+    }
   }
   ],
   "tabBar": {

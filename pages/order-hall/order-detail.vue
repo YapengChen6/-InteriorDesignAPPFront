@@ -103,13 +103,13 @@
 				<view class="publisher-info">
 					<view class="publisher-avatar">
 						<image 
-							:src="projectDetail.avatar || '/static/images/default-avatar.png'" 
+							:src="getPublisherAvatar()" 
 							class="avatar-image" 
 							mode="aspectFill"
 						/>
 					</view>
 					<view class="publisher-details">
-						<text class="publisher-name">{{ projectDetail.createBy || '匿名用户' }}</text>
+						<text class="publisher-name">{{ getPublisherName() }}</text>
 						<text class="publisher-meta">发布于 {{ formatTime(projectDetail.createTime) }}</text>
 					</view>
 				</view>
@@ -173,6 +173,7 @@
 
 <script>
 import { projectService } from '@/api/project.js'
+import { getUserProfile } from '@/api/users.js'
 
 export default {
 	data() {
@@ -182,6 +183,9 @@ export default {
 			
 			// 项目详情
 			projectDetail: {},
+			
+			// 发布者详细信息
+			publisherInfo: null,
 			
 			// 发布者统计信息
 			publisherStats: null,
@@ -246,6 +250,9 @@ export default {
 				if (result && result.projectId) {
 					this.projectDetail = result
 					
+					// 加载发布者详细信息
+					await this.loadPublisherInfo(result.userId || result.createBy)
+					
 					// 加载发布者统计信息
 					await this.loadPublisherStats(result.createBy)
 				} else {
@@ -263,6 +270,94 @@ export default {
 			} finally {
 				this.loading = false
 			}
+		},
+		
+		// 加载发布者详细信息
+		async loadPublisherInfo(userId) {
+			if (!userId) {
+				console.log('没有用户ID，使用默认发布者信息')
+				this.publisherInfo = this.getDefaultPublisherInfo()
+				return
+			}
+			
+			try {
+				console.log('正在获取发布者信息，用户ID:', userId)
+				const userInfo = await getUserProfile(userId)
+				console.log('发布者信息:', userInfo)
+				
+				// 格式化用户信息
+				this.publisherInfo = this.formatUserInfo(userInfo)
+				
+			} catch (error) {
+				console.error('获取发布者信息失败:', error)
+				// 出错时使用默认信息
+				this.publisherInfo = this.getDefaultPublisherInfo()
+			}
+		},
+		
+		// 格式化用户信息
+		formatUserInfo(userInfo) {
+			if (!userInfo) {
+				return this.getDefaultPublisherInfo()
+			}
+			
+			// 处理接口返回的数据结构
+			let userData = userInfo
+			
+			// 如果接口返回的是 {code: 200, data: {...}} 结构
+			if (userInfo.code === 200 && userInfo.data) {
+				userData = userInfo.data
+			}
+			
+			const formattedInfo = {
+				// 姓名字段 - 优先使用 name，如果没有则使用 nickName 或 userName
+				name: userData.name || userData.nickName || userData.userName || '匿名用户',
+				// 手机号
+				phone: userData.phone || '',
+				// 头像
+				avatar: userData.avatar || '/static/images/default-avatar.png',
+				// 用户ID
+				userId: userData.userId || '',
+				// 角色类型
+				currentRoleType: userData.currentRoleType || 'user'
+			}
+			
+			return formattedInfo
+		},
+		
+		// 获取默认发布者信息
+		getDefaultPublisherInfo() {
+			return {
+				name: this.projectDetail.createBy || '匿名用户',
+				phone: '',
+				avatar: '/static/images/default-avatar.png',
+				userId: '',
+				currentRoleType: 'user'
+			}
+		},
+		
+		// 获取发布者显示名称
+		getPublisherName() {
+			if (this.publisherInfo && this.publisherInfo.name) {
+				return this.publisherInfo.name
+			}
+			return this.projectDetail.createBy || '匿名用户'
+		},
+		
+		// 获取发布者头像
+		getPublisherAvatar() {
+			if (this.publisherInfo && this.publisherInfo.avatar) {
+				return this.publisherInfo.avatar
+			}
+			return '/static/images/default-avatar.png'
+		},
+		
+		// 获取发布者手机号（用于联系）
+		getPublisherPhone() {
+			if (this.publisherInfo && this.publisherInfo.phone) {
+				return this.publisherInfo.phone
+			}
+			return this.projectDetail.contactPhone || ''
 		},
 		
 		// 加载发布者统计信息
@@ -283,15 +378,10 @@ export default {
 		
 		// 联系发布者
 		contactPublisher() {
-			// 直接拨打电话，不弹出选择
-			this.makePhoneCall()
-		},
-		
-		// 拨打电话
-		makePhoneCall() {
-			if (this.projectDetail.contactPhone) {
+			const phone = this.getPublisherPhone()
+			if (phone) {
 				uni.makePhoneCall({
-					phoneNumber: this.projectDetail.contactPhone
+					phoneNumber: phone
 				})
 			} else {
 				uni.showToast({

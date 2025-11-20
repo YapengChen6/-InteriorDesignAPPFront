@@ -48,16 +48,15 @@
 			<button class="reset-btn" @click="resetFilters">重置</button>
 		</view>
 
-		<!-- 调试信息开关 -->
-		<view class="debug-section" v-if="showDebug">
-			<text class="debug-title">调试信息</text>
-			<switch :checked="showDebug" @change="toggleDebug" />
-			<text class="debug-status">{{ showDebug ? '调试开启' : '调试关闭' }}</text>
-		</view>
-
 		<!-- 订单列表 -->
 		<view class="order-list">
-			<view class="order-item" v-for="project in filteredProjectList" :key="project.projectId" @click="viewProjectDetail(project.projectId)">
+			<view 
+				class="order-item" 
+				:class="{ 'disabled-item': isViewOnly }"
+				v-for="project in filteredProjectList" 
+				:key="project.projectId" 
+				@click="handleItemClick(project)"
+			>
 				<view class="order-header">
 					<text class="order-title">{{ project.title || '未命名项目' }}</text>
 					<view class="order-status" :class="getStatusClass(project.status)">
@@ -85,6 +84,8 @@
 					<text class="tag">{{ getRoleText(project.requiredRoles) }}</text>
 					<!-- 显示角色匹配标签 -->
 					<text class="tag match-tag" v-if="isRoleMatch(project.requiredRoles)">匹配身份</text>
+					<!-- 查看权限提示 -->
+					<text class="tag view-only-tag" v-if="isViewOnly">仅可查看</text>
 				</view>
 				
 				<view class="order-footer">
@@ -94,13 +95,6 @@
 							<image :src="project.userInfo.avatar" class="avatar-img" mode="aspectFill"></image>
 						</view>
 						<view class="publisher-info">
-							<!-- 调试信息 -->
-							<text class="publisher-debug" v-if="showDebug">
-								项目ID:{{ project.projectId }} | 用户ID:{{ project.userId }} | 
-								有信息:{{ !!project.userInfo }} | 
-								姓名:{{ project.userInfo ? (project.userInfo.name || '空') : '无' }}
-							</text>
-							
 							<text class="publisher-name">
 								{{ getPublisherName(project.userInfo) }}
 							</text>
@@ -111,7 +105,13 @@
 						</view>
 					</view>
 					<view class="detail-btn-container">
-						<button class="detail-btn" @click.stop="viewProjectDetail(project.projectId)">详情</button>
+						<button 
+							class="detail-btn" 
+							:class="{ 'disabled-btn': isViewOnly }"
+							@click.stop="handleDetailClick(project)"
+						>
+							{{ isViewOnly ? '仅查看' : '详情' }}
+						</button>
 					</view>
 				</view>
 			</view>
@@ -175,12 +175,10 @@ const ROLE_PROJECT_MAPPING = {
 export default {
   data() {
     return {
-      // 调试开关
-      showDebug: true,
-      
       // 当前用户角色
       currentRole: null,
       isUserRole: false,
+      isViewOnly: false, // 是否为仅查看模式
       
       // 筛选条件
       selectedLocation: '',
@@ -232,12 +230,12 @@ export default {
         return []
       }
       
-      if (!this.currentRole || this.isUserRole) {
-        // 普通用户或未获取到角色时显示所有可用项目
+      if (this.isViewOnly) {
+        // 仅查看模式（用户和材料商）：显示所有可用项目
         return availableProjects
       }
       
-      // 根据角色映射过滤项目
+      // 设计师和监理：根据角色映射过滤项目
       const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
       return availableProjects.filter(project => {
         const requiredRole = parseInt(project.requiredRoles)
@@ -247,9 +245,6 @@ export default {
   },
   async onLoad() {
     console.log('🚀 页面加载，开始获取用户角色和项目列表...')
-    
-    // 测试用户信息获取
-    await this.testUserInfo()
     
     await this.getUserRole()
     this.loadProjectList()
@@ -276,53 +271,7 @@ export default {
     }
   },
   methods: {
-    // 测试用户信息获取
-    async testUserInfo() {
-      try {
-        console.log('🧪 开始测试用户信息获取...')
-        const testUserId = '102' // 使用您提供的用户ID
-        const testResult = await getUserProfile(testUserId)
-        console.log('🧪 测试结果:', testResult)
-        
-        if (testResult && testResult.data) {
-          console.log('🧪 测试用户姓名:', testResult.data.name)
-          console.log('🧪 测试用户完整信息:', testResult.data)
-        } else {
-          console.log('🧪 测试结果中没有data字段')
-        }
-      } catch (error) {
-        console.error('🧪 测试失败:', error)
-      }
-    },
-
-    // 切换调试模式
-    toggleDebug(e) {
-      this.showDebug = e.detail.value
-      console.log('🔧 调试模式:', this.showDebug ? '开启' : '关闭')
-    },
-
-    // 获取发布者姓名
-    getPublisherName(userInfo) {
-      console.log('👤 获取发布者姓名，userInfo:', userInfo)
-      
-      if (!userInfo) {
-        console.log('❌ userInfo为空，返回加载中')
-        return '加载中...'
-      }
-      
-      const name = userInfo.name
-      console.log('📝 从userInfo中获取的name:', name)
-      
-      if (name) {
-        console.log('✅ 找到姓名:', name)
-        return name
-      } else {
-        console.log('❌ 未找到姓名，返回匿名用户')
-        return '匿名用户'
-      }
-    },
-
-    // 获取用户角色
+    // 获取用户角色并设置权限
     async getUserRole() {
       try {
         // 从全局获取用户信息
@@ -353,13 +302,49 @@ export default {
         
         this.isUserRole = this.currentRole === 'user'
         
+        // 设置查看权限：用户和材料商只能查看，不能点击详情
+        this.isViewOnly = this.currentRole === 'user' || this.currentRole === 'material_supplier'
+        
         console.log('🎭 当前用户角色:', this.currentRole)
+        console.log('👀 查看权限模式:', this.isViewOnly)
         
       } catch (error) {
         console.error('获取用户角色失败:', error)
         this.currentRole = 'user'
         this.isUserRole = true
+        this.isViewOnly = true
       }
+    },
+    
+    // 处理项目项点击
+    handleItemClick(project) {
+      if (this.isViewOnly) {
+        // 仅查看模式：显示提示信息
+        this.showViewOnlyTip()
+      } else {
+        // 可操作模式：跳转到详情页
+        this.viewProjectDetail(project.projectId)
+      }
+    },
+    
+    // 处理详情按钮点击
+    handleDetailClick(project) {
+      if (this.isViewOnly) {
+        // 仅查看模式：显示提示信息
+        this.showViewOnlyTip()
+      } else {
+        // 可操作模式：跳转到详情页
+        this.viewProjectDetail(project.projectId)
+      }
+    },
+    
+    // 显示仅查看提示
+    showViewOnlyTip() {
+      uni.showToast({
+        title: '当前身份仅可查看项目信息',
+        icon: 'none',
+        duration: 2000
+      })
     },
     
     // 从角色数组中获取最高优先级的角色
@@ -399,7 +384,7 @@ export default {
     
     // 检查角色是否匹配项目需求
     isRoleMatch(requiredRole) {
-      if (!this.currentRole || this.isUserRole || this.currentRole === 'material_supplier') return false
+      if (!this.currentRole || this.isViewOnly || this.currentRole === 'material_supplier') return false
       
       const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
       const requiredRoleNum = parseInt(requiredRole)
@@ -523,12 +508,6 @@ export default {
             userInfo = await getUserProfile(project.userId)
             console.log(`✅ 用户 ${project.userId} 的信息获取成功:`, userInfo)
             
-            // 检查数据结构和name字段
-            if (userInfo && userInfo.data) {
-              console.log('📊 接口返回的完整数据结构:', userInfo)
-              console.log('📝 name字段值:', userInfo.data.name)
-            }
-            
             // 缓存用户信息
             this.userInfoCache.set(project.userId, userInfo)
           }
@@ -553,10 +532,7 @@ export default {
     
     // 格式化用户信息
     formatUserInfo(userInfo) {
-      console.log('🔧 开始格式化用户信息，原始数据:', userInfo)
-      
       if (!userInfo) {
-        console.log('❌ 用户信息为空，返回默认信息')
         return this.getDefaultUserInfo()
       }
       
@@ -566,12 +542,10 @@ export default {
       // 如果接口返回的是 {code: 200, data: {...}} 结构
       if (userInfo.code === 200 && userInfo.data) {
         userData = userInfo.data
-        console.log('📦 提取data字段中的数据:', userData)
       }
       
       // 检查name字段是否存在
       const name = userData.name
-      console.log('📝 提取到的name字段:', name)
       
       const formattedInfo = {
         // 姓名字段
@@ -580,12 +554,9 @@ export default {
         phone: userData.phone,
         avatar: userData.avatar,
         userId: userData.userId,
-        currentRoleType: userData.currentRoleType,
-        // 保留原始数据用于调试
-        _raw: userInfo
+        currentRoleType: userData.currentRoleType
       }
       
-      console.log('✅ 格式化后的用户信息:', formattedInfo)
       return formattedInfo
     },
     
@@ -596,6 +567,21 @@ export default {
         phone: '',
         avatar: '',
         userId: ''
+      }
+    },
+    
+    // 获取发布者姓名
+    getPublisherName(userInfo) {
+      if (!userInfo) {
+        return '加载中...'
+      }
+      
+      const name = userInfo.name
+      
+      if (name) {
+        return name
+      } else {
+        return '匿名用户'
       }
     },
     
@@ -760,30 +746,6 @@ export default {
 		padding: 15px;
 	}
 	
-	/* 调试区域 */
-	.debug-section {
-		display: flex;
-		align-items: center;
-		background-color: #fff3cd;
-		border: 1px solid #ffeaa7;
-		border-radius: 8px;
-		padding: 10px 15px;
-		margin-bottom: 15px;
-	}
-	
-	.debug-title {
-		font-size: 14px;
-		color: #856404;
-		font-weight: bold;
-		margin-right: 10px;
-	}
-	
-	.debug-status {
-		font-size: 12px;
-		color: #856404;
-		margin-left: 10px;
-	}
-	
 	/* 筛选区域 */
 	.filter-section {
 		display: flex;
@@ -925,6 +887,17 @@ export default {
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 	}
 	
+	/* 禁用状态的项目项 */
+	.order-item.disabled-item {
+		opacity: 0.7;
+		background-color: #f9f9f9;
+	}
+	
+	.order-item.disabled-item:active {
+		transform: none;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+	}
+	
 	.order-header {
 		display: flex;
 		justify-content: space-between;
@@ -1023,6 +996,12 @@ export default {
 		font-weight: bold;
 	}
 	
+	.tag.view-only-tag {
+		background-color: #f5f5f5;
+		color: #999;
+		font-weight: bold;
+	}
+	
 	.order-footer {
 		display: flex;
 		justify-content: space-between;
@@ -1055,16 +1034,6 @@ export default {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
-	}
-	
-	.publisher-debug {
-		font-size: 10px;
-		color: #ff0000;
-		background: #fff0f0;
-		padding: 2px 4px;
-		border-radius: 4px;
-		margin-bottom: 2px;
-		font-family: monospace;
 	}
 	
 	.publisher-name {
@@ -1100,6 +1069,11 @@ export default {
 		font-size: 12px;
 		font-weight: 500;
 		line-height: 1;
+	}
+	
+	.detail-btn.disabled-btn {
+		background-color: #ccc;
+		color: #999;
 	}
 	
 	/* 选择器弹窗 */

@@ -115,37 +115,45 @@ export const orderApi = {
  */
 export const orderService = {
   /**
-   * 创建设计订单
+   * 创建设计订单 - 修复版本
    * @param {Object} orderData 订单数据
    * @returns {Promise}
    */
   async createDesignOrder(orderData) {
     try {
-      // 构建符合后端OrderDTO字段的订单数据
+      console.log('🎯 开始创建设计订单，输入数据:', orderData)
+      
+      // 构建符合后端OrderDTO字段的订单数据 - 严格匹配后端字段
       const orderDTO = {
         projectId: orderData.projectId,
         userId: orderData.userId, // 客户用户ID
         type: OrderType.DESIGN, // 设计订单
         expectedEndTime: orderData.expectedEndTime,
         totalAmount: orderData.totalAmount,
-        remark: orderData.remark,
-        // 其他可能需要的字段
-        contractorId: orderData.contractorId || null,
-        contractUrl: orderData.contractUrl || '',
-        contractStatus: orderData.contractStatus || ContractStatus.PENDING_SIGN
+        remark: orderData.remark || ''
+        // 注意：后端 OrderDTO 不支持 contractorId 字段，已移除
       }
       
-      console.log('创建设计订单数据:', orderDTO)
+      console.log('✅ 构建的订单DTO:', JSON.stringify(orderDTO, null, 2))
+      console.log('✅ DTO字段列表:', Object.keys(orderDTO))
+      
+      // 最终验证 - 确保没有 contractorId
+      if (orderDTO.hasOwnProperty('contractorId')) {
+        console.error('❌ 发现意外的 contractorId 字段，强制删除')
+        delete orderDTO.contractorId
+      }
       
       const res = await orderApi.save(orderDTO)
       if (res.code === 200 || res.success) {
+        console.log('🎉 创建订单成功:', res)
         return Promise.resolve(res.data || res.result)
       } else {
         const errorMsg = res.msg || res.message || '创建订单失败'
+        console.error('❌ 创建订单失败:', errorMsg)
         return Promise.reject(new Error(errorMsg))
       }
     } catch (error) {
-      console.error('创建订单异常:', error)
+      console.error('❌ 创建订单异常:', error)
       if (error.errMsg && error.errMsg.includes('request:fail')) {
         throw new Error('网络连接失败，请检查网络设置')
       }
