@@ -1,1069 +1,1 @@
-<template>
-	<view class="container">
-		<!-- 顶部标题栏 -->
-		<view class="header-section">
-			<view class="header-title">我的订单</view>
-			<view class="header-actions">
-				<view class="action-item" @click="goToMessage">
-					<text class="action-icon">💬</text>
-				</view>
-			</view>
-		</view>
-		
-		<!-- 订单状态筛选 -->
-		<view class="status-filter">
-			<scroll-view class="filter-scroll" scroll-x="true">
-				<view class="filter-list">
-					<view class="filter-item" 
-						:class="{ active: activeStatus === '' }" 
-						@click="changeStatus('')">
-						<text>全部</text>
-					</view>
-					<view class="filter-item" 
-						:class="{ active: activeStatus === '0' }" 
-						@click="changeStatus('0')">
-						<text>待确认</text>
-						<text v-if="statusCount['0'] > 0" class="count-badge">{{ statusCount['0'] }}</text>
-					</view>
-					<view class="filter-item" 
-						:class="{ active: activeStatus === '1' }" 
-						@click="changeStatus('1')">
-						<text>进行中</text>
-						<text v-if="statusCount['1'] > 0" class="count-badge">{{ statusCount['1'] }}</text>
-					</view>
-					<view class="filter-item" 
-						:class="{ active: activeStatus === '2' }" 
-						@click="changeStatus('2')">
-						<text>已完成</text>
-					</view>
-					<view class="filter-item" 
-						:class="{ active: activeStatus === '3' }" 
-						@click="changeStatus('3')">
-						<text>已取消</text>
-					</view>
-				</view>
-			</scroll-view>
-		</view>
-		
-		<!-- 订单列表 -->
-		<scroll-view class="order-list" scroll-y="true" @scrolltolower="loadMore" refresher-enabled @refresherrefresh="onRefresh">
-			<!-- 下拉刷新 -->
-			<view class="refresh-container" v-if="refreshing">
-				<text class="refresh-text">刷新中...</text>
-			</view>
-			
-			<!-- 空状态 -->
-			<view v-if="!loading && orderList.length === 0" class="empty-state">
-				<view class="empty-icon">{{ currentRoleConfig.icon }}</view>
-				<view class="empty-text">暂无订单</view>
-				<view class="empty-desc">{{ getEmptyDesc() }}</view>
-			</view>
-			
-			<!-- 加载状态 -->
-			<view v-if="loading && orderList.length === 0" class="loading-state">
-				<text class="loading-text">加载中...</text>
-			</view>
-			
-			<!-- 订单项 -->
-			<view class="order-item" v-for="order in orderList" :key="order.orderId">
-				<view class="order-header">
-					<view class="order-info">
-						<text class="order-number">订单号：DD{{ order.orderId }}</text>
-						<text class="order-time">{{ formatTime(order.createTime) }}</text>
-					</view>
-					<view class="order-status" :class="getStatusClass(order.status)">
-						{{ getStatusText(order.status) }}
-					</view>
-				</view>
-				
-				<view class="order-content" @click="viewOrderDetail(order.orderId)">
-					<view class="project-info">
-						<view class="project-title">{{ order.projectInfo ? order.projectInfo.title : '设计项目' }}</view>
-						<view class="project-desc">{{ order.projectInfo ? order.projectInfo.description : (order.remark || '暂无描述') }}</view>
-						<view class="project-tags">
-							<text class="tag" v-if="order.projectInfo && order.projectInfo.budget">预算 {{ order.projectInfo.budget }}元</text>
-							<text class="tag" v-if="order.expectedEndTime">预计 {{ formatDate(order.expectedEndTime) }}完成</text>
-							<text class="tag">{{ getOrderTypeText(order.type) }}</text>
-							<text class="tag" v-if="order.projectInfo && order.projectInfo.area">{{ order.projectInfo.area }}㎡</text>
-							<text class="tag" v-if="order.projectInfo && order.projectInfo.address">{{ order.projectInfo.address }}</text>
-						</view>
-					</view>
-					
-					<view class="designer-info" v-if="order.contractorId">
-						<view class="designer-avatar">
-							<image :src="order.contractorInfo.avatar" mode="aspectFill" />
-						</view>
-						<view class="designer-details">
-							<text class="designer-name">{{ order.contractorInfo.name }}</text>
-							<text class="designer-role">{{ order.contractorInfo.role }}</text>
-							<text class="designer-phone">电话: {{ order.contractorInfo.phone }}</text>
-						</view>
-						<view class="contact-btn" @click.stop="contactDesigner(order.contractorId)">
-							联系
-						</view>
-					</view>
-					
-					<view class="no-designer" v-else>
-						<text class="no-designer-text">暂未分配设计师</text>
-					</view>
-				</view>
-				
-				<view class="order-footer">
-					<view class="order-amount">
-						<text class="amount-label">订单金额：</text>
-						<text class="amount-value">¥{{ order.totalAmount || 0 }}</text>
-					</view>
-					<view class="order-actions">
-						<button v-if="order.status === 0" class="btn secondary" @click="cancelOrder(order.orderId)">
-							取消订单
-						</button>
-						<button v-if="order.status === 1 && order.contractorId" class="btn secondary" @click="contactDesigner(order.contractorId)">
-							联系设计师
-						</button>
-						<button v-if="order.status === 1" class="btn primary" @click="completeOrder(order.orderId)">
-							确认完成
-						</button>
-						<button v-if="order.status === 2" class="btn secondary" @click="viewOrderDetail(order.orderId)">
-							查看详情
-						</button>
-						<button v-if="order.status === 0" class="btn primary" @click="confirmOrder(order.orderId)">
-							确认订单
-						</button>
-					</view>
-				</view>
-			</view>
-			
-			<!-- 加载更多 -->
-			<view v-if="loading && orderList.length > 0" class="load-more">
-				<text class="load-more-text">加载中...</text>
-			</view>
-			<view v-if="hasMore && orderList.length > 0" class="load-more">
-				<text class="load-more-text">上拉加载更多</text>
-			</view>
-			<view v-if="!hasMore && orderList.length > 0" class="load-more">
-				<text class="load-more-text">没有更多数据了</text>
-			</view>
-		</scroll-view>
-	</view>
-</template>
-
-<script>
-	import { orderService } from '@/api/order.js'
-	import { projectService } from '@/api/project.js'
-	import { getUserProfile,getCurrentRole } from '@/api/users.js'
-	
-	// 角色配置常量
-	const ROLE_CONFIG = {
-		'user': {
-			name: '普通用户',
-			desc: '浏览内容、发布作品、参与互动',
-			icon: '👤',
-			alwaysAvailable: true // 普通用户始终可用
-		},
-		'designer': {
-			name: '设计师',
-			desc: '发布作品、管理内容、数据分析',
-			icon: '🎨'
-		},
-		'supervisor': {
-			name: '监理',
-			desc: '工程监督、质量检查、进度管理',
-			icon: '👷'
-		},
-		'material_supplier': {
-			name: '材料商',
-			desc: '管理材料、处理订单、库存管理',
-			icon: '🏭'
-		}
-	}
-	
-	export default {
-		data() {
-			return {
-				// 订单状态筛选
-				activeStatus: '',
-				loading: false,
-				refreshing: false,
-				hasMore: true,
-				currentUserId: null,
-				
-				// 身份状态
-				userRole: 'user', // 默认普通用户
-				currentRoleConfig: ROLE_CONFIG['user'], // 当前角色配置
-				isDesigner: false,
-				isCustomer: true,
-				isSupervisor: false,
-				isMaterialSupplier: false,
-				
-				// 分页参数
-				pagination: {
-					pageNum: 1,
-					pageSize: 10,
-					total: 0
-				},
-				
-				// 订单列表数据
-				orderList: [],
-				
-				// 订单状态数量统计
-				statusCount: {
-					'0': 0,
-					'1': 0,
-					'2': 0,
-					'3': 0
-				}
-			}
-		},
-		methods: {
-			// 获取当前用户身份
-			async getCurrentRole() {
-				try {
-					console.log('👤 开始获取用户身份...')
-					const roleInfo = await getCurrentRole()
-					console.log('✅ 用户身份获取成功:', roleInfo)
-					
-					// 根据实际接口返回结构调整
-					let userRole = 'user' // 默认普通用户
-					if (roleInfo && roleInfo.role) {
-						userRole = roleInfo.role
-					} else if (roleInfo && roleInfo.data && roleInfo.data.role) {
-						userRole = roleInfo.data.role
-					} else if (roleInfo && roleInfo.roleType) {
-						userRole = roleInfo.roleType
-					}
-					
-					this.userRole = userRole
-					this.currentRoleConfig = ROLE_CONFIG[userRole] || ROLE_CONFIG['user']
-					
-					// 设置身份标识
-					this.isDesigner = userRole === 'designer'
-					this.isCustomer = userRole === 'user' // 普通用户即为客户
-					this.isSupervisor = userRole === 'supervisor'
-					this.isMaterialSupplier = userRole === 'material_supplier'
-					
-					console.log('🎯 用户身份设置:', {
-						role: this.userRole,
-						roleName: this.currentRoleConfig.name,
-						isDesigner: this.isDesigner,
-						isCustomer: this.isCustomer,
-						isSupervisor: this.isSupervisor,
-						isMaterialSupplier: this.isMaterialSupplier
-					})
-					
-					return true
-				} catch (error) {
-					console.error('❌ 获取用户身份失败:', error)
-					// 默认设置为普通用户身份
-					this.userRole = 'user'
-					this.currentRoleConfig = ROLE_CONFIG['user']
-					this.isCustomer = true
-					this.isDesigner = false
-					this.isSupervisor = false
-					this.isMaterialSupplier = false
-					return false
-				}
-			},
-			
-			// 获取空状态描述
-			getEmptyDesc() {
-				const descMap = {
-					'user': '您还没有任何订单',
-					'designer': '您还没有接到的订单',
-					'supervisor': '您还没有监理的订单',
-					'material_supplier': '您还没有材料订单'
-				}
-				return descMap[this.userRole] || '暂无订单'
-			},
-			
-			// 获取当前用户信息
-			async getCurrentUserInfo() {
-				try {
-					console.log('👤 开始获取用户信息...')
-					
-					// 先获取身份信息
-					await this.getCurrentRole()
-					
-					const userInfo = await getUserProfile()
-					console.log('✅ 用户信息获取成功:', userInfo)
-					
-					// 根据实际接口返回结构调整
-					let userId = null
-					if (userInfo && userInfo.userId) {
-						userId = userInfo.userId
-					} else if (userInfo && userInfo.data && userInfo.data.userId) {
-						userId = userInfo.data.userId
-					} else if (userInfo && userInfo.id) {
-						userId = userInfo.id
-					}
-					
-					if (userId) {
-						this.currentUserId = userId
-						console.log('🎯 设置当前用户ID:', this.currentUserId)
-						return true
-					} else {
-						console.error('❌ 未找到用户ID')
-						uni.showToast({
-							title: '获取用户信息失败',
-							icon: 'none'
-						})
-						return false
-					}
-				} catch (error) {
-					console.error('❌ 获取用户信息失败:', error)
-					uni.showToast({
-						title: '获取用户信息失败',
-						icon: 'none'
-					})
-					return false
-				}
-			},
-			
-			// 根据设计师ID获取设计师信息
-			async getDesignerInfo(contractorId) {
-				if (!contractorId) {
-					return null
-				}
-				
-				try {
-					console.log('👨‍🎨 获取设计师信息，设计师ID:', contractorId)
-					const designerInfo = await getUserProfile(contractorId)
-					console.log('✅ 设计师信息获取成功:', designerInfo)
-					
-					// 根据实际API返回结构调整
-					let designerData = designerInfo
-					if (designerInfo && designerInfo.data) {
-						designerData = designerInfo.data
-					}
-					
-					return {
-						name: designerData.name || designerData.nickname || '未知设计师',
-						phone: designerData.phone || designerData.mobile || '暂无联系方式',
-						avatar: designerData.avatar || '/static/images/default-avatar.png',
-						role: designerData.role || '设计师'
-					}
-				} catch (error) {
-					console.error('❌ 获取设计师信息失败:', error)
-					return {
-						name: '设计师',
-						phone: '暂无联系方式',
-						avatar: '/static/images/default-avatar.png',
-						role: '设计师'
-					}
-				}
-			},
-			
-			// 切换订单状态
-			changeStatus(status) {
-				this.activeStatus = status
-				this.pagination.pageNum = 1
-				this.hasMore = true
-				this.orderList = []
-				this.loadOrderList()
-			},
-			
-			// 获取状态文本
-			getStatusText(status) {
-				return orderService.getOrderStatusText(status)
-			},
-			
-			// 获取订单类型文本
-			getOrderTypeText(type) {
-				return orderService.getOrderTypeText(type)
-			},
-			
-			// 获取状态样式类
-			getStatusClass(status) {
-				const classMap = {
-					0: 'status-pending',
-					1: 'status-progress',
-					2: 'status-completed',
-					3: 'status-canceled'
-				}
-				return classMap[status] || ''
-			},
-			
-			// 格式化时间
-			formatTime(timeStr) {
-				if (!timeStr) return ''
-				if (typeof timeStr === 'number') {
-					const date = new Date(timeStr)
-					return date.toLocaleDateString()
-				}
-				return timeStr.split(' ')[0]
-			},
-			
-			// 格式化日期
-			formatDate(dateStr) {
-				if (!dateStr) return ''
-				if (dateStr.includes('T')) {
-					return dateStr.split('T')[0]
-				}
-				return dateStr.split(' ')[0]
-			},
-			
-			// 根据项目ID获取项目详情
-			async getProjectDetail(projectId) {
-				if (!projectId) {
-					console.warn('项目ID为空')
-					return null
-				}
-				
-				try {
-					console.log('📋 获取项目详情，项目ID:', projectId)
-					const projectDetail = await projectService.getProjectDetail(projectId)
-					console.log('✅ 项目详情获取成功:', projectDetail)
-					return projectDetail
-				} catch (error) {
-					console.error('❌ 获取项目详情失败:', error)
-					return null
-				}
-			},
-			
-			// 加载订单列表
-			async loadOrderList() {
-				if (this.loading) return
-				
-				// 检查用户ID
-				if (!this.currentUserId) {
-					console.log('🔄 未获取到用户ID，先获取用户信息...')
-					const hasUserInfo = await this.getCurrentUserInfo()
-					if (!hasUserInfo) {
-						this.loading = false
-						this.refreshing = false
-						return
-					}
-				}
-				
-				try {
-					this.loading = true
-					
-					const queryParams = {
-						pageNum: this.pagination.pageNum,
-						pageSize: this.pagination.pageSize
-					}
-					
-					// 添加状态筛选
-					if (this.activeStatus !== '') {
-						queryParams.status = this.activeStatus
-					}
-					
-					console.log('📋 加载订单列表 - 用户ID:', this.currentUserId, '身份:', this.userRole, '查询参数:', queryParams)
-					
-					// 使用新的API方法，传递用户ID
-					const result = await orderService.getOrderListByUserId(this.currentUserId, queryParams)
-					console.log('✅ 订单列表响应:', result)
-					
-					// 处理返回数据格式
-					let list = []
-					let total = 0
-					
-					if (Array.isArray(result)) {
-						list = result
-						total = result.length
-					} else if (result && result.records) {
-						list = result.records
-						total = result.total
-					} else if (result && result.list) {
-						list = result.list
-						total = result.total
-					} else if (result && result.data) {
-						list = result.data.records || result.data.list || []
-						total = result.data.total || 0
-					}
-					
-					// 为每个订单获取项目详情和设计师信息
-					console.log('🔄 开始获取订单对应的详细信息...')
-					const ordersWithDetails = []
-					for (const order of list) {
-						let projectInfo = {}
-						let contractorInfo = {}
-						
-						// 获取项目详情
-						if (order.projectId) {
-							try {
-								projectInfo = await this.getProjectDetail(order.projectId) || {}
-							} catch (error) {
-								console.error(`获取订单 ${order.orderId} 的项目详情失败:`, error)
-							}
-						}
-						
-						// 获取设计师信息
-						if (order.contractorId) {
-							try {
-								contractorInfo = await this.getDesignerInfo(order.contractorId) || {}
-							} catch (error) {
-								console.error(`获取订单 ${order.orderId} 的设计师信息失败:`, error)
-							}
-						}
-						
-						ordersWithDetails.push({
-							...order,
-							projectInfo,
-							contractorInfo
-						})
-					}
-					console.log('✅ 订单数据整合完成:', ordersWithDetails)
-					
-					// 更新数据
-					if (this.pagination.pageNum === 1) {
-						this.orderList = ordersWithDetails
-					} else {
-						this.orderList = [...this.orderList, ...ordersWithDetails]
-					}
-					
-					// 更新分页信息
-					this.pagination.total = total
-					this.hasMore = this.orderList.length < total
-					
-					// 更新状态统计
-					this.updateStatusCount()
-					
-				} catch (error) {
-					console.error('❌ 加载订单列表失败:', error)
-					uni.showToast({
-						title: error.message || '加载失败',
-						icon: 'none'
-					})
-				} finally {
-					this.loading = false
-					this.refreshing = false
-				}
-			},
-			
-			// 更新状态统计
-			updateStatusCount() {
-				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0 }
-				
-				this.orderList.forEach(order => {
-					const status = order.status.toString()
-					if (this.statusCount[status] !== undefined) {
-						this.statusCount[status]++
-					}
-				})
-				
-				console.log('📊 订单状态统计:', this.statusCount)
-			},
-			
-			// 加载更多
-			loadMore() {
-				if (this.loading || !this.hasMore) return
-				this.pagination.pageNum++
-				this.loadOrderList()
-			},
-			
-			// 下拉刷新
-			onRefresh() {
-				if (this.refreshing) return
-				this.refreshing = true
-				this.pagination.pageNum = 1
-				this.hasMore = true
-				this.loadOrderList()
-			},
-			
-			// 查看订单详情
-			viewOrderDetail(orderId) {
-				uni.navigateTo({
-					url: `/pages/order-hall/order-detail?id=${orderId}`
-				})
-			},
-			
-			// 联系设计师（跳转聊天页面）
-			contactDesigner(designerId) {
-				if (!designerId) {
-					uni.showToast({
-						title: '暂无设计师信息',
-						icon: 'none'
-					})
-					return
-				}
-				uni.navigateTo({
-					url: `/pages/chat/designer?id=${designerId}`
-				})
-			},
-			
-			// 确认订单
-			async confirmOrder(orderId) {
-				try {
-					uni.showModal({
-						title: '确认订单',
-						content: '确定要确认这个订单吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								uni.showLoading({ title: '确认中...' })
-								await orderService.confirmOrder(orderId)
-								uni.hideLoading()
-								uni.showToast({
-									title: '订单已确认',
-									icon: 'success'
-								})
-								this.pagination.pageNum = 1
-								this.loadOrderList()
-							}
-						}
-					})
-				} catch (error) {
-					uni.hideLoading()
-					uni.showToast({
-						title: error.message || '确认失败',
-						icon: 'none'
-					})
-				}
-			},
-			
-			// 取消订单
-			async cancelOrder(orderId) {
-				try {
-					uni.showModal({
-						title: '确认取消',
-						content: '确定要取消这个订单吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								uni.showLoading({ title: '取消中...' })
-								await orderService.cancelOrder(orderId)
-								uni.hideLoading()
-								uni.showToast({
-									title: '订单已取消',
-									icon: 'success'
-								})
-								this.pagination.pageNum = 1
-								this.loadOrderList()
-							}
-						}
-					})
-				} catch (error) {
-					uni.hideLoading()
-					uni.showToast({
-						title: error.message || '取消失败',
-						icon: 'none'
-					})
-				}
-			},
-			
-			// 完成订单
-			async completeOrder(orderId) {
-				try {
-					uni.showModal({
-						title: '确认完成',
-						content: '确认订单已完成？',
-						success: async (res) => {
-							if (res.confirm) {
-								uni.showLoading({ title: '处理中...' })
-								await orderService.completeOrder(orderId)
-								uni.hideLoading()
-								uni.showToast({
-									title: '订单已完成',
-									icon: 'success'
-								})
-								this.pagination.pageNum = 1
-								this.loadOrderList()
-							}
-						}
-					})
-				} catch (error) {
-					uni.hideLoading()
-					uni.showToast({
-						title: error.message || '操作失败',
-						icon: 'none'
-					})
-				}
-			},
-			
-			// 跳转到消息页面
-			goToMessage() {
-				uni.navigateTo({
-					url: '/pages/message/message'
-				})
-			}
-		},
-		
-		onLoad() {
-			this.getCurrentUserInfo().then(hasUserInfo => {
-				if (hasUserInfo) {
-					this.loadOrderList()
-				}
-			})
-		},
-		
-		onShow() {
-			if (this.currentUserId && this.orderList.length > 0) {
-				this.pagination.pageNum = 1
-				this.loadOrderList()
-			}
-		},
-		
-		onPullDownRefresh() {
-			this.onRefresh()
-			uni.stopPullDownRefresh()
-		},
-		
-		onReachBottom() {
-			this.loadMore()
-		}
-	}
-</script>
-
-<style scoped>
-	.container {
-		max-width: 750rpx;
-		margin: 0 auto;
-		background-color: #f5f5f5;
-		min-height: 100vh;
-	}
-	
-	.header-section {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 30rpx;
-		background-color: #fff;
-		border-bottom: 1rpx solid #eee;
-	}
-	
-	.header-title {
-		font-size: 36rpx;
-		font-weight: bold;
-		color: #333;
-	}
-	
-	.header-actions {
-		display: flex;
-		align-items: center;
-	}
-	
-	.action-item {
-		position: relative;
-		padding: 10rpx;
-	}
-	
-	.action-icon {
-		font-size: 36rpx;
-	}
-	
-	.badge {
-		position: absolute;
-		top: 0;
-		right: 0;
-		background: #ff4757;
-		color: white;
-		font-size: 20rpx;
-		padding: 4rpx 8rpx;
-		border-radius: 20rpx;
-		min-width: 24rpx;
-		text-align: center;
-	}
-	
-	.status-filter {
-		background-color: #fff;
-		border-bottom: 1rpx solid #eee;
-	}
-	
-	.filter-scroll {
-		white-space: nowrap;
-	}
-	
-	.filter-list {
-		display: inline-flex;
-		padding: 20rpx 30rpx;
-	}
-	
-	.filter-item {
-		position: relative;
-		padding: 16rpx 30rpx;
-		font-size: 28rpx;
-		color: #666;
-		white-space: nowrap;
-		cursor: pointer;
-		transition: all 0.3s;
-	}
-	
-	.filter-item.active {
-		color: #ff6b00;
-		font-weight: bold;
-	}
-	
-	.filter-item.active::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 50%;
-		transform: translateX(-50%);
-		width: 40rpx;
-		height: 4rpx;
-		background-color: #ff6b00;
-		border-radius: 2rpx;
-	}
-	
-	.count-badge {
-		position: absolute;
-		top: 8rpx;
-		right: 16rpx;
-		background: #ff6b00;
-		color: white;
-		font-size: 20rpx;
-		padding: 2rpx 6rpx;
-		border-radius: 12rpx;
-		min-width: 20rpx;
-		text-align: center;
-	}
-	
-	.order-list {
-		height: calc(100vh - 200rpx);
-		padding: 20rpx;
-	}
-	
-	.refresh-container {
-		text-align: center;
-		padding: 20rpx;
-		color: #999;
-	}
-	
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 120rpx 0;
-		text-align: center;
-	}
-	
-	.empty-icon {
-		font-size: 120rpx;
-		margin-bottom: 30rpx;
-		opacity: 0.5;
-	}
-	
-	.empty-text {
-		font-size: 32rpx;
-		color: #999;
-		margin-bottom: 16rpx;
-	}
-	
-	.empty-desc {
-		font-size: 28rpx;
-		color: #ccc;
-		margin-bottom: 40rpx;
-	}
-	
-	.loading-state {
-		text-align: center;
-		padding: 60rpx;
-		color: #999;
-	}
-	
-	.load-more {
-		text-align: center;
-		padding: 30rpx;
-		color: #999;
-		font-size: 28rpx;
-	}
-	
-	.order-item {
-		background-color: #fff;
-		border-radius: 16rpx;
-		margin-bottom: 20rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
-		overflow: hidden;
-	}
-	
-	.order-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 24rpx 30rpx;
-		border-bottom: 1rpx solid #f5f5f5;
-	}
-	
-	.order-info {
-		flex: 1;
-	}
-	
-	.order-number {
-		display: block;
-		font-size: 24rpx;
-		color: #999;
-		margin-bottom: 8rpx;
-	}
-	
-	.order-time {
-		font-size: 24rpx;
-		color: #ccc;
-	}
-	
-	.order-status {
-		font-size: 24rpx;
-		padding: 8rpx 16rpx;
-		border-radius: 20rpx;
-	}
-	
-	.status-pending {
-		background: #fff9e6;
-		color: #f39c12;
-	}
-	
-	.status-progress {
-		background: #e6f7ff;
-		color: #1890ff;
-	}
-	
-	.status-completed {
-		background: #f6f6f6;
-		color: #999;
-	}
-	
-	.status-canceled {
-		background: #fff2f0;
-		color: #ff4d4f;
-	}
-	
-	.order-content {
-		padding: 30rpx;
-		cursor: pointer;
-	}
-	
-	.project-title {
-		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 16rpx;
-	}
-	
-	.project-desc {
-		font-size: 28rpx;
-		color: #666;
-		line-height: 1.5;
-		margin-bottom: 20rpx;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
-	
-	.project-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 16rpx;
-	}
-	
-	.tag {
-		font-size: 24rpx;
-		color: #666;
-		background: #f5f5f5;
-		padding: 8rpx 16rpx;
-		border-radius: 20rpx;
-	}
-	
-	.designer-info {
-		display: flex;
-		align-items: center;
-		padding: 24rpx 0 0 0;
-		border-top: 1rpx solid #f5f5f5;
-		margin-top: 24rpx;
-	}
-	
-	.designer-avatar {
-		width: 80rpx;
-		height: 80rpx;
-		border-radius: 50%;
-		overflow: hidden;
-		margin-right: 20rpx;
-		background: #f0f0f0;
-	}
-	
-	.designer-avatar image {
-		width: 100%;
-		height: 100%;
-	}
-	
-	.designer-details {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-	}
-	
-	.designer-name {
-		font-size: 28rpx;
-		color: #333;
-		margin-bottom: 4rpx;
-		font-weight: bold;
-	}
-	
-	.designer-role {
-		font-size: 24rpx;
-		color: #999;
-		margin-bottom: 4rpx;
-	}
-	
-	.designer-phone {
-		font-size: 22rpx;
-		color: #666;
-	}
-	
-	.contact-btn {
-		background: #f5f5f5;
-		color: #666;
-		padding: 12rpx 24rpx;
-		border-radius: 20rpx;
-		font-size: 24rpx;
-		cursor: pointer;
-	}
-	
-	.no-designer {
-		padding: 24rpx 0 0 0;
-		border-top: 1rpx solid #f5f5f5;
-		margin-top: 24rpx;
-		text-align: center;
-	}
-	
-	.no-designer-text {
-		font-size: 24rpx;
-		color: #999;
-	}
-	
-	.order-footer {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 24rpx 30rpx;
-		border-top: 1rpx solid #f5f5f5;
-		background: #fafafa;
-	}
-	
-	.order-amount {
-		flex: 1;
-	}
-	
-	.amount-label {
-		font-size: 24rpx;
-		color: #999;
-	}
-	
-	.amount-value {
-		font-size: 28rpx;
-		color: #ff6b00;
-		font-weight: bold;
-	}
-	
-	.order-actions {
-		display: flex;
-		gap: 16rpx;
-	}
-	
-	.btn {
-		padding: 12rpx 24rpx;
-		border-radius: 20rpx;
-		font-size: 24rpx;
-		border: none;
-		cursor: pointer;
-	}
-	
-	.btn.primary {
-		background: #ff6b00;
-		color: white;
-	}
-	
-	.btn.secondary {
-		background: #f5f5f5;
-		color: #666;
-		border: 1rpx solid #e0e0e0;
-	}
-</style>
+<template>	<view class="container">		<!-- 顶部标题栏 -->		<view class="header-section">			<view class="header-title">我的订单</view>			<view class="header-actions">				<view class="action-item" @click="goToMessage">					<text class="action-icon">💬</text>				</view>			</view>		</view>				<!-- 订单状态筛选 -->		<view class="status-filter">			<scroll-view class="filter-scroll" scroll-x="true">				<view class="filter-list">					<view class="filter-item" 						:class="{ active: activeStatus === '' }" 						@click="changeStatus('')">						<text>全部</text>					</view>					<view class="filter-item" 						:class="{ active: activeStatus === '0' }" 						@click="changeStatus('0')">						<text>待确认</text>						<text v-if="statusCount['0'] > 0" class="count-badge">{{ statusCount['0'] }}</text>					</view>					<view class="filter-item" 						:class="{ active: activeStatus === '1' }" 						@click="changeStatus('1')">						<text>进行中</text>						<text v-if="statusCount['1'] > 0" class="count-badge">{{ statusCount['1'] }}</text>					</view>					<view class="filter-item" 						:class="{ active: activeStatus === '2' }" 						@click="changeStatus('2')">						<text>已完成</text>					</view>					<view class="filter-item" 						:class="{ active: activeStatus === '3' }" 						@click="changeStatus('3')">						<text>已取消</text>					</view>				</view>			</scroll-view>		</view>				<!-- 订单列表 -->		<scroll-view class="order-list" scroll-y="true" @scrolltolower="loadMore" refresher-enabled @refresherrefresh="onRefresh">			<!-- 下拉刷新 -->			<view class="refresh-container" v-if="refreshing">				<text class="refresh-text">刷新中...</text>			</view>						<!-- 空状态 -->			<view v-if="!loading && orderList.length === 0" class="empty-state">				<view class="empty-icon">{{ currentRoleConfig.icon }}</view>				<view class="empty-text">暂无订单</view>				<view class="empty-desc">{{ getEmptyDesc() }}</view>			</view>						<!-- 加载状态 -->			<view v-if="loading && orderList.length === 0" class="loading-state">				<text class="loading-text">加载中...</text>			</view>						<!-- 订单项 -->			<view class="order-item" v-for="order in orderList" :key="order.orderId">				<view class="order-header">					<view class="order-info">						<text class="order-number">订单号：DD{{ order.orderId }}</text>						<text class="order-time">{{ formatTime(order.createTime) }}</text>					</view>					<view class="order-status" :class="getStatusClass(order.status)">						{{ getStatusText(order.status) }}					</view>				</view>								<view class="order-content" @click="viewOrderDetail(order.orderId)">					<view class="project-info">						<view class="project-title">{{ order.projectInfo ? order.projectInfo.title : '设计项目' }}</view>						<view class="project-desc">{{ order.projectInfo ? order.projectInfo.description : (order.remark || '暂无描述') }}</view>						<view class="project-tags">							<text class="tag" v-if="order.projectInfo && order.projectInfo.budget">预算 {{ order.projectInfo.budget }}元</text>							<text class="tag" v-if="order.expectedEndTime">预计 {{ formatDate(order.expectedEndTime) }}完成</text>							<text class="tag">{{ getOrderTypeText(order.type) }}</text>							<text class="tag" v-if="order.projectInfo && order.projectInfo.area">{{ order.projectInfo.area }}㎡</text>							<text class="tag" v-if="order.projectInfo && order.projectInfo.address">{{ order.projectInfo.address }}</text>						</view>					</view>										<!-- 根据用户身份动态显示对应的人物信息 -->					<view class="designer-info" v-if="showPersonInfo(order)">						<view class="designer-avatar">							<image :src="getDisplayInfo(order).avatar" mode="aspectFill" />						</view>						<view class="designer-details">							<text class="designer-name">{{ getDisplayInfo(order).name }}</text>							<text class="designer-role">{{ getDisplayInfo(order).role }}</text>							<text class="designer-phone">电话: {{ getDisplayInfo(order).phone }}</text>						</view>						<view class="contact-btn" @click.stop="contactPerson(getDisplayInfo(order).id)">							联系						</view>					</view>										<view class="no-designer" v-else-if="shouldShowNoPerson(order)">						<text class="no-designer-text">暂未分配{{ getRoleDisplayName() }}</text>					</view>				</view>								<view class="order-footer">					<view class="order-amount">						<text class="amount-label">订单金额：</text>						<text class="amount-value">¥{{ order.totalAmount || 0 }}</text>					</view>					<view class="order-actions">						<!-- 普通用户的操作按钮 -->						<template v-if="isCustomer">							<!-- 待确认状态：显示确认订单和取消订单 -->							<button v-if="order.status === 0" class="btn secondary" @click="cancelOrder(order.orderId)">								取消订单							</button>							<button v-if="order.status === 0" class="btn primary" @click="confirmOrder(order.orderId)">								确认订单							</button>														<!-- 进行中状态：显示联系设计师和确认完成 -->							<button v-if="order.status === 1 && showPersonInfo(order)" class="btn secondary" @click="contactPerson(getDisplayInfo(order).id)">								联系设计师							</button>							<button v-if="order.status === 1" class="btn primary" @click="completeOrder(order.orderId)">								确认完成							</button>														<!-- 已完成状态：显示查看详情 -->							<button v-if="order.status === 2" class="btn secondary" @click="viewOrderDetail(order.orderId)">								查看详情							</button>						</template>												<!-- 设计师/监理/材料商的操作按钮 -->						<template v-else>							<!-- 待确认状态：显示取消订单 -->							<button v-if="order.status === 0" class="btn secondary" @click="cancelOrder(order.orderId)">								取消订单							</button>														<!-- 进行中状态：显示联系客户 -->							<button v-if="order.status === 1 && showPersonInfo(order)" class="btn secondary" @click="contactPerson(getDisplayInfo(order).id)">								联系客户							</button>														<!-- 已完成状态：显示查看详情 -->							<button v-if="order.status === 2" class="btn secondary" @click="viewOrderDetail(order.orderId)">								查看详情							</button>						</template>					</view>				</view>			</view>						<!-- 加载更多 -->			<view v-if="loading && orderList.length > 0" class="load-more">				<text class="load-more-text">加载中...</text>			</view>			<view v-if="hasMore && orderList.length > 0" class="load-more">				<text class="load-more-text">上拉加载更多</text>			</view>			<view v-if="!hasMore && orderList.length > 0" class="load-more">				<text class="load-more-text">没有更多数据了</text>			</view>		</scroll-view>	</view></template><script>	import { orderService } from '@/api/order.js'	import { projectService } from '@/api/project.js'	import { getUserProfile } from '@/api/users.js'		// 角色配置常量	const ROLE_CONFIG = {		'user': {			name: '普通用户',			desc: '浏览内容、发布作品、参与互动',			icon: '👤',			alwaysAvailable: true,			displayName: '设计师'		},		'designer': {			name: '设计师',			desc: '发布作品、管理内容、数据分析',			icon: '🎨',			displayName: '客户'		},		'supervisor': {			name: '监理',			desc: '工程监督、质量检查、进度管理',			icon: '👷',			displayName: '客户'		},		'material_supplier': {			name: '材料商',			desc: '管理材料、处理订单、库存管理',			icon: '🏭',			displayName: '客户'		}	}	export default {		data() {			return {				// 订单状态筛选				activeStatus: '',				loading: false,				refreshing: false,				hasMore: true,				currentUserId: null,								// 身份状态				currentRole: null,				currentRoleConfig: ROLE_CONFIG['user'],				isUserRole: false,				isViewOnly: false,								// 身份标识				isCustomer: true,				isDesigner: false,				isSupervisor: false,				isMaterialSupplier: false,								// 分页参数				pagination: {					pageNum: 1,					pageSize: 10,					total: 0				},								// 订单列表数据				orderList: [],								// 订单状态数量统计				statusCount: {					'0': 0,					'1': 0,					'2': 0,					'3': 0				},								// 用户信息缓存				userInfoCache: new Map()			}		},		methods: {			// 获取用户角色并设置权限			async getUserRole() {				try {					console.log('👤 开始获取用户角色...')										// 从全局获取用户信息					const app = getApp()					let userInfo = null										if (app && app.globalData && app.globalData.userInfo) {						userInfo = app.globalData.userInfo					} else {						userInfo = uni.getStorageSync('userInfo')					}										if (userInfo) {						// 优先使用 currentRoleType						if (userInfo.currentRoleType) {							this.currentRole = userInfo.currentRoleType						}						// 其次检查 roles 数组						else if (userInfo.roles && Array.isArray(userInfo.roles) && userInfo.roles.length > 0) {							this.currentRole = this.getHighestPriorityRole(userInfo.roles)						}					}										// 如果没有找到角色，使用普通用户					if (!this.currentRole) {						this.currentRole = 'user'					}										this.isUserRole = this.currentRole === 'user'										// 设置身份标识					this.isCustomer = this.currentRole === 'user'					this.isDesigner = this.currentRole === 'designer'					this.isSupervisor = this.currentRole === 'supervisor'					this.isMaterialSupplier = this.currentRole === 'material_supplier'										// 设置角色配置					this.currentRoleConfig = ROLE_CONFIG[this.currentRole] || ROLE_CONFIG['user']										console.log('🎭 当前用户角色:', this.currentRole)					console.log('👥 身份标识:', {						isCustomer: this.isCustomer,						isDesigner: this.isDesigner,						isSupervisor: this.isSupervisor,						isMaterialSupplier: this.isMaterialSupplier					})										return true				} catch (error) {					console.error('获取用户角色失败:', error)					// 默认设置为普通用户身份					this.currentRole = 'user'					this.currentRoleConfig = ROLE_CONFIG['user']					this.isCustomer = true					this.isDesigner = false					this.isSupervisor = false					this.isMaterialSupplier = false					return false				}			},						// 从角色数组中获取最高优先级的角色			getHighestPriorityRole(roles) {				const rolePriority = {					'designer': 1,					'supervisor': 2,					'material_supplier': 3,					'user': 4				}								let highestPriorityRole = 'user'				let highestPriority = rolePriority.user								roles.forEach(role => {					const roleKey = this.normalizeRoleKey(role)					if (rolePriority[roleKey] && rolePriority[roleKey] < highestPriority) {						highestPriority = rolePriority[roleKey]						highestPriorityRole = roleKey					}				})								return highestPriorityRole			},						// 标准化角色键			normalizeRoleKey(role) {				if (typeof role === 'string') {					const roleLower = role.toLowerCase()					if (roleLower.includes('design')) return 'designer'					if (roleLower.includes('supervisor') || roleLower.includes('监理')) return 'supervisor'					if (roleLower.includes('material') || roleLower.includes('supplier') || roleLower.includes('材料')) return 'material_supplier'					if (roleLower.includes('user')) return 'user'				}				return 'user'			},						// 获取空状态描述			getEmptyDesc() {				const descMap = {					'user': '您还没有任何订单',					'designer': '您还没有接到的订单',					'supervisor': '您还没有监理的订单',					'material_supplier': '您还没有材料订单'				}				return descMap[this.currentRole] || '暂无订单'			},						// 获取角色显示名称			getRoleDisplayName() {				return this.currentRoleConfig.displayName || '对方'			},						// 判断是否显示人物信息			showPersonInfo(order) {				if (this.isCustomer) {					// 普通用户显示设计师信息					return order.contractorId && order.contractorInfo				} else {					// 设计师/监理/材料商显示客户信息					return order.userId && order.userInfo				}			},						// 判断是否显示"暂未分配"提示			shouldShowNoPerson(order) {				if (this.isCustomer) {					return !order.contractorId				} else {					return false // 对于非普通用户，不显示此提示				}			},						// 获取要显示的人物信息			getDisplayInfo(order) {				if (this.isCustomer) {					// 普通用户显示设计师信息					return order.contractorInfo || {						name: '未知设计师',						phone: '暂无联系方式',						avatar: '/static/images/default-avatar.png',						role: '设计师',						id: order.contractorId					}				} else {					// 设计师/监理/材料商显示客户信息					return order.userInfo || {						name: '客户',						phone: '暂无联系方式',						avatar: '/static/images/default-avatar.png',						role: '客户',						id: order.userId					}				}			},						// 获取当前用户信息			async getCurrentUserInfo() {				try {					console.log('👤 开始获取用户信息...')										// 先获取身份信息					await this.getUserRole()										const userInfo = await getUserProfile()					console.log('✅ 用户信息获取成功:', userInfo)										// 根据实际接口返回结构调整					let userId = null					if (userInfo && userInfo.userId) {						userId = userInfo.userId					} else if (userInfo && userInfo.data && userInfo.data.userId) {						userId = userInfo.data.userId					} else if (userInfo && userInfo.id) {						userId = userInfo.id					}										if (userId) {						this.currentUserId = userId						console.log('🎯 设置当前用户ID:', this.currentUserId)						return true					} else {						console.error('❌ 未找到用户ID')						uni.showToast({							title: '获取用户信息失败',							icon: 'none'						})						return false					}				} catch (error) {					console.error('❌ 获取用户信息失败:', error)					uni.showToast({						title: '获取用户信息失败',						icon: 'none'					})					return false				}			},						// 根据用户ID获取用户信息			async getUserInfo(userId) {				if (!userId) {					return null				}								// 检查缓存				if (this.userInfoCache.has(userId)) {					return this.userInfoCache.get(userId)				}								try {					console.log('👤 获取用户信息，用户ID:', userId)					const userInfo = await getUserProfile(userId)					console.log('✅ 用户信息获取成功:', userInfo)										// 根据实际API返回结构调整					let userData = userInfo					if (userInfo && userInfo.data) {						userData = userInfo.data					}										const userProfile = {						name: userData.name || userData.nickname || (this.isCustomer ? '设计师' : '客户'),						phone: userData.phone || userData.mobile || '暂无联系方式',						avatar: userData.avatar || '/static/images/default-avatar.png',						role: userData.role || (this.isCustomer ? '设计师' : '客户'),						id: userId					}										// 缓存用户信息					this.userInfoCache.set(userId, userProfile)										return userProfile				} catch (error) {					console.error('❌ 获取用户信息失败:', error)					return {						name: this.isCustomer ? '设计师' : '客户',						phone: '暂无联系方式',						avatar: '/static/images/default-avatar.png',						role: this.isCustomer ? '设计师' : '客户',						id: userId					}				}			},						// 切换订单状态			changeStatus(status) {				this.activeStatus = status				this.pagination.pageNum = 1				this.hasMore = true				this.orderList = []				this.loadOrderList()			},						// 获取状态文本			getStatusText(status) {				return orderService.getOrderStatusText(status)			},						// 获取订单类型文本			getOrderTypeText(type) {				return orderService.getOrderTypeText(type)			},						// 获取状态样式类			getStatusClass(status) {				const classMap = {					0: 'status-pending',					1: 'status-progress',					2: 'status-completed',					3: 'status-canceled'				}				return classMap[status] || ''			},						// 格式化时间			formatTime(timeStr) {				if (!timeStr) return ''				if (typeof timeStr === 'number') {					const date = new Date(timeStr)					return date.toLocaleDateString()				}				return timeStr.split(' ')[0]			},						// 格式化日期			formatDate(dateStr) {				if (!dateStr) return ''				if (dateStr.includes('T')) {					return dateStr.split('T')[0]				}				return dateStr.split(' ')[0]			},						// 根据项目ID获取项目详情			async getProjectDetail(projectId) {				if (!projectId) {					console.warn('项目ID为空')					return null				}								try {					console.log('📋 获取项目详情，项目ID:', projectId)					const projectDetail = await projectService.getProjectDetail(projectId)					console.log('✅ 项目详情获取成功:', projectDetail)					return projectDetail				} catch (error) {					console.error('❌ 获取项目详情失败:', error)					return null				}			},						// 加载订单列表			async loadOrderList() {				if (this.loading) return								// 检查用户ID				if (!this.currentUserId) {					console.log('🔄 未获取到用户ID，先获取用户信息...')					const hasUserInfo = await this.getCurrentUserInfo()					if (!hasUserInfo) {						this.loading = false						this.refreshing = false						return					}				}								try {					this.loading = true										const queryParams = {						pageNum: this.pagination.pageNum,						pageSize: this.pagination.pageSize					}										// 添加状态筛选					if (this.activeStatus !== '') {						queryParams.status = this.activeStatus					}										console.log('📋 加载订单列表 - 用户ID:', this.currentUserId, '身份:', this.currentRole, '查询参数:', queryParams)										// 使用统一的API方法，根据身份传递不同的参数					let result = null					if (this.isCustomer) {						// 普通用户获取自己的订单						result = await orderService.getOrderListByUserId(this.currentUserId, queryParams)					} else {						// 设计师/监理/材料商获取分配给自己的订单						queryParams.contractorId = this.currentUserId						result = await orderService.getOrderList(queryParams)					}										console.log('✅ 订单列表响应:', result)										// 处理返回数据格式					let list = []					let total = 0										if (Array.isArray(result)) {						list = result						total = result.length					} else if (result && result.records) {						list = result.records						total = result.total					} else if (result && result.list) {						list = result.list						total = result.total					} else if (result && result.data) {						list = result.data.records || result.data.list || []						total = result.data.total || 0					}										// 为每个订单获取项目详情和用户信息					console.log('🔄 开始获取订单对应的详细信息...')					const ordersWithDetails = []					for (const order of list) {						let projectInfo = {}						let contractorInfo = {}						let userInfo = {}												// 获取项目详情						if (order.projectId) {							try {								projectInfo = await this.getProjectDetail(order.projectId) || {}							} catch (error) {								console.error(`获取订单 ${order.orderId} 的项目详情失败:`, error)							}						}												// 获取设计师信息（对于普通用户）						if (order.contractorId && this.isCustomer) {							try {								contractorInfo = await this.getUserInfo(order.contractorId) || {}							} catch (error) {								console.error(`获取订单 ${order.orderId} 的设计师信息失败:`, error)							}						}												// 获取客户信息（对于设计师/监理/材料商）						if (order.userId && !this.isCustomer) {							try {								userInfo = await this.getUserInfo(order.userId) || {}							} catch (error) {								console.error(`获取订单 ${order.orderId} 的客户信息失败:`, error)							}						}												ordersWithDetails.push({							...order,							projectInfo,							contractorInfo,							userInfo						})					}					console.log('✅ 订单数据整合完成:', ordersWithDetails)										// 更新数据					if (this.pagination.pageNum === 1) {						this.orderList = ordersWithDetails					} else {						this.orderList = [...this.orderList, ...ordersWithDetails]					}										// 更新分页信息					this.pagination.total = total					this.hasMore = this.orderList.length < total										// 更新状态统计					this.updateStatusCount()									} catch (error) {					console.error('❌ 加载订单列表失败:', error)					uni.showToast({						title: error.message || '加载失败',						icon: 'none'					})				} finally {					this.loading = false					this.refreshing = false				}			},						// 更新状态统计			updateStatusCount() {				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0 }								this.orderList.forEach(order => {					const status = order.status.toString()					if (this.statusCount[status] !== undefined) {						this.statusCount[status]++					}				})								console.log('📊 订单状态统计:', this.statusCount)			},						// 加载更多			loadMore() {				if (this.loading || !this.hasMore) return				this.pagination.pageNum++				this.loadOrderList()			},						// 下拉刷新			onRefresh() {				if (this.refreshing) return				this.refreshing = true				this.pagination.pageNum = 1				this.hasMore = true				this.loadOrderList()			},						// 查看订单详情			viewOrderDetail(orderId) {				uni.navigateTo({					url: `/pages/order-hall/order-detail?id=${orderId}`				})			},						// 联系对方（通用方法）			contactPerson(userId) {				if (!userId) {					uni.showToast({						title: '暂无联系方式',						icon: 'none'					})					return				}				uni.navigateTo({					url: `/pages/chat/designer?id=${userId}`				})			},						// 确认订单（只有普通用户）- 状态改为1			async confirmOrder(orderId) {				try {					uni.showModal({						title: '确认订单',						content: '确定要确认这个订单吗？',						success: async (res) => {							if (res.confirm) {								uni.showLoading({ title: '确认中...' })								console.log('🎯 开始确认订单:')								console.log('📦 订单ID:', orderId)								console.log('🎯 目标状态: 1(PROCESSING)')																try {									const result = await orderService.confirmOrder(orderId)									console.log('✅ 确认订单成功:', result)									uni.hideLoading()									uni.showToast({										title: '订单已确认',										icon: 'success'									})									// 刷新订单列表									this.pagination.pageNum = 1									this.loadOrderList()								} catch (error) {									console.error('❌ 确认订单失败:', error)									throw error								}							}						}					})				} catch (error) {					uni.hideLoading()					console.error('❌ 确认订单异常:', error)					uni.showToast({						title: error.message || '确认失败',						icon: 'none'					})				}			},						// 取消订单（只有普通用户）- 状态改为3			async cancelOrder(orderId) {				try {					uni.showModal({						title: '确认取消',						content: '确定要取消这个订单吗？',						success: async (res) => {							if (res.confirm) {								uni.showLoading({ title: '取消中...' })								console.log('🎯 开始取消订单:')								console.log('📦 订单ID:', orderId)								console.log('🎯 目标状态: 3(CANCELLED)')																try {									const result = await orderService.cancelOrder(orderId)									console.log('✅ 取消订单成功:', result)									uni.hideLoading()									uni.showToast({										title: '订单已取消',										icon: 'success'									})									// 刷新订单列表									this.pagination.pageNum = 1									this.loadOrderList()								} catch (error) {									console.error('❌ 取消订单失败:', error)									throw error								}							}						}					})				} catch (error) {					uni.hideLoading()					console.error('❌ 取消订单异常:', error)					uni.showToast({						title: error.message || '取消失败',						icon: 'none'					})				}			},						// 完成订单（只有普通用户）- 状态改为2			async completeOrder(orderId) {				try {					uni.showModal({						title: '确认完成',						content: '确认订单已完成？',						success: async (res) => {							if (res.confirm) {								uni.showLoading({ title: '处理中...' })								console.log('🎯 开始完成订单:')								console.log('📦 订单ID:', orderId)								console.log('🎯 目标状态: 2(COMPLETED)')																try {									const result = await orderService.completeOrder(orderId)									console.log('✅ 完成订单成功:', result)									uni.hideLoading()									uni.showToast({										title: '订单已完成',										icon: 'success'									})									// 刷新订单列表									this.pagination.pageNum = 1									this.loadOrderList()								} catch (error) {									console.error('❌ 完成订单失败:', error)									throw error								}							}						}					})				} catch (error) {					uni.hideLoading()					console.error('❌ 完成订单异常:', error)					uni.showToast({						title: error.message || '操作失败',						icon: 'none'					})				}			},						// 跳转到消息页面			goToMessage() {				uni.navigateTo({					url: '/pages/message/message'				})			}		},				onLoad() {			this.getCurrentUserInfo().then(hasUserInfo => {				if (hasUserInfo) {					this.loadOrderList()				}			})		},				onShow() {			if (this.currentUserId && this.orderList.length > 0) {				this.pagination.pageNum = 1				this.loadOrderList()			}		},				onPullDownRefresh() {			this.onRefresh()			uni.stopPullDownRefresh()		},				onReachBottom() {			this.loadMore()		}	}</script><style scoped>	.container {		max-width: 750rpx;		margin: 0 auto;		background-color: #f5f5f5;		min-height: 100vh;	}		.header-section {		display: flex;		align-items: center;		justify-content: space-between;		padding: 30rpx;		background-color: #fff;		border-bottom: 1rpx solid #eee;	}		.header-title {		font-size: 36rpx;		font-weight: bold;		color: #333;	}		.header-actions {		display: flex;		align-items: center;	}		.action-item {		position: relative;		padding: 10rpx;	}		.action-icon {		font-size: 36rpx;	}		.badge {		position: absolute;		top: 0;		right: 0;		background: #ff4757;		color: white;		font-size: 20rpx;		padding: 4rpx 8rpx;		border-radius: 20rpx;		min-width: 24rpx;		text-align: center;	}		.status-filter {		background-color: #fff;		border-bottom: 1rpx solid #eee;	}		.filter-scroll {		white-space: nowrap;	}		.filter-list {		display: inline-flex;		padding: 20rpx 30rpx;	}		.filter-item {		position: relative;		padding: 16rpx 30rpx;		font-size: 28rpx;		color: #666;		white-space: nowrap;		cursor: pointer;		transition: all 0.3s;	}		.filter-item.active {		color: #ff6b00;		font-weight: bold;	}		.filter-item.active::after {		content: '';		position: absolute;		bottom: 0;		left: 50%;		transform: translateX(-50%);		width: 40rpx;		height: 4rpx;		background-color: #ff6b00;		border-radius: 2rpx;	}		.count-badge {		position: absolute;		top: 8rpx;		right: 16rpx;		background: #ff6b00;		color: white;		font-size: 20rpx;		padding: 2rpx 6rpx;		border-radius: 12rpx;		min-width: 20rpx;		text-align: center;	}		.order-list {		height: calc(100vh - 200rpx);		padding: 20rpx;	}		.refresh-container {		text-align: center;		padding: 20rpx;		color: #999;	}		.empty-state {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 120rpx 0;		text-align: center;	}		.empty-icon {		font-size: 120rpx;		margin-bottom: 30rpx;		opacity: 0.5;	}		.empty-text {		font-size: 32rpx;		color: #999;		margin-bottom: 16rpx;	}		.empty-desc {		font-size: 28rpx;		color: #ccc;		margin-bottom: 40rpx;	}		.loading-state {		text-align: center;		padding: 60rpx;		color: #999;	}		.load-more {		text-align: center;		padding: 30rpx;		color: #999;		font-size: 28rpx;	}		.order-item {		background-color: #fff;		border-radius: 16rpx;		margin-bottom: 20rpx;		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);		overflow: hidden;	}		.order-header {		display: flex;		justify-content: space-between;		align-items: center;		padding: 24rpx 30rpx;		border-bottom: 1rpx solid #f5f5f5;	}		.order-info {		flex: 1;	}		.order-number {		display: block;		font-size: 24rpx;		color: #999;		margin-bottom: 8rpx;	}		.order-time {		font-size: 24rpx;		color: #ccc;	}		.order-status {		font-size: 24rpx;		padding: 8rpx 16rpx;		border-radius: 20rpx;	}		.status-pending {		background: #fff9e6;		color: #f39c12;	}		.status-progress {		background: #e6f7ff;		color: #1890ff;	}		.status-completed {		background: #f6f6f6;		color: #999;	}		.status-canceled {		background: #fff2f0;		color: #ff4d4f;	}		.order-content {		padding: 30rpx;		cursor: pointer;	}		.project-title {		font-size: 32rpx;		font-weight: bold;		color: #333;		margin-bottom: 16rpx;	}		.project-desc {		font-size: 28rpx;		color: #666;		line-height: 1.5;		margin-bottom: 20rpx;		display: -webkit-box;		-webkit-line-clamp: 2;		-webkit-box-orient: vertical;		overflow: hidden;	}		.project-tags {		display: flex;		flex-wrap: wrap;		gap: 16rpx;	}		.tag {		font-size: 24rpx;		color: #666;		background: #f5f5f5;		padding: 8rpx 16rpx;		border-radius: 20rpx;	}		.designer-info {		display: flex;		align-items: center;		padding: 24rpx 0 0 0;		border-top: 1rpx solid #f5f5f5;		margin-top: 24rpx;	}		.designer-avatar {		width: 80rpx;		height: 80rpx;		border-radius: 50%;		overflow: hidden;		margin-right: 20rpx;		background: #f0f0f0;	}		.designer-avatar image {		width: 100%;		height: 100%;	}		.designer-details {		flex: 1;		display: flex;		flex-direction: column;	}		.designer-name {		font-size: 28rpx;		color: #333;		margin-bottom: 4rpx;		font-weight: bold;	}		.designer-role {		font-size: 24rpx;		color: #999;		margin-bottom: 4rpx;	}		.designer-phone {		font-size: 22rpx;		color: #666;	}		.contact-btn {		background: #f5f5f5;		color: #666;		padding: 12rpx 24rpx;		border-radius: 20rpx;		font-size: 24rpx;		cursor: pointer;	}		.no-designer {		padding: 24rpx 0 0 0;		border-top: 1rpx solid #f5f5f5;		margin-top: 24rpx;		text-align: center;	}		.no-designer-text {		font-size: 24rpx;		color: #999;	}		.order-footer {		display: flex;		justify-content: space-between;		align-items: center;		padding: 24rpx 30rpx;		border-top: 1rpx solid #f5f5f5;		background: #fafafa;	}		.order-amount {		flex: 1;	}		.amount-label {		font-size: 24rpx;		color: #999;	}		.amount-value {		font-size: 28rpx;		color: #ff6b00;		font-weight: bold;	}		.order-actions {		display: flex;		gap: 16rpx;	}		.btn {		padding: 12rpx 24rpx;		border-radius: 20rpx;		font-size: 24rpx;		border: none;		cursor: pointer;	}		.btn.primary {		background: #ff6b00;		color: white;	}		.btn.secondary {		background: #f5f5f5;		color: #666;		border: 1rpx solid #e0e0e0;	}</style>
