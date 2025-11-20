@@ -29,55 +29,6 @@
 				</view>
 			</view>
 			
-			<!-- 压缩设置区域 -->
-			<view class="compression-settings" v-if="isShowImg">
-				<view class="setting-title">图片压缩设置</view>
-				<view class="setting-item">
-					<text class="setting-label">图片质量</text>
-					<slider 
-						:value="compressionQuality" 
-						min="30" 
-						max="100" 
-						step="5" 
-						@change="onQualityChange"
-						activeColor="#4A90E2"
-						show-value
-					/>
-					<text class="setting-value">{{ compressionQuality }}%</text>
-				</view>
-				<view class="setting-item">
-					<text class="setting-label">目标尺寸</text>
-					<radio-group @change="onSizeChange">
-						<label class="radio-label">
-							<radio value="200" :checked="targetSize === 200" color="#4A90E2" /> 小 (200×200)
-						</label>
-						<label class="radio-label">
-							<radio value="400" :checked="targetSize === 400" color="#4A90E2" /> 中 (400×400)
-						</label>
-						<label class="radio-label">
-							<radio value="600" :checked="targetSize === 600" color="#4A90E2" /> 大 (600×600)
-						</label>
-					</radio-group>
-				</view>
-				<view class="compression-preview">
-					<text class="preview-title">压缩预览</text>
-					<view class="preview-content">
-						<view class="preview-item">
-							<text class="preview-label">原图大小:</text>
-							<text class="preview-value">{{ originalSize }}</text>
-						</view>
-						<view class="preview-item">
-							<text class="preview-label">压缩后:</text>
-							<text class="preview-value">{{ compressedSize }}</text>
-						</view>
-						<view class="preview-item">
-							<text class="preview-label">节省空间:</text>
-							<text class="preview-value save">{{ sizeReduction }}</text>
-						</view>
-					</view>
-				</view>
-			</view>
-			
 			<view class='cropper-config'>
 				<button type="primary reverse" @click="getImage" style='margin-top: 30rpx;'> 选择头像 </button>
 				<button type="warn" @click="getImageInfo" style='margin-top: 30rpx;'> 提交 </button>
@@ -150,12 +101,9 @@
 				// 上传相关
 				uploading: false,
 				
-				// 压缩设置
-				compressionQuality: 70, // 默认压缩质量70%
-				targetSize: 400, // 默认目标尺寸400×400
-				originalSize: '0 KB',
-				compressedSize: '0 KB',
-				sizeReduction: '0%',
+				// 统一的压缩设置（不再展示给用户）
+				compressionQuality: 80, // 统一压缩质量80%
+				targetSize: 400, // 统一目标尺寸400×400
 				originalFileSize: 0
 			}
 		},
@@ -191,8 +139,6 @@
 							filePath: res.tempFilePaths[0],
 							success: (fileInfo) => {
 								_this.originalFileSize = fileInfo.size
-								_this.originalSize = _this.formatFileSize(fileInfo.size)
-								_this.updateCompressionPreview()
 							}
 						})
 						
@@ -350,29 +296,13 @@
 						y: canvasT,
 						width: canvasW,
 						height: canvasH,
-						destWidth: _this.targetSize,  // 使用设置的压缩尺寸
-						destHeight: _this.targetSize, // 使用设置的压缩尺寸
-						quality: quality,              // 使用设置的压缩质量
+						destWidth: _this.targetSize,  // 使用统一的压缩尺寸
+						destHeight: _this.targetSize, // 使用统一的压缩尺寸
+						quality: quality,              // 使用统一的压缩质量
 						canvasId: 'myCanvas',
 						success: function (res) {
 							uni.hideLoading()
 							console.log('🎨 生成的临时文件路径:', res.tempFilePath)
-							
-							// 获取压缩后的文件大小
-							uni.getFileInfo({
-								filePath: res.tempFilePath,
-								success: (fileInfo) => {
-									_this.compressedSize = _this.formatFileSize(fileInfo.size)
-									const reduction = ((_this.originalFileSize - fileInfo.size) / _this.originalFileSize * 100).toFixed(1)
-									_this.sizeReduction = reduction + '%'
-									
-									console.log('📊 压缩效果:', {
-										原图大小: _this.originalSize,
-										压缩后: _this.compressedSize,
-										节省空间: _this.sizeReduction
-									})
-								}
-							})
 							
 							_this.uploadAvatar(res.tempFilePath)
 						},
@@ -383,31 +313,6 @@
 						}
 					})
 				})
-			},
-			
-			// 压缩质量变化
-			onQualityChange(e) {
-				this.compressionQuality = e.detail.value
-				this.updateCompressionPreview()
-			},
-			
-			// 目标尺寸变化
-			onSizeChange(e) {
-				this.targetSize = parseInt(e.detail.value)
-				this.updateCompressionPreview()
-			},
-			
-			// 更新压缩预览信息
-			updateCompressionPreview() {
-				// 这里可以添加更精确的压缩大小预估
-				// 简单估算：文件大小与质量成正比，与尺寸的平方成正比
-				const qualityFactor = this.compressionQuality / 100
-				const sizeFactor = Math.pow(this.targetSize / 600, 2) // 以600为基准
-				const estimatedSize = this.originalFileSize * qualityFactor * sizeFactor
-				
-				this.compressedSize = this.formatFileSize(estimatedSize)
-				const reduction = ((this.originalFileSize - estimatedSize) / this.originalFileSize * 100).toFixed(1)
-				this.sizeReduction = reduction + '%'
 			},
 			
 			// 格式化文件大小
@@ -585,92 +490,6 @@
 	.cropper-content {
 		min-height: 750rpx;
 		width: 100%;
-	}
-	
-	/* 压缩设置区域 */
-	.compression-settings {
-		background: white;
-		margin: 20rpx;
-		padding: 30rpx;
-		border-radius: 16rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
-	}
-	
-	.setting-title {
-		font-size: 32rpx;
-		font-weight: 600;
-		color: #333;
-		margin-bottom: 30rpx;
-		text-align: center;
-	}
-	
-	.setting-item {
-		margin-bottom: 40rpx;
-	}
-	
-	.setting-label {
-		display: block;
-		font-size: 28rpx;
-		color: #666;
-		margin-bottom: 20rpx;
-		font-weight: 500;
-	}
-	
-	.setting-value {
-		font-size: 24rpx;
-		color: #4A90E2;
-		font-weight: 500;
-		margin-left: 20rpx;
-	}
-	
-	.radio-label {
-		display: block;
-		margin: 15rpx 0;
-		font-size: 26rpx;
-		color: #333;
-	}
-	
-	.compression-preview {
-		background: #f8f9fa;
-		padding: 25rpx;
-		border-radius: 12rpx;
-		margin-top: 20rpx;
-	}
-	
-	.preview-title {
-		font-size: 28rpx;
-		font-weight: 600;
-		color: #333;
-		margin-bottom: 20rpx;
-		display: block;
-	}
-	
-	.preview-content {
-		display: flex;
-		flex-direction: column;
-		gap: 12rpx;
-	}
-	
-	.preview-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	
-	.preview-label {
-		font-size: 26rpx;
-		color: #666;
-	}
-	
-	.preview-value {
-		font-size: 26rpx;
-		color: #333;
-		font-weight: 500;
-	}
-	
-	.preview-value.save {
-		color: #52c41a;
-		font-weight: 600;
 	}
 
 	.uni-corpper {

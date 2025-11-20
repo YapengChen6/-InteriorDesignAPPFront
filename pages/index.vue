@@ -20,7 +20,7 @@
 		
 		<!-- 主菜单 -->
 		<view class="main-menu">
-			<view class="menu-item" :class="{ active: activeMainMenu === 0 }" @click="activeMainMenu = 0">
+			<view class="menu-item" :class="{ active: activeMainMenu === 0 }" @click="goToOrderHall()">
 				<view class="menu-icon">📋</view>
 				<text>订单大厅</text>
 			</view>
@@ -36,7 +36,9 @@
 				<view class="menu-icon">👨‍🎨</view>
 				<text>找设计师</text>
 			</view>
-			<view class="menu-item" :class="{ active: activeMainMenu === 3 }" @click="activeMainMenu = 3">
+			<view class="menu-item" 
+			      :class="{ active: activeMainMenu === 3 }" 
+			      @click="goToFindSupervisor()">
 				<view class="menu-icon">👷</view>
 				<text>找监工</text>
 			</view>
@@ -222,6 +224,13 @@ export default {
 	},
 	
 	methods: {
+		// 跳转到订单大厅页面
+		goToOrderHall() {
+			uni.navigateTo({
+				url: '/pages/order-hall/order-hall'
+			});
+		},
+		
 		// 跳转到定位页面
 		goToLocationPage() {
 			uni.navigateTo({
@@ -233,6 +242,20 @@ export default {
 		goToShopPage() {
 			uni.navigateTo({
 				url: '/pages/shop/shop'
+			});
+		},
+		
+		// 跳转到找监工页面
+		goToFindSupervisor() {
+			uni.navigateTo({
+				url: '/pages/find-supervisor/find-supervisor'
+			});
+		},
+		
+		// 跳转到找设计师页面
+		goToFindDesigner() {
+			uni.navigateTo({
+				url: '/pages/find-design/find-design'
 			});
 		},
 		
@@ -264,13 +287,6 @@ export default {
 					icon: 'none'
 				});
 			}
-		},
-		
-		// 跳转到找设计师页面
-		goToFindDesigner() {
-			uni.navigateTo({
-				url: '/pages/find-design/find-design'
-			});
 		},
 		
 		// 切换轮播图
@@ -805,6 +821,7 @@ export default {
 	}
 }
 </script>
+
 <style>
 	.container {
 		max-width: 750px;

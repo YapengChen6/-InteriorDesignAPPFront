@@ -18,7 +18,7 @@
     <!-- 身份提示 -->
     <view class="identity-hint">请选择要切换的身份：</view>
     
-    <!-- 身份选择列表 - 添加滚动容器 -->
+    <!-- 身份选择列表 -->
     <scroll-view 
       class="menu-scroll-container"
       scroll-y
@@ -90,13 +90,13 @@
 <script>
 import { getUserProfile, getCurrentRole, getAvailableRoles, switchRole, switchToUser } from '@/api/users.js'
 
-// 角色类型配置（直接使用字符串）
+// 角色类型配置
 const ROLE_CONFIG = {
   'user': {
     name: '普通用户',
     desc: '浏览内容、发布作品、参与互动',
     icon: '👤',
-    alwaysAvailable: true // 普通用户始终可用
+    alwaysAvailable: true
   },
   'designer': {
     name: '设计师',
@@ -115,10 +115,12 @@ const ROLE_CONFIG = {
   }
 }
 
-// 认证状态常量
+// 认证状态常量 - 根据后端代码更新
 const CERTIFICATION_STATUS = {
-  PENDING: '1',      // 审核中
+  PENDING: '0',      // 待审核
+  REVIEWING: '1',    // 审核中
   APPROVED: '2',     // 已通过
+  REJECTED: '3',     // 已拒绝
   NOT_APPLIED: '9'   // 未入驻
 }
 
@@ -132,29 +134,26 @@ export default {
   data() {
     return {
       windowHeight: uni.getSystemInfoSync().windowHeight,
-      selectedRoleType: '', // 选中的角色类型（字符串）
-      currentRoleType: '', // 当前角色类型（字符串）
+      selectedRoleType: '',
+      currentRoleType: '',
       userInfo: {},
-      availableRoles: [], // 可用的角色列表
+      availableRoles: [],
       loading: false,
       defaultAvatar: 'https://design.gemcoder.com/staticResource/echoAiSystemImages/378da9ddd57051faab2f02fd247494da.png',
-      scrollViewHeight: 400, // 默认滚动区域高度
-      showScrollHint: true, // 是否显示滚动提示
-      hasScrolled: false // 用户是否已经滚动过
+      scrollViewHeight: 400,
+      showScrollHint: true,
+      hasScrolled: false
     }
   },
   computed: {
-    // 当前角色名称
     currentRoleName() {
       const role = this.getRoleConfig(this.currentRoleType)
       return role ? role.name : '普通用户'
     },
-    // 当前角色描述
     currentRoleDesc() {
       const role = this.getRoleConfig(this.currentRoleType)
       return role ? role.desc : ''
     },
-    // 确认按钮文本
     confirmButtonText() {
       if (this.selectedRoleType === this.currentRoleType) {
         return '当前身份'
@@ -165,10 +164,9 @@ export default {
       const selectedRole = this.getRoleConfig(this.selectedRoleType)
       return selectedRole ? `切换为${selectedRole.name}` : '切换身份'
     },
-    // 选中的角色是否可用
     isSelectedRoleAvailable() {
       if (this.selectedRoleType === this.currentRoleType) {
-        return true // 当前角色始终可用
+        return true
       }
       const selectedRole = this.availableRoles.find(role => role.roleType === this.selectedRoleType)
       return selectedRole ? this.isRoleAvailable(selectedRole) : false
@@ -179,7 +177,6 @@ export default {
     this.calculateScrollHeight()
   },
   onReady() {
-    // 确保页面渲染完成后计算高度
     setTimeout(() => {
       this.calculateScrollHeight()
     }, 100)
@@ -190,33 +187,23 @@ export default {
     })
   },
   onResize() {
-    // 窗口尺寸变化时重新计算高度
     this.calculateScrollHeight()
   },
   methods: {
-    // 计算滚动区域高度
     calculateScrollHeight() {
       const systemInfo = uni.getSystemInfoSync()
       const windowHeight = systemInfo.windowHeight
       
-      // 计算其他元素的高度（估算值，可根据实际调整）
-      const currentRoleSectionHeight = 200 // 当前角色区域高度
-      const identityHintHeight = 40 // 提示文字高度
-      const confirmBtnHeight = 100 // 确认按钮区域高度
-      const paddingHeight = 80 // 上下内边距
+      const currentRoleSectionHeight = 200
+      const identityHintHeight = 40
+      const confirmBtnHeight = 100
+      const paddingHeight = 80
       
-      // 计算滚动区域可用高度
       const scrollHeight = windowHeight - currentRoleSectionHeight - identityHintHeight - confirmBtnHeight - paddingHeight
       
-      this.scrollViewHeight = Math.max(scrollHeight, 300) // 最小高度300px
-      console.log('滚动区域高度计算:', {
-        windowHeight,
-        scrollHeight,
-        finalHeight: this.scrollViewHeight
-      })
+      this.scrollViewHeight = Math.max(scrollHeight, 300)
     },
 
-    // 滚动事件处理
     onScroll(event) {
       if (!this.hasScrolled) {
         this.hasScrolled = true
@@ -226,20 +213,29 @@ export default {
       const { scrollTop, scrollHeight } = event.detail
       const clientHeight = this.scrollViewHeight
       
-      // 如果接近底部，隐藏滚动提示
       if (scrollHeight - scrollTop - clientHeight < 50) {
         this.showScrollHint = false
       }
     },
 
-    // 初始化页面 - 修改为顺序执行，确保数据一致性
     async initPage() {
       try {
         this.loading = true
-        // 顺序执行，确保角色信息优先加载
-        await this.loadCurrentRole() // 先加载当前角色
-        await this.loadUserInfo()    // 再加载用户信息，并同步角色信息
-        await this.loadAvailableRoles() // 最后加载可用角色
+        await this.loadCurrentRole()
+        await this.loadUserInfo()
+        await this.loadAvailableRoles()
+        
+        // 添加权限检查日志
+        console.log('用户权限状态分析:')
+        this.availableRoles.forEach(role => {
+          console.log(`角色 ${role.roleTypeName}:`, {
+            认证状态: role.certificationStatus,
+            状态文本: role.certificationStatusText,
+            是否可用: this.isRoleAvailable(role),
+            是否当前: role.isCurrent
+          })
+        })
+        
         console.log('页面初始化完成:', {
           当前角色: this.currentRoleType,
           用户信息角色: this.userInfo.currentRoleType
@@ -255,45 +251,46 @@ export default {
       }
     },
 
-    // 根据角色类型获取角色配置
     getRoleConfig(roleType) {
       return ROLE_CONFIG[roleType] || ROLE_CONFIG['user']
     },
 
-    // 获取角色图标
     getRoleIcon(roleType) {
       const config = this.getRoleConfig(roleType)
       return config.icon
     },
 
-    // 获取角色描述
     getRoleDesc(roleType) {
       const config = this.getRoleConfig(roleType)
       return config.desc
     },
 
-    // 检查角色是否可用（认证状态为2）
+    // 检查角色是否可用（基于后端 sys_user_role 表逻辑）
     isRoleAvailable(role) {
       // 当前角色始终可用
       if (role.roleType === this.currentRoleType) {
         return true
       }
-      // 检查角色配置中是否标记为始终可用
-      const roleConfig = this.getRoleConfig(role.roleType)
-      if (roleConfig.alwaysAvailable) {
+      // 普通用户角色始终可用
+      if (role.roleType === 'user') {
         return true
       }
-      // 检查认证状态是否为2（已通过）
+      // 其他角色：认证状态为 "2"（已通过）即可用
       return role.certificationStatus === CERTIFICATION_STATUS.APPROVED
     },
 
-    // 获取认证状态对应的样式类
+    // 更新认证状态样式类
     getStatusClass(status) {
+      if (!status) return 'status-unknown'
+      
       switch (status) {
         case CERTIFICATION_STATUS.APPROVED:
           return 'status-approved'
         case CERTIFICATION_STATUS.PENDING:
+        case CERTIFICATION_STATUS.REVIEWING:
           return 'status-pending'
+        case CERTIFICATION_STATUS.REJECTED:
+          return 'status-rejected'
         case CERTIFICATION_STATUS.NOT_APPLIED:
           return 'status-not-applied'
         default:
@@ -301,7 +298,6 @@ export default {
       }
     },
 
-    // 从本地存储获取当前角色
     getStoredRole() {
       try {
         const storedRole = uni.getStorageSync(STORAGE_KEYS.CURRENT_ROLE)
@@ -312,7 +308,6 @@ export default {
       }
     },
 
-    // 保存当前角色到本地存储
     saveRoleToStorage(roleType) {
       try {
         uni.setStorageSync(STORAGE_KEYS.CURRENT_ROLE, roleType)
@@ -322,7 +317,6 @@ export default {
       }
     },
 
-    // 保存用户信息到本地存储
     saveUserInfoToStorage(userInfo) {
       try {
         uni.setStorageSync(STORAGE_KEYS.USER_INFO, userInfo)
@@ -332,7 +326,6 @@ export default {
       }
     },
 
-    // 从本地存储获取用户信息
     getStoredUserInfo() {
       try {
         return uni.getStorageSync(STORAGE_KEYS.USER_INFO) || {}
@@ -342,24 +335,20 @@ export default {
       }
     },
 
-    // 加载用户信息 - 修改为使用当前角色信息同步
     async loadUserInfo() {
       try {
         const res = await getUserProfile()
         if (res.code === 200) {
           this.userInfo = res.data
           
-          // 关键修改：使用当前角色接口的数据覆盖用户信息中的角色类型
           if (this.currentRoleType) {
             this.userInfo.currentRoleType = this.currentRoleType
           } else if (this.userInfo.currentRoleType) {
-            // 如果当前角色为空，但用户信息中有角色，则使用用户信息的角色
             this.currentRoleType = this.userInfo.currentRoleType
             this.selectedRoleType = this.currentRoleType
             this.saveRoleToStorage(this.currentRoleType)
           }
           
-          // 保存到本地存储
           this.saveUserInfoToStorage(this.userInfo)
           console.log('用户信息加载成功:', {
             用户信息: this.userInfo,
@@ -370,11 +359,9 @@ export default {
         }
       } catch (error) {
         console.error('获取用户信息失败:', error)
-        // 降级方案：从本地存储获取
         const storedUserInfo = this.getStoredUserInfo()
         if (storedUserInfo && Object.keys(storedUserInfo).length > 0) {
           this.userInfo = storedUserInfo
-          // 从存储的用户信息中恢复角色类型
           if (this.userInfo.currentRoleType && !this.currentRoleType) {
             this.currentRoleType = this.userInfo.currentRoleType
             this.selectedRoleType = this.currentRoleType
@@ -385,17 +372,14 @@ export default {
       }
     },
 
-    // 加载当前角色 - 作为主要角色信息来源
     async loadCurrentRole() {
       try {
         const res = await getCurrentRole()
         console.log('当前角色响应:', res)
         if (res.code === 200 && res.data) {
-          // 优先使用当前角色接口返回的数据
           this.currentRoleType = res.data.roleType
           this.selectedRoleType = this.currentRoleType
           
-          // 保存到本地存储
           this.saveRoleToStorage(this.currentRoleType)
           console.log('当前角色类型:', this.currentRoleType)
         } else {
@@ -403,14 +387,12 @@ export default {
         }
       } catch (error) {
         console.error('获取当前角色失败:', error)
-        // 降级方案：从本地存储获取
         const storedRole = this.getStoredRole()
         if (storedRole !== null) {
           this.currentRoleType = storedRole
           this.selectedRoleType = storedRole
           console.log('从本地存储获取角色:', storedRole)
         } else {
-          // 如果都没有，默认使用用户角色
           this.currentRoleType = 'user'
           this.selectedRoleType = 'user'
         }
@@ -418,22 +400,22 @@ export default {
       }
     },
 
-    // 加载可用的角色列表
     async loadAvailableRoles() {
       try {
         const res = await getAvailableRoles()
-        console.log('可用角色列表:', res)
+        console.log('可用角色列表完整响应:', JSON.stringify(res, null, 2))
+        
         if (res.code === 200 && res.data && Array.isArray(res.data)) {
-          // 直接使用后端返回的角色数据
           this.availableRoles = res.data.map(item => ({
             roleType: item.roleType,
             roleTypeName: item.roleTypeName,
             certificationStatus: item.certificationStatus,
             certificationStatusText: item.certificationStatusText,
-            isCurrent: item.roleType === this.currentRoleType // 根据当前角色设置isCurrent
+            isCurrent: item.roleType === this.currentRoleType
           }))
           
-          // 确保普通用户角色存在
+          console.log('处理后的可用角色:', this.availableRoles)
+          
           this.ensureDefaultRoles()
         } else {
           throw new Error(res.msg || '获取可用角色失败')
@@ -445,7 +427,6 @@ export default {
       }
     },
 
-    // 确保默认角色存在
     ensureDefaultRoles() {
       const hasUserRole = this.availableRoles.some(role => role.roleType === 'user')
       if (!hasUserRole) {
@@ -459,7 +440,6 @@ export default {
       }
     },
 
-    // 设置默认角色列表
     setDefaultRoles() {
       this.availableRoles = Object.keys(ROLE_CONFIG).map(roleType => ({
         roleType: roleType,
@@ -470,28 +450,45 @@ export default {
       }))
     },
 
-    // 选择角色
     selectRole(role) {
-      console.log('选择角色:', role, '当前角色:', this.currentRoleType)
+      console.log('选择角色详情:', {
+        角色信息: role,
+        当前角色: this.currentRoleType,
+        是否可用: this.isRoleAvailable(role)
+      })
       
       // 检查角色是否可用
       if (!this.isRoleAvailable(role) && role.roleType !== this.currentRoleType) {
         let message = ''
+        let showGuide = false
+        
         switch (role.certificationStatus) {
           case CERTIFICATION_STATUS.PENDING:
+          case CERTIFICATION_STATUS.REVIEWING:
             message = `${role.roleTypeName}身份审核中，请耐心等待`
             break
+          case CERTIFICATION_STATUS.REJECTED:
+            message = `${role.roleTypeName}身份审核未通过`
+            break
           case CERTIFICATION_STATUS.NOT_APPLIED:
-            message = `您尚未入驻${role.roleTypeName}身份，请先申请入驻`
+            message = `您尚未入驻${role.roleTypeName}身份`
+            showGuide = true
             break
           default:
             message = `${role.roleTypeName}身份暂不可用`
         }
         
-        uni.showToast({
-          title: message,
-          icon: 'none',
-          duration: 2000
+        uni.showModal({
+          title: '提示',
+          content: message,
+          confirmText: showGuide ? '去入驻' : '知道了',
+          cancelText: '取消',
+          success: (res) => {
+            if (res.confirm && showGuide) {
+              // 跳转到入驻页面
+              this.navigateToSettlePage(role.roleType)
+            }
+          }
         })
         return
       }
@@ -508,10 +505,29 @@ export default {
       this.selectedRoleType = role.roleType
     },
     
-    // 强制刷新用户信息
+    // 跳转到入驻页面
+    navigateToSettlePage(roleType) {
+      const settlePages = {
+        'designer': '/pages/designer/settle/index',
+        'supervisor': '/pages/supervisor/settle/index', 
+        'material_supplier': '/pages/supplier/settle/index'
+      }
+      
+      const targetPage = settlePages[roleType]
+      if (targetPage) {
+        uni.navigateTo({
+          url: targetPage
+        })
+      } else {
+        uni.showToast({
+          title: '暂不支持该身份入驻',
+          icon: 'none'
+        })
+      }
+    },
+    
     async forceRefreshUserInfo() {
       try {
-        // 先刷新当前角色信息
         const roleRes = await getCurrentRole()
         if (roleRes.code === 200 && roleRes.data) {
           this.currentRoleType = roleRes.data.roleType
@@ -520,32 +536,25 @@ export default {
           console.log('当前角色强制刷新成功:', this.currentRoleType)
         }
         
-        // 再刷新用户信息，并同步角色信息
         const userRes = await getUserProfile()
         if (userRes.code === 200) {
           this.userInfo = userRes.data
-          // 使用当前角色信息覆盖用户信息中的角色类型
           this.userInfo.currentRoleType = this.currentRoleType
           this.saveUserInfoToStorage(this.userInfo)
           console.log('用户信息强制刷新成功:', this.userInfo)
         }
       } catch (error) {
         console.error('强制刷新用户信息失败:', error)
-        // 即使刷新失败，也要确保本地状态正确
         this.updateLocalRoleInfo(this.selectedRoleType)
       }
     },
 
-    // 更新本地角色信息
     updateLocalRoleInfo(newRoleType) {
-      // 更新当前角色类型
       this.currentRoleType = newRoleType
       this.selectedRoleType = newRoleType
       
-      // 保存到本地存储
       this.saveRoleToStorage(newRoleType)
       
-      // 更新用户信息中的角色类型
       if (this.userInfo) {
         this.userInfo.currentRoleType = newRoleType
         this.saveUserInfoToStorage(this.userInfo)
@@ -559,12 +568,9 @@ export default {
       })
     },
 
-    // 通知角色变更
     notifyRoleChanged(roleType, roleName) {
-      // 更新全局状态
       this.updateGlobalState(roleType)
       
-      // 发送全局事件
       uni.$emit('roleChanged', { 
         roleType: roleType,
         roleName: roleName,
@@ -572,14 +578,12 @@ export default {
         timestamp: new Date().getTime()
       })
       
-      // 通知用户信息更新
       uni.$emit('userInfoUpdated', {
         userInfo: this.userInfo,
         currentRoleType: roleType,
         timestamp: new Date().getTime()
       })
       
-      // 新增：发送角色切换完成事件
       uni.$emit('roleSwitchCompleted', {
         roleType: roleType,
         roleName: roleName,
@@ -588,9 +592,7 @@ export default {
       })
     },
 
-    // 更新全局状态
     updateGlobalState(roleType) {
-      // 更新应用全局数据
       if (typeof getApp !== 'undefined') {
         const app = getApp()
         if (app && app.globalData) {
@@ -604,7 +606,7 @@ export default {
       }
     },
 
-    // 确认切换
+    // 改进错误处理，提供更详细的错误信息
     async handleConfirm() {
       console.log('确认切换:', {
         当前角色: this.currentRoleType,
@@ -612,7 +614,6 @@ export default {
         用户信息角色: this.userInfo.currentRoleType
       })
 
-      // 如果选择的是当前身份，不执行切换
       if (this.selectedRoleType === this.currentRoleType) {
         const roleConfig = this.getRoleConfig(this.selectedRoleType)
         uni.showToast({
@@ -622,14 +623,18 @@ export default {
         return
       }
 
-      // 检查选中的角色是否可用
       if (!this.isSelectedRoleAvailable) {
         const selectedRole = this.availableRoles.find(role => role.roleType === this.selectedRoleType)
         let message = '该身份暂不可用'
         if (selectedRole) {
+          // 根据新的认证状态给出具体提示
           switch (selectedRole.certificationStatus) {
             case CERTIFICATION_STATUS.PENDING:
+            case CERTIFICATION_STATUS.REVIEWING:
               message = `${selectedRole.roleTypeName}身份审核中，请耐心等待`
+              break
+            case CERTIFICATION_STATUS.REJECTED:
+              message = `${selectedRole.roleTypeName}身份审核未通过`
               break
             case CERTIFICATION_STATUS.NOT_APPLIED:
               message = `您尚未入驻${selectedRole.roleTypeName}身份，请先申请入驻`
@@ -638,7 +643,8 @@ export default {
         }
         uni.showToast({
           title: message,
-          icon: 'none'
+          icon: 'none',
+          duration: 3000
         })
         return
       }
@@ -646,33 +652,23 @@ export default {
       this.loading = true
       
       try {
-        let result
         const targetRoleType = this.selectedRoleType
         const roleConfig = this.getRoleConfig(targetRoleType)
         
         console.log('开始切换到:', targetRoleType, roleConfig)
         
-        // 根据角色类型选择不同的切换方式
-        if (targetRoleType === 'user') {
-          // 切换到普通用户
-          result = await switchToUser()
-        } else {
-          // 切换到其他角色
-          const switchData = {
-            roleType: targetRoleType,
-            remark: `用户主动切换到${roleConfig.name}身份`
-          }
-          console.log('切换请求数据:', switchData)
-          result = await switchRole(switchData)
+        // 统一使用 switchRole 接口
+        const switchData = {
+          roleType: targetRoleType
         }
+        console.log('切换请求数据:', switchData)
+        const result = await switchRole(switchData)
 
         console.log('切换结果:', result)
 
         if (result.code === 200) {
-          // 立即更新本地角色信息
           this.updateLocalRoleInfo(targetRoleType)
           
-          // 强制刷新用户信息，确保获取到最新的角色信息
           await this.forceRefreshUserInfo()
           
           uni.showToast({
@@ -681,23 +677,49 @@ export default {
             duration: 1500
           })
           
-          // 延迟返回上一页
           setTimeout(() => {
-            // 触发全局事件，通知其他页面身份已变更
             this.notifyRoleChanged(targetRoleType, roleConfig.name)
-            
             uni.navigateBack()
           }, 1500)
         } else {
-          throw new Error(result.msg || '切换失败')
+          // 提供更详细的错误信息
+          let errorMessage = result.msg || '切换失败'
+          if (result.code === 400) {
+            // 根据后端返回的具体错误信息进行处理
+            if (errorMessage.includes('未入驻')) {
+              errorMessage = `您尚未入驻${roleConfig.name}身份，请先申请入驻`
+            } else if (errorMessage.includes('审核未通过')) {
+              errorMessage = `${roleConfig.name}身份审核未通过，无法切换`
+            } else {
+              errorMessage = `${roleConfig.name}身份暂不可用：${errorMessage}`
+            }
+          }
+          throw new Error(errorMessage)
         }
       } catch (error) {
         console.error('切换角色失败:', error)
+        // 显示更详细的错误信息
+        let errorMessage = error.message || '切换失败，请重试'
+        
+        // 处理网络错误或服务器错误
+        if (error.message.includes('Network Error') || error.message.includes('timeout')) {
+          errorMessage = '网络连接失败，请检查网络后重试'
+        } else if (error.message.includes('500')) {
+          errorMessage = '服务器内部错误，请稍后重试'
+        }
+        
         uni.showToast({
-          title: error.message || '切换失败，请重试',
+          title: errorMessage,
           icon: 'none',
-          duration: 2000
+          duration: 3000
         })
+        
+        // 重新加载可用角色列表，确保状态最新
+        try {
+          await this.loadAvailableRoles()
+        } catch (reloadError) {
+          console.error('重新加载角色列表失败:', reloadError)
+        }
       } finally {
         this.loading = false
       }
@@ -707,7 +729,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-/* 样式保持不变 */
 .setting-container {
   background-color: #f8f8f8;
   padding: 40rpx 30rpx;
@@ -773,7 +794,6 @@ export default {
   font-weight: 500;
 }
 
-/* 新增滚动容器样式 */
 .menu-scroll-container {
   flex: 1;
   margin-bottom: 20rpx;
@@ -857,8 +877,12 @@ export default {
     color: #faad14;
   }
   
-  &.status-not-applied {
+  &.status-rejected {
     color: #ff4d4f;
+  }
+  
+  &.status-not-applied {
+    color: #999;
   }
   
   &.status-unknown {
@@ -902,7 +926,6 @@ export default {
   opacity: 0.6;
 }
 
-/* 新增滚动提示样式 */
 .scroll-hint {
   display: flex;
   flex-direction: column;

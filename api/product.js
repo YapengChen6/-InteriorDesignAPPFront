@@ -5,28 +5,6 @@ const baseURL = 'http://localhost:8081' // 根据您的后端地址调整
 // ==================== 分类管理 ====================
 
 /**
- * 获取所有有效分类
- */
-export function getCategoryTree() {
-  return request({
-    url: '/api/product-shelf/category/list',
-    method: 'get',
-    baseURL
-  })
-}
-
-/**
- * 获取三级分类
- */
-export function getLevel3Categories() {
-  return request({
-    url: '/api/product-shelf/category/level3',
-    method: 'get',
-    baseURL
-  })
-}
-
-/**
  * 新增分类
  */
 export function addCategory(data) {
@@ -61,12 +39,101 @@ export function deleteCategory(categoryId) {
   })
 }
 
+/**
+ * 查询所有有效分类
+ */
+export function getAllCategories() {
+  return request({
+    url: '/api/product-shelf/category/list',
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
+ * 查询三级分类
+ */
+export function getLevel3Categories() {
+  return request({
+    url: '/api/product-shelf/category/level3',
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
+ * 获取一级分类列表
+ */
+export function getLevel1Categories() {
+  return request({
+    url: '/api/product-shelf/category/level1',
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
+ * 根据一级分类ID获取二级分类列表
+ */
+export function getLevel2CategoriesByLevel1(level1CategoryId) {
+  return request({
+    url: `/api/product-shelf/category/level2/${level1CategoryId}`,
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
+ * 根据二级分类ID获取三级分类列表
+ */
+export function getLevel3CategoriesByLevel2(level2CategoryId) {
+  return request({
+    url: `/api/product-shelf/category/level3/${level2CategoryId}`,
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
+ * 验证三级分类与一、二级分类的父子关系一致性
+ */
+export function validateCategoryHierarchy(data) {
+  return request({
+    url: '/api/product-shelf/category/validate-hierarchy',
+    method: 'post',
+    data: data,
+    baseURL
+  })
+}
+
+/**
+ * 获取分类的完整路径字符串
+ */
+export function getCategoryPathString(categoryId) {
+  return request({
+    url: `/api/product-shelf/category/path/${categoryId}`,
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
+ * 为现有商品数据设置分类路径信息
+ */
+export function updateExistingProductCategoryPaths() {
+  return request({
+    url: '/api/product-shelf/spu/update-category-paths',
+    method: 'post',
+    baseURL
+  })
+}
+
 // ==================== SPU 管理 ====================
 
 /**
  * 新增商品SPU
  */
-export function createProduct(data) {
+export function addProductSpu(data) {
   return request({
     url: '/api/product-shelf/spu/add',
     method: 'post',
@@ -157,7 +224,7 @@ export function batchUnpublishProductSpu(spuIds) {
 }
 
 /**
- * 获取所有有效SPU
+ * 查询所有有效SPU
  */
 export function getAllProductSpus() {
   return request({
@@ -360,7 +427,7 @@ export function uploadProductImage(formData) {
     url: '/api/media/upload',
     method: 'post',
     data: formData,
-    header: {
+    headers: {
       'Content-Type': 'multipart/form-data'
     },
     baseURL
@@ -379,14 +446,20 @@ export function batchUploadProductImages(formDataList) {
 
 export default {
   // 分类管理
-  getCategoryTree,
-  getLevel3Categories,
   addCategory,
   updateCategory,
   deleteCategory,
+  getAllCategories,
+  getLevel3Categories,
+  getLevel1Categories,
+  getLevel2CategoriesByLevel1,
+  getLevel3CategoriesByLevel2,
+  validateCategoryHierarchy,
+  getCategoryPathString,
+  updateExistingProductCategoryPaths,
   
   // SPU管理
-  createProduct,
+  addProductSpu,
   updateProductSpu,
   deleteProductSpu,
   batchDeleteProductSpus,

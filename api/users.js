@@ -29,7 +29,7 @@ export function getRouters() {
 // 用户头像上传
 export function uploadAvatar(data) {
   return upload({
-    url: '/api/users/profile/avatar', // 建议使用专门的头像上传接口
+    url: '/api/users/profile/avatar',
     name: data.name,
     filePath: data.filePath
   })
@@ -40,7 +40,7 @@ export function logout(token) {
   return request({
     url: '/api/users/logout',
     method: 'post',
-    params: { token } // 根据控制器需要token参数
+    params: { token }
   })
 }
 
@@ -70,20 +70,29 @@ export function getCodeImg() {
   })
 }
 
+// 多条件查询用户信息
+export function searchUsers(query) {
+  return request({
+    url: '/api/users/search',
+    method: 'post',
+    data: query
+  })
+}
+
 // 身份切换相关API
 
 // 切换用户身份
-export function switchRole(roleSwitchDTO) {
+export function switchRole(data) {
   return request({
     url: '/api/users/role/switch',
     method: 'post',
-    data: roleSwitchDTO
+    data: data
   })
 }
 
 // 获取身份信息（支持可选手机号查询）
 export function getRoleSwitchInfo(phone) {
-  const params = phone ? { phone: phone.trim() } : {}
+  const params = phone ? { phone } : {}
   return request({
     url: '/api/users/role/info',
     method: 'get',
@@ -115,7 +124,7 @@ export function resetToUser() {
   })
 }
 
-// 获取身份切换历史记录
+// 获取身份切换历史记录 - 注意：后端已弃用，返回空数组
 export function getRoleSwitchHistory() {
   return request({
     url: '/api/users/role/history',
@@ -178,6 +187,7 @@ export default {
   getRouters,
   uploadAvatar,
   logout,
+  searchUsers,
   
   // 认证相关
   sendCode,

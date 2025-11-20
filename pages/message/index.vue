@@ -628,6 +628,7 @@ export default {
 }
 .search-box {
   display: flex;
+  height: 100rpx;
   flex-direction: row;
   align-items: center;
   background-color: #f5f6fa;

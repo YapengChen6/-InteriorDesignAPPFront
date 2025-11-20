@@ -37,57 +37,90 @@
         <view v-if="currentStep === 1" class="step-panel">
           <view class="form-group">
             <text class="form-label">商品分类</text>
-            <view class="category-selector">
-              <view class="picker-group">
-                <text class="picker-label">一级分类</text>
-                <picker 
-                  @change="onCategory1Change" 
-                  :value="category1Index" 
-                  :range="category1Options"
-                  range-key="name"
-                  class="picker"
-                >
-                  <view class="picker-text">
-                    {{ category1Options[category1Index] ? category1Options[category1Index].name : '请选择一级分类' }}
-                  </view>
-                </picker>
-              </view>
-              <view class="picker-group">
-                <text class="picker-label">二级分类</text>
-                <picker 
-                  @change="onCategory2Change" 
-                  :value="category2Index" 
-                  :range="category2Options"
-                  range-key="name"
-                  :disabled="!category1Options[category1Index]"
-                  class="picker"
-                >
-                  <view class="picker-text" :class="{ disabled: !category1Options[category1Index] }">
+            
+            <!-- 一级分类 -->
+            <view class="picker-group">
+              <text class="picker-label">一级分类</text>
+              <picker 
+                @change="onCategory1Change" 
+                :value="category1Index" 
+                :range="category1Options"
+                range-key="name"
+                class="picker"
+              >
+                <view class="picker-text">
+                  {{ category1Options[category1Index] ? category1Options[category1Index].name : '请选择一级分类' }}
+                  <text v-if="loadingCategory1" class="loading-indicator">加载中...</text>
+                </view>
+              </picker>
+            </view>
+            
+            <!-- 二级分类 -->
+            <view class="picker-group">
+              <text class="picker-label">二级分类</text>
+              <picker 
+                @change="onCategory2Change" 
+                :value="category2Index" 
+                :range="category2Options"
+                range-key="name"
+                :disabled="!selectedCategory1Id || loadingCategory2"
+                class="picker"
+              >
+                <view class="picker-text" :class="{ 
+                  disabled: !selectedCategory1Id,
+                  loading: loadingCategory2 
+                }">
+                  <template v-if="loadingCategory2">
+                    加载中...
+                  </template>
+                  <template v-else-if="!selectedCategory1Id">
+                    请先选择二级分类
+                  </template>
+                  <template v-else>
                     {{ category2Options[category2Index] ? category2Options[category2Index].name : '请选择二级分类' }}
-                  </view>
-                </picker>
-              </view>
-              <view class="picker-group">
-                <text class="picker-label">三级分类</text>
-                <picker 
-                  @change="onCategory3Change" 
-                  :value="category3Index" 
-                  :range="category3Options"
-                  range-key="name"
-                  :disabled="!category2Options[category2Index]"
-                  class="picker"
-                >
-                  <view class="picker-text" :class="{ disabled: !category2Options[category2Index] }">
+                  </template>
+                </view>
+              </picker>
+            </view>
+            
+            <!-- 三级分类 -->
+            <view class="picker-group">
+              <text class="picker-label">三级分类</text>
+              <picker 
+                @change="onCategory3Change" 
+                :value="category3Index" 
+                :range="category3Options"
+                range-key="name"
+                :disabled="!selectedCategory2Id || loadingCategory3"
+                class="picker"
+              >
+                <view class="picker-text" :class="{ 
+                  disabled: !selectedCategory2Id,
+                  loading: loadingCategory3 
+                }">
+                  <template v-if="loadingCategory3">
+                    加载中...
+                  </template>
+                  <template v-else-if="!selectedCategory2Id">
+                    请先选择三级分类
+                  </template>
+                  <template v-else>
                     {{ category3Options[category3Index] ? category3Options[category3Index].name : '请选择三级分类' }}
-                  </view>
-                </picker>
-              </view>
+                  </template>
+                </view>
+              </picker>
             </view>
             
             <!-- 分类选择状态显示 -->
             <view class="category-status" v-if="selectedCategory3Id">
               <text class="status-text">已选择分类：</text>
-              <text class="category-path">{{ productData.category }}</text>
+              <text class="category-path">{{ selectedCategoryPath }}</text>
+            </view>
+
+            <!-- 错误信息显示 -->
+            <view v-if="categoryError" class="error-message">
+              <text>{{ categoryError }}</text>
+              <text class="retry-text" @tap="loadLevel1Categories">点击重试</text>
             </view>
           </view>
           
@@ -321,7 +354,14 @@
 </template>
 
 <script>
-import { getCategoryTree, createProduct } from '@/api/product.js'
+// 导入API函数
+import { 
+  getLevel1Categories, 
+  getLevel2CategoriesByLevel1, 
+  getLevel3CategoriesByLevel2,
+  addProductSpu, 
+  addProductSku
+} from '@/api/product.js'
 
 export default {
   data() {
@@ -336,21 +376,31 @@ export default {
       category2Options: [],
       category3Options: [],
       
-      // 存储选中的分类ID
+      // 分类加载状态
+      loadingCategory1: false,
+      loadingCategory2: false,
+      loadingCategory3: false,
+      categoryError: '',
+      
+      // 存储选中的分类信息
       selectedCategory1Id: null,
       selectedCategory2Id: null,
       selectedCategory3Id: null,
+      selectedCategory1Name: '',
+      selectedCategory2Name: '',
+      selectedCategory3Name: '',
+      selectedCategoryPath: '',
       
       // 商品图片
       productImages: [],
       
-      // 商品数据 - 匹配后端 ProductSpuDTO
+      // 商品数据
       productData: {
         productName: '',
         productDetail: '',
-        categoryId: null, // 三级分类ID
-        productStatus: 0, // 0-下架，1-上架
-        specType: 0, // 0-单规格，2-多规格
+        categoryId: null,
+        productStatus: 0,
+        specType: 0,
         marketPrice: 0,
         costPrice: 0,
         stock: 100
@@ -384,6 +434,27 @@ export default {
         color: '#333',
         backgroundColor: '#fff',
         minHeight: '200rpx'
+      },
+      specNameInputStyles: {
+        borderColor: 'transparent',
+        color: '#333',
+        backgroundColor: 'transparent'
+      },
+      tableInputStyles: {
+        borderColor: 'transparent',
+        color: '#333',
+        backgroundColor: 'transparent',
+        textAlign: 'center'
+      },
+      batchInputStyles: {
+        borderColor: '#e0e0e0',
+        color: '#333',
+        backgroundColor: '#fff'
+      },
+      priceInputStyles: {
+        borderColor: '#e0e0e0',
+        color: '#333',
+        backgroundColor: '#fff'
       }
     }
   },
@@ -404,42 +475,68 @@ export default {
       }
     },
     
-    // 分类选择方法
-    onCategory1Change(e) {
+    // 一级分类选择
+    async onCategory1Change(e) {
       const index = parseInt(e.detail.value)
       this.category1Index = index
       const selectedCategory = this.category1Options[index]
       
       if (selectedCategory) {
         this.selectedCategory1Id = selectedCategory.id
-        // 根据一级分类查找二级分类
-        this.category2Options = this.getCategoriesByParentId(this.selectedCategory1Id)
-        this.category2Index = 0
+        this.selectedCategory1Name = selectedCategory.name
+        
+        console.log('选择一级分类:', {
+          名称: selectedCategory.name,
+          ID: this.selectedCategory1Id
+        })
+        
+        // 重置下级分类
+        this.category2Options = []
         this.category3Options = []
+        this.category2Index = 0
         this.category3Index = 0
         this.selectedCategory2Id = null
+        this.selectedCategory2Name = ''
         this.selectedCategory3Id = null
+        this.selectedCategory3Name = ''
         
-        this.updateCategoryData()
+        this.updateCategoryPath()
+        
+        // 加载二级分类
+        await this.loadLevel2Categories(this.selectedCategory1Id)
+        
       }
     },
     
-    onCategory2Change(e) {
+    // 二级分类选择
+    async onCategory2Change(e) {
       const index = parseInt(e.detail.value)
       this.category2Index = index
       const selectedCategory = this.category2Options[index]
       
       if (selectedCategory) {
         this.selectedCategory2Id = selectedCategory.id
-        // 根据二级分类查找三级分类
-        this.category3Options = this.getCategoriesByParentId(this.selectedCategory2Id)
+        this.selectedCategory2Name = selectedCategory.name
+        
+        console.log('选择二级分类:', {
+          名称: selectedCategory.name,
+          ID: this.selectedCategory2Id
+        })
+        
+        // 重置三级分类
+        this.category3Options = []
         this.category3Index = 0
         this.selectedCategory3Id = null
+        this.selectedCategory3Name = ''
         
-        this.updateCategoryData()
+        this.updateCategoryPath()
+        
+        // 加载三级分类
+        await this.loadLevel3Categories(this.selectedCategory2Id)
       }
     },
     
+    // 三级分类选择
     onCategory3Change(e) {
       const index = parseInt(e.detail.value)
       this.category3Index = index
@@ -447,72 +544,186 @@ export default {
       
       if (selectedCategory) {
         this.selectedCategory3Id = selectedCategory.id
+        this.selectedCategory3Name = selectedCategory.name
         this.productData.categoryId = this.selectedCategory3Id
-        this.updateCategoryData()
+        
+        this.updateCategoryPath()
         
         uni.showToast({
           title: '分类选择完成',
           icon: 'success',
           duration: 1500
         })
+        
+        console.log('三级分类选择:', {
+          选择的三级分类: selectedCategory.name,
+          分类ID: this.selectedCategory3Id
+        })
       }
     },
     
-    // 根据父级ID获取分类
-    getCategoriesByParentId(parentId) {
-      if (!this.categoryTree || !Array.isArray(this.categoryTree)) {
-        return []
-      }
-      return this.categoryTree.filter(category => category.parentId === parentId)
+    // 更新分类路径显示
+    updateCategoryPath() {
+      let path = ''
+      if (this.selectedCategory1Name) path += this.selectedCategory1Name
+      if (this.selectedCategory2Name) path += ' / ' + this.selectedCategory2Name
+      if (this.selectedCategory3Name) path += ' / ' + this.selectedCategory3Name
+      
+      this.selectedCategoryPath = path
     },
     
-    // 更新分类数据
-    updateCategoryData() {
-      const category1 = this.category1Options[this.category1Index]
-      const category2 = this.category2Options[this.category2Index]
-      const category3 = this.category3Options[this.category3Index]
-      
-      let categoryPath = ''
-      if (category1) categoryPath += category1.name
-      if (category2) categoryPath += ' / ' + category2.name
-      if (category3) categoryPath += ' / ' + category3.name
-      
-      this.productData.category = categoryPath
-    },
-    
-    // 加载分类数据
-    async loadCategoryTree() {
+    // 加载一级分类
+    async loadLevel1Categories() {
       try {
+        this.loadingCategory1 = true
+        this.categoryError = ''
+        
         uni.showLoading({
           title: '加载分类中...',
           mask: true
         })
         
-        const response = await getCategoryTree()
+        const response = await getLevel1Categories()
+        console.log('一级分类API响应:', response)
         
-        if (response.code === 200 || response.success) {
-          this.categoryTree = response.data || []
+        if (response.code === 200) {
+          const categoryData = response.data
           
-          // 设置一级分类 (parentId=0)
-          this.category1Options = this.getCategoriesByParentId(0)
+          if (!categoryData || categoryData.length === 0) {
+            throw new Error('一级分类数据为空')
+          }
           
-          console.log('分类数据加载成功:', {
-            '总分类数量': this.categoryTree.length,
-            '一级分类数量': this.category1Options.length
+          this.category1Options = categoryData
+          
+          console.log('一级分类加载成功:', {
+            '一级分类数量': this.category1Options.length,
+            '一级分类列表': this.category1Options.map(cat => ({
+              name: cat.name,
+              id: cat.id
+            }))
+          })
+          
+          uni.showToast({
+            title: '分类加载成功',
+            icon: 'success',
+            duration: 1500
           })
           
         } else {
-          throw new Error(response.message || '加载分类失败')
+          throw new Error(response.message || '加载一级分类失败')
         }
         
       } catch (error) {
-        console.error('加载分类数据失败:', error)
+        console.error('加载一级分类失败:', error)
+        this.categoryError = error.message || '一级分类加载失败，请检查网络连接'
         uni.showToast({
           title: '分类加载失败',
-          icon: 'none'
+          icon: 'none',
+          duration: 3000
         })
+        
+        this.category1Options = []
       } finally {
+        this.loadingCategory1 = false
         uni.hideLoading()
+      }
+    },
+    
+    // 加载二级分类 - 根据一级分类ID
+    async loadLevel2Categories(level1CategoryId) {
+      try {
+        this.loadingCategory2 = true
+        
+        console.log('开始加载二级分类，一级分类ID:', level1CategoryId)
+        
+        const response = await getLevel2CategoriesByLevel1(level1CategoryId)
+        console.log('二级分类API响应:', response)
+        
+        if (response.code === 200) {
+          const categoryData = response.data
+          
+          this.category2Options = categoryData
+          
+          console.log('二级分类加载成功:', {
+            '二级分类数量': this.category2Options.length,
+            '二级分类列表': this.category2Options.map(cat => ({
+              name: cat.name,
+              id: cat.id
+            }))
+          })
+          
+          if (this.category2Options.length === 0) {
+            uni.showToast({
+              title: '该分类下暂无二级分类',
+              icon: 'none',
+              duration: 2000
+            })
+          }
+          
+        } else {
+          throw new Error(response.message || '加载二级分类失败')
+        }
+        
+      } catch (error) {
+        console.error('加载二级分类失败:', error)
+        uni.showToast({
+          title: '二级分类加载失败',
+          icon: 'none',
+          duration: 2000
+        })
+        
+        this.category2Options = []
+      } finally {
+        this.loadingCategory2 = false
+      }
+    },
+    
+    // 加载三级分类 - 根据二级分类ID
+    async loadLevel3Categories(level2CategoryId) {
+      try {
+        this.loadingCategory3 = true
+        
+        console.log('开始加载三级分类，二级分类ID:', level2CategoryId)
+        
+        const response = await getLevel3CategoriesByLevel2(level2CategoryId)
+        console.log('三级分类API响应:', response)
+        
+        if (response.code === 200) {
+          const categoryData = response.data
+          
+          this.category3Options = categoryData
+          
+          console.log('三级分类加载成功:', {
+            '三级分类数量': this.category3Options.length,
+            '三级分类列表': this.category3Options.map(cat => ({
+              name: cat.name,
+              id: cat.id
+            }))
+          })
+          
+          if (this.category3Options.length === 0) {
+            uni.showToast({
+              title: '该分类下暂无三级分类',
+              icon: 'none',
+              duration: 2000
+            })
+          }
+          
+        } else {
+          throw new Error(response.message || '加载三级分类失败')
+        }
+        
+      } catch (error) {
+        console.error('加载三级分类失败:', error)
+        uni.showToast({
+          title: '三级分类加载失败',
+          icon: 'none',
+          duration: 2000
+        })
+        
+        this.category3Options = []
+      } finally {
+        this.loadingCategory3 = false
       }
     },
     
@@ -571,10 +782,7 @@ export default {
       }
       
       this.specifications.push(spec)
-      this.specCounter++
       this.generatePriceStockTable()
-      
-      // 更新规格类型
       this.productData.specType = this.specifications.length > 0 ? 2 : 0
     },
     
@@ -613,6 +821,14 @@ export default {
       const spec = this.specifications.find(s => s.id === specId)
       if (spec) {
         spec.values = spec.values.filter(v => v !== value)
+        this.generatePriceStockTable()
+      }
+    },
+    
+    updateSpecName(specId, newName) {
+      const spec = this.specifications.find(s => s.id === specId)
+      if (spec) {
+        spec.name = newName
         this.generatePriceStockTable()
       }
     },
@@ -702,40 +918,54 @@ export default {
       this.batchSinglePrice = ''
     },
     
-    // 构建SKU列表 - 匹配后端 ProductSkuDTO
+    // 计算总库存
+    calculateTotalStock() {
+      if (this.specifications.length === 0) {
+        return parseInt(this.priceStockData[0].stock) || 0
+      }
+      
+      return this.priceStockData.reduce((total, item) => {
+        return total + (parseInt(item.stock) || 0)
+      }, 0)
+    },
+    
+    // 构建SKU列表数据
     buildSkuList() {
       if (this.specifications.length === 0) {
-        // 单规格商品
+        const item = this.priceStockData[0]
         return [{
-          stockQuantity: parseInt(this.priceStockData[0].stock) || 0,
-          salePrice: parseFloat(this.priceStockData[0].singlePrice) || 0,
-          costPrice: this.productData.costPrice || 0,
-          skuStatus: this.priceStockData[0].status === 'on' ? 1 : 0, // 1-上架，0-下架
+          stockQuantity: parseInt(item.stock) || 0,
+          salePrice: parseFloat(item.singlePrice) || 0,
+          costPrice: parseFloat(item.singlePrice) * 0.8 || 0,
+          skuStatus: item.status === 'on' ? 1 : 0,
           skuDetail: JSON.stringify({
             type: 'single',
-            productName: this.productData.productName
+            productName: this.productData.productName,
+            description: '单规格商品'
           })
         }]
       } else {
-        // 多规格商品
-        return this.priceStockData.map(item => {
+        return this.priceStockData.map((item, index) => {
           const specValues = item.values || []
-          const specCombination = this.specifications.map((spec, index) => ({
+          const specCombination = this.specifications.map((spec, specIndex) => ({
             name: spec.name,
-            value: specValues[index] || ''
+            value: specValues[specIndex] || ''
           }))
           
-          const specDescription = specCombination.map(spec => `${spec.name}:${spec.value}`).join(' ')
+          const specDescription = specCombination.map(spec => `${spec.name}:${spec.value}`).join(';')
+          const skuName = `${this.productData.productName} ${specDescription}`
           
           return {
             stockQuantity: parseInt(item.stock) || 0,
             salePrice: parseFloat(item.singlePrice) || 0,
-            costPrice: this.productData.costPrice || 0,
-            skuStatus: item.status === 'on' ? 1 : 0, // 1-上架，0-下架
+            costPrice: parseFloat(item.singlePrice) * 0.8 || 0,
+            skuStatus: item.status === 'on' ? 1 : 0,
             skuDetail: JSON.stringify({
               type: 'multi',
               combination: specCombination,
-              description: specDescription
+              description: specDescription,
+              skuName: skuName,
+              index: index
             })
           }
         })
@@ -744,18 +974,27 @@ export default {
     
     // 验证表单
     validateForm() {
+      console.log('开始表单验证...')
+      
+      // 验证商品标题
       if (!this.productData.productName || this.productData.productName.trim() === '') {
         throw new Error('请输入商品标题')
       }
       
+      if (this.productData.productName.trim().length < 2) {
+        throw new Error('商品标题至少2个字符')
+      }
+
+      // 验证分类
       if (!this.selectedCategory3Id) {
         throw new Error('请选择完整的三级分类')
       }
-      
+
+      // 验证图片
       if (this.productImages.length === 0) {
-        throw new Error('请上传商品图片')
+        throw new Error('请上传至少1张商品图片')
       }
-      
+
       // 验证规格
       for (let i = 0; i < this.specifications.length; i++) {
         const spec = this.specifications[i]
@@ -764,28 +1003,274 @@ export default {
         }
         
         if (spec.values.length === 0) {
-          throw new Error('请为' + spec.name + '添加规格值')
+          throw new Error('请为"' + spec.name + '"添加规格值')
+        }
+        
+        // 验证规格值是否重复
+        const uniqueValues = [...new Set(spec.values)]
+        if (uniqueValues.length !== spec.values.length) {
+          throw new Error('"' + spec.name + '"中存在重复的规格值')
         }
       }
-      
-      // 验证价格库存
+
+      // 验证价格和库存
+      let hasValidItem = false
       for (let i = 0; i < this.priceStockData.length; i++) {
         const item = this.priceStockData[i]
-        if (!item.stock || parseInt(item.stock) <= 0) {
+        const stock = parseInt(item.stock)
+        const price = parseFloat(item.singlePrice)
+        
+        if (!item.stock || isNaN(stock) || stock < 0) {
           throw new Error('请填写有效的库存数量')
         }
         
-        if (!item.singlePrice || parseFloat(item.singlePrice) <= 0) {
+        if (!item.singlePrice || isNaN(price) || price <= 0) {
           throw new Error('请填写有效的价格')
         }
+        
+        if (price > 999999) {
+          throw new Error('价格不能超过999999元')
+        }
+        
+        hasValidItem = true
+      }
+      
+      if (!hasValidItem) {
+        throw new Error('请至少填写一个有效的价格库存项')
+      }
+      
+      // 验证参考价
+      const referencePrice = parseFloat(this.referencePrice)
+      if (isNaN(referencePrice) || referencePrice < 0) {
+        throw new Error('请填写有效的商品参考价')
+      }
+      
+      console.log('表单验证通过')
+    },
+    
+    // 上传商品图片
+    async uploadProductImages(spuId) {
+      try {
+        uni.showLoading({
+          title: '上传图片中...',
+          mask: true
+        })
+
+        const token = uni.getStorageSync('token') || ''
+        
+        console.log('开始上传商品图片:', {
+          spuId,
+          图片数量: this.productImages.length,
+          token: token ? '有token' : '无token'
+        })
+
+        const uploadPromises = this.productImages.map(async (imagePath, index) => {
+          try {
+            console.log(`上传第${index + 1}张图片:`, imagePath)
+            
+            // 使用 uni.uploadFile 直接上传到媒体服务
+            const uploadResult = await new Promise((resolve, reject) => {
+              uni.uploadFile({
+                url: 'http://localhost:8081/api/media/upload',
+                filePath: imagePath,
+                name: 'file',
+                formData: {
+                  relatedType: '5', // 商品类型
+                  relatedId: spuId.toString(),
+                  description: `商品主图${index + 1}`,
+                  stage: 'MAIN',
+                  sequence: index.toString()
+                },
+                header: {
+                  'Authorization': 'Bearer ' + token
+                },
+                success: (res) => {
+                  console.log(`第${index + 1}张图片上传响应:`, res)
+                  resolve(res)
+                },
+                fail: (err) => {
+                  console.error(`第${index + 1}张图片上传失败:`, err)
+                  reject(err)
+                }
+              })
+            })
+
+            // 处理上传结果
+            if (uploadResult.statusCode === 200) {
+              let resultData
+              try {
+                resultData = typeof uploadResult.data === 'string' ? 
+                  JSON.parse(uploadResult.data) : uploadResult.data
+              } catch (e) {
+                console.error('解析响应数据失败:', e)
+                resultData = { success: true, data: uploadResult.data }
+              }
+              
+              console.log(`第${index + 1}张图片上传成功:`, resultData)
+              return resultData
+            } else {
+              console.error(`上传失败，状态码: ${uploadResult.statusCode}`, uploadResult)
+              throw new Error(`上传失败: ${uploadResult.statusCode}`)
+            }
+          } catch (error) {
+            console.error(`第${index + 1}张图片上传失败:`, error)
+            // 返回错误信息，但不阻断其他图片上传
+            return { 
+              success: false, 
+              error: error.message,
+              index: index 
+            }
+          }
+        })
+
+        const results = await Promise.all(uploadPromises)
+        
+        // 统计成功和失败的数量
+        const successResults = results.filter(result => 
+          result && (result.code === 200 || result.success === true || result.success)
+        )
+        const failedResults = results.filter(result => 
+          result && (result.success === false || result.error)
+        )
+
+        console.log('图片上传统计:', {
+          总数量: results.length,
+          成功数量: successResults.length,
+          失败数量: failedResults.length
+        })
+
+        if (successResults.length > 0) {
+          uni.showToast({
+            title: `图片上传完成 (${successResults.length}/${results.length})`,
+            icon: 'success',
+            duration: 2000
+          })
+        }
+
+        if (failedResults.length > 0) {
+          console.warn('部分图片上传失败:', failedResults)
+          // 可以选择是否抛出错误
+          if (successResults.length === 0) {
+            throw new Error('所有图片上传失败')
+          }
+        }
+
+        return {
+          success: true,
+          total: results.length,
+          successCount: successResults.length,
+          failedCount: failedResults.length,
+          failedItems: failedResults
+        }
+
+      } catch (error) {
+        console.error('图片上传过程出错:', error)
+        uni.showToast({
+          title: error.message || '图片上传失败',
+          icon: 'none',
+          duration: 3000
+        })
+        throw error // 重新抛出错误，让调用方处理
+      } finally {
+        uni.hideLoading()
       }
     },
     
-    // 提交商品 - 匹配后端 ProductSpuDTO 结构
+    // 创建SKU
+    async createProductSkus(spuId) {
+      try {
+        const skuList = this.buildSkuList()
+        console.log('创建SKU列表:', skuList)
+        
+        const skuPromises = skuList.map(async (skuData, index) => {
+          try {
+            const skuDto = {
+              spuId: spuId,
+              stockQuantity: skuData.stockQuantity,
+              salePrice: skuData.salePrice,
+              costPrice: skuData.costPrice,
+              skuStatus: skuData.skuStatus,
+              skuDetail: skuData.skuDetail
+            }
+            
+            const result = await addProductSku(skuDto)
+            console.log(`第${index + 1}个SKU创建结果:`, result)
+            return result
+          } catch (error) {
+            console.error(`创建第${index + 1}个SKU失败:`, error)
+            return { success: false, error: error.message, index }
+          }
+        })
+        
+        const results = await Promise.all(skuPromises)
+        const successResults = results.filter(result => 
+          result && (result.code === 200 || result.success === true || result.success)
+        )
+        
+        console.log('SKU创建统计:', {
+          总数量: results.length,
+          成功数量: successResults.length
+        })
+        
+        return {
+          success: successResults.length > 0,
+          createdCount: successResults.length,
+          totalCount: results.length,
+          results: results
+        }
+        
+      } catch (error) {
+        console.error('创建SKU过程出错:', error)
+        throw new Error('SKU创建失败: ' + error.message)
+      }
+    },
+    
+    // 显示提交结果
+    showSubmitResult(result) {
+      const { spuId, uploadResult, skuResult, hasImages, hasSpecs } = result
+      
+      let message = '商品创建成功！\n'
+      message += `商品ID: ${spuId}\n`
+      
+      if (hasImages) {
+        message += `图片: ${uploadResult.successCount}张上传成功\n`
+      }
+      
+      if (hasSpecs) {
+        message += `规格: ${skuResult.createdCount}个SKU创建成功\n`
+      }
+      
+      uni.showModal({
+        title: '提交成功',
+        content: message,
+        showCancel: false,
+        confirmText: '确定',
+        success: (res) => {
+          if (res.confirm) {
+            // 返回上一页
+            setTimeout(() => {
+              uni.navigateBack()
+            }, 500)
+          }
+        }
+      })
+    },
+    
+    // 提交商品
     async submitProduct() {
       if (this.loading) return
       
       try {
+        console.log('开始提交商品，当前数据:', {
+          步骤: this.currentStep,
+          分类ID: this.selectedCategory3Id,
+          商品名称: this.productData.productName,
+          图片数量: this.productImages.length,
+          规格数量: this.specifications.length,
+          价格库存项: this.priceStockData.length
+        })
+        
+        // 验证表单
         this.validateForm()
         
         this.loading = true
@@ -793,49 +1278,76 @@ export default {
           title: '提交中...',
           mask: true
         })
-        
-        // 构建商品数据 - 匹配后端 ProductSpuDTO
-        const submitData = {
-          productName: this.productData.productName,
-          productDetail: this.productData.productDetail,
+
+        // 1. 构建SPU数据
+        const spuData = {
+          productName: this.productData.productName.trim(),
+          productDetail: this.productData.productDetail.trim(),
           categoryId: this.selectedCategory3Id,
-          productStatus: 0, // 默认下架，创建后手动上架
-          specType: this.productData.specType,
+          productStatus: 0, // 默认下架状态
+          specType: this.specifications.length > 0 ? 2 : 0, // 根据是否有规格确定类型
           marketPrice: parseFloat(this.referencePrice) || 0,
           costPrice: this.productData.costPrice || 0,
-          stock: this.productData.stock || 100,
-          skuList: this.buildSkuList()
+          stock: this.calculateTotalStock() // 计算总库存
         }
+
+        console.log('提交SPU数据:', spuData)
         
-        console.log('提交的商品数据:', JSON.stringify(submitData, null, 2))
+        // 2. 创建SPU
+        const spuResponse = await addProductSpu(spuData)
         
-        const response = await createProduct(submitData)
-        
-        console.log('创建商品响应:', response)
-        
-        if (response.code === 200 || response.success) {
-          const productSpuId = response.data || response.data?.productSpuId
+        if (spuResponse.code === 200) {
+          const spuId = spuResponse.data
           
-          console.log('创建商品成功，商品ID:', productSpuId)
+          console.log('SPU创建成功，ID:', spuId)
           
-          // 上传商品图片
-          if (this.productImages.length > 0 && productSpuId) {
-            await this.uploadProductImages(productSpuId)
+          let uploadResult = { success: false, successCount: 0 }
+          
+          // 3. 上传商品图片（如果失败不影响SPU创建）
+          if (this.productImages.length > 0) {
+            try {
+              uploadResult = await this.uploadProductImages(spuId)
+              console.log('图片上传结果:', uploadResult)
+            } catch (uploadError) {
+              console.error('图片上传失败，但SPU已创建:', uploadError)
+              // 记录错误但继续执行
+              uploadResult = {
+                success: false,
+                error: uploadError.message,
+                successCount: 0
+              }
+            }
+          }
+          
+          // 4. 创建SKU（如果有规格）
+          let skuResult = { success: true, createdCount: 0 }
+          if (this.specifications.length > 0) {
+            try {
+              skuResult = await this.createProductSkus(spuId)
+              console.log('SKU创建结果:', skuResult)
+            } catch (skuError) {
+              console.error('SKU创建失败:', skuError)
+              skuResult = {
+                success: false,
+                error: skuError.message,
+                createdCount: 0
+              }
+            }
           }
           
           uni.hideLoading()
-          uni.showToast({
-            title: '商品创建成功！',
-            icon: 'success',
-            duration: 2000
+          
+          // 5. 显示最终结果
+          this.showSubmitResult({
+            spuId,
+            uploadResult,
+            skuResult,
+            hasImages: this.productImages.length > 0,
+            hasSpecs: this.specifications.length > 0
           })
           
-          setTimeout(() => {
-            uni.navigateBack()
-          }, 1500)
-          
         } else {
-          throw new Error(response.message || response.msg || '创建商品失败')
+          throw new Error(spuResponse.message || '创建商品失败')
         }
         
       } catch (error) {
@@ -849,60 +1361,12 @@ export default {
       } finally {
         this.loading = false
       }
-    },
-    
-    // 上传商品图片
-    async uploadProductImages(productSpuId) {
-      try {
-        uni.showLoading({
-          title: '上传图片中...',
-          mask: true
-        })
-        
-        const uploadPromises = this.productImages.map(async (imagePath, index) => {
-          try {
-            const uploadResult = await uni.uploadFile({
-              url: `${this.$baseURL || 'http://localhost:8081'}/api/media/upload`,
-              filePath: imagePath,
-              name: 'file',
-              formData: {
-                relatedType: '5', // 商品类型
-                relatedId: productSpuId.toString(),
-                description: '商品主图',
-                stage: 'MAIN',
-                sequence: index.toString()
-              },
-              header: {
-                'Authorization': 'Bearer ' + (uni.getStorageSync('token') || '')
-              }
-            })
-            
-            const result = typeof uploadResult.data === 'string' ? JSON.parse(uploadResult.data) : uploadResult.data
-            return result
-          } catch (error) {
-            console.error(`第${index + 1}张图片上传失败:`, error)
-            return null
-          }
-        })
-        
-        const results = await Promise.all(uploadPromises)
-        const successResults = results.filter(result => result && (result.code === 200 || result.success))
-        
-        console.log('图片上传完成:', {
-          总数量: results.length,
-          成功数量: successResults.length
-        })
-        
-      } catch (error) {
-        console.error('图片上传过程出错:', error)
-      } finally {
-        uni.hideLoading()
-      }
     }
   },
   
   async onLoad() {
-    await this.loadCategoryTree()
+    // 页面加载时只加载一级分类
+    await this.loadLevel1Categories()
   },
   
   watch: {
@@ -925,87 +1389,102 @@ export default {
   }
 }
 </script>
+
+
 <style scoped>
-/* 样式保持不变 */
 .container {
-  background-color: #f8f9fa;
+  padding: 20rpx;
+  background-color: #f8f8f8;
   min-height: 100vh;
 }
 
 .header {
-  background: white;
-  padding: 30rpx 24rpx 20rpx;
-  border-bottom: 1rpx solid #eee;
+  text-align: center;
+  margin-bottom: 30rpx;
 }
 
 .title {
-  font-size: 36rpx;
-  color: #333;
   display: block;
-  margin-bottom: 8rpx;
-  font-weight: 600;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10rpx;
 }
 
 .subtitle {
-  color: #999;
-  font-size: 26rpx;
   display: block;
+  font-size: 24rpx;
+  color: #666;
 }
 
 .upload-container {
   background: white;
-  min-height: calc(100vh - 160rpx);
+  border-radius: 16rpx;
+  padding: 30rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.1);
 }
 
 .steps {
   display: flex;
-  background: white;
-  padding: 0 24rpx;
-  border-bottom: 1rpx solid #eee;
+  justify-content: space-between;
+  margin-bottom: 40rpx;
+  position: relative;
+}
+
+.steps::before {
+  content: '';
+  position: absolute;
+  top: 40rpx;
+  left: 20%;
+  right: 20%;
+  height: 4rpx;
+  background: #e0e0e0;
+  z-index: 1;
 }
 
 .step {
-  flex: 1;
-  padding: 24rpx 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
-  color: #999;
+  z-index: 2;
+  flex: 1;
 }
 
-.step.active {
-  color: #007AFF;
+.step-number {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: #e0e0e0;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  margin-bottom: 10rpx;
+  transition: all 0.3s;
 }
 
 .step.active .step-number {
   background: #007AFF;
-  color: white;
-}
-
-.step-number {
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
-  background: #f0f0f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24rpx;
-  margin-bottom: 8rpx;
 }
 
 .step-text {
   font-size: 24rpx;
+  color: #999;
+}
+
+.step.active .step-text {
+  color: #007AFF;
+  font-weight: bold;
 }
 
 .step-content {
-  height: calc(100vh - 280rpx);
-  padding: 0 24rpx;
+  max-height: 70vh;
 }
 
 .step-panel {
-  padding: 30rpx 0;
+  padding: 20rpx 0;
 }
 
 .form-group {
@@ -1014,103 +1493,139 @@ export default {
 
 .form-label {
   display: block;
-  margin-bottom: 20rpx;
-  font-weight: 500;
+  font-size: 28rpx;
+  font-weight: bold;
   color: #333;
-  font-size: 30rpx;
-}
-
-.category-selector {
-  gap: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .picker-group {
-  margin-bottom: 24rpx;
+  margin-bottom: 30rpx;
+}
+
+.picker-group:last-child {
+  margin-bottom: 0;
 }
 
 .picker-label {
   display: block;
-  margin-bottom: 12rpx;
-  color: #666;
-  font-size: 28rpx;
+  font-size: 26rpx;
+  color: #333;
+  margin-bottom: 15rpx;
+}
+
+.picker {
+  background: white;
+  border: 2rpx solid #e0e0e0;
+  border-radius: 12rpx;
+  padding: 20rpx;
 }
 
 .picker-text {
-  padding: 24rpx;
-  border: 1rpx solid #e0e0e0;
-  border-radius: 12rpx;
   font-size: 28rpx;
-  background: white;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .picker-text.disabled {
-  background-color: #f8f9fa;
-  color: #c0c4cc;
+  color: #999;
+  background: #f5f5f5;
 }
 
-/* 新增分类状态显示样式 */
+.picker-text.loading {
+  color: #007AFF;
+}
+
+.loading-indicator {
+  color: #007AFF;
+  font-size: 24rpx;
+}
+
 .category-status {
-  margin-top: 20rpx;
-  padding: 20rpx;
-  background-color: #f8f9fa;
+  background: #e8f5e8;
+  border: 2rpx solid #4CAF50;
   border-radius: 12rpx;
-  border: 1rpx solid #e0e0e0;
+  padding: 20rpx;
+  margin-top: 20rpx;
 }
 
 .status-text {
-  color: #666;
   font-size: 26rpx;
+  color: #2E7D32;
+  margin-right: 10rpx;
 }
 
 .category-path {
+  font-size: 26rpx;
+  color: #2E7D32;
+  font-weight: bold;
+}
+
+.error-message {
+  background: #ffebee;
+  border: 2rpx solid #f44336;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-top: 20rpx;
+  text-align: center;
+}
+
+.error-message text:first-child {
+  display: block;
+  font-size: 26rpx;
+  color: #d32f2f;
+  margin-bottom: 10rpx;
+}
+
+.retry-text {
+  font-size: 26rpx;
   color: #007AFF;
-  font-size: 28rpx;
-  font-weight: 500;
-  margin-left: 12rpx;
+  text-decoration: underline;
 }
 
 .upload-area {
-  border: 2rpx dashed #e0e0e0;
-  border-radius: 16rpx;
+  border: 2rpx dashed #007AFF;
+  border-radius: 12rpx;
   padding: 60rpx 30rpx;
   text-align: center;
-  background-color: #fafafa;
+  background: #f0f8ff;
 }
 
 .upload-icon {
-  font-size: 64rpx;
-  color: #999;
   display: block;
+  font-size: 60rpx;
   margin-bottom: 20rpx;
 }
 
 .upload-text {
-  color: #666;
   display: block;
-  margin-bottom: 12rpx;
-  font-size: 30rpx;
+  font-size: 28rpx;
+  color: #007AFF;
+  margin-bottom: 10rpx;
 }
 
 .upload-tip {
-  font-size: 24rpx;
-  color: #999;
   display: block;
+  font-size: 24rpx;
+  color: #666;
 }
 
 .image-preview {
   display: flex;
   flex-wrap: wrap;
   gap: 20rpx;
-  margin-top: 24rpx;
+  margin-top: 20rpx;
 }
 
 .preview-item {
   position: relative;
-  width: 140rpx;
-  height: 140rpx;
+  width: 200rpx;
+  height: 200rpx;
   border-radius: 12rpx;
   overflow: hidden;
-  border: 1rpx solid #e0e0e0;
+  border: 2rpx solid #e0e0e0;
 }
 
 .preview-image {
@@ -1120,34 +1635,42 @@ export default {
 
 .remove {
   position: absolute;
-  top: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
+  top: 8rpx;
+  right: 8rpx;
   width: 40rpx;
   height: 40rpx;
-  border-radius: 0 0 0 12rpx;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24rpx;
+  font-weight: bold;
+}
+
+.description-container {
+  margin-top: 10rpx;
+}
+
+.specifications-container {
+  margin-bottom: 30rpx;
 }
 
 .specification-container {
-  border: 1rpx solid #e0e0e0;
+  border: 2rpx solid #e0e0e0;
   border-radius: 12rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 30rpx;
   overflow: hidden;
 }
 
 .spec-header {
-  padding: 24rpx;
-  background-color: #f8f9fa;
-  border-bottom: 1rpx solid #e0e0e0;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16rpx;
+  justify-content: space-between;
+  background: #f8f9fa;
+  padding: 20rpx;
+  border-bottom: 2rpx solid #e0e0e0;
 }
 
 .spec-name-input {
@@ -1157,102 +1680,74 @@ export default {
 .delete-spec {
   color: #ff4757;
   font-size: 26rpx;
-  white-space: nowrap;
+  margin-left: 20rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 6rpx;
+  background: #fff5f5;
 }
 
 .spec-body {
-  padding: 24rpx;
+  padding: 20rpx;
 }
 
 .spec-values {
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
+  gap: 15rpx;
   margin-bottom: 20rpx;
 }
 
 .spec-value-item {
+  background: #e3f2fd;
+  border: 1rpx solid #2196F3;
+  border-radius: 20rpx;
+  padding: 12rpx 20rpx;
   display: flex;
   align-items: center;
-  background: #f8f9fa;
-  padding: 16rpx 20rpx;
-  border-radius: 8rpx;
-  font-size: 26rpx;
-  border: 1rpx solid #e0e0e0;
+  gap: 10rpx;
+  font-size: 24rpx;
 }
 
 .remove-value {
   color: #ff4757;
-  margin-left: 12rpx;
-  font-size: 24rpx;
+  font-size: 20rpx;
   font-weight: bold;
+  cursor: pointer;
+  width: 24rpx;
+  height: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: white;
 }
 
 .add-value-input {
   display: flex;
-  gap: 16rpx;
-  align-items: flex-start;
-}
-
-.add-value-input .uni-easyinput {
-  flex: 1;
+  gap: 15rpx;
+  align-items: center;
 }
 
 .add-btn {
-  width: 120rpx;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   white-space: nowrap;
-}
-
-.btn {
-  padding: 20rpx 32rpx;
-  border-radius: 12rpx;
-  font-size: 28rpx;
+  background: #2196F3;
+  color: white;
   border: none;
-}
-
-.btn:disabled {
-  background-color: #c0c4cc !important;
-  color: #fff !important;
-}
-
-.btn-primary {
-  background-color: #007AFF;
-  color: white;
-}
-
-.btn-secondary {
-  background-color: #f8f9fa;
-  color: #666;
-  border: 1rpx solid #e0e0e0;
-}
-
-.btn-success {
-  background-color: #34C759;
-  color: white;
-}
-
-.btn-mini {
-  padding: 16rpx 24rpx;
+  border-radius: 8rpx;
+  padding: 15rpx 25rpx;
   font-size: 24rpx;
-  white-space: nowrap;
-  height: auto;
 }
 
 .add-spec-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
-  padding: 24rpx;
-  border: 2rpx dashed #e0e0e0;
+  border: 2rpx dashed #007AFF;
   border-radius: 12rpx;
+  padding: 25rpx;
   color: #007AFF;
-  font-size: 28rpx;
-  background: #fafafa;
+  gap: 10rpx;
+  background: #f0f8ff;
 }
 
 .add-icon {
@@ -1261,27 +1756,33 @@ export default {
 }
 
 .spec-count {
-  color: #999;
+  color: #666;
   font-size: 24rpx;
 }
 
 .warning-text {
-  color: #ff9500;
-  font-size: 24rpx;
-  margin-bottom: 24rpx;
   display: block;
-  line-height: 1.5;
+  font-size: 24rpx;
+  color: #ff6b35;
+  margin-bottom: 20rpx;
+  background: #fff3e0;
+  padding: 15rpx;
+  border-radius: 8rpx;
+  line-height: 1.4;
+}
+
+.price-stock-container {
+  border: 2rpx solid #e0e0e0;
+  border-radius: 12rpx;
+  overflow: hidden;
 }
 
 .table {
-  border: 1rpx solid #e0e0e0;
-  border-radius: 12rpx;
-  overflow: hidden;
-  margin-bottom: 24rpx;
+  width: 100%;
 }
 
 .table-header {
-  background-color: #f8f9fa;
+  background: #f5f5f5;
 }
 
 .table-row {
@@ -1294,59 +1795,81 @@ export default {
 }
 
 .table-header-cell {
-  padding: 20rpx 16rpx;
-  font-weight: 500;
   flex: 1;
-  font-size: 24rpx;
+  padding: 20rpx 15rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #333;
   text-align: center;
-  color: #666;
-}
-
-.table-cell {
-  padding: 20rpx 16rpx;
-  flex: 1;
+  border-right: 1rpx solid #e0e0e0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24rpx;
+}
+
+.table-header-cell:last-child {
+  border-right: none;
+}
+
+.required-field::after {
+  content: '*';
+  color: #ff4757;
+  margin-left: 4rpx;
+}
+
+.table-body .table-row:nth-child(even) {
+  background: #fafafa;
+}
+
+.table-cell {
+  flex: 1;
+  padding: 15rpx 10rpx;
+  font-size: 26rpx;
+  color: #333;
+  text-align: center;
+  border-right: 1rpx solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 80rpx;
 }
 
-.required-field::before {
-  content: "*";
-  color: #ff4757;
-  margin-right: 4rpx;
+.table-cell:last-child {
+  border-right: none;
 }
 
 .status-badge {
+  background: #4CAF50;
+  color: white;
   padding: 8rpx 16rpx;
   border-radius: 20rpx;
-  font-size: 22rpx;
-  background-color: #e8f5e8;
-  color: #34C759;
-  transition: all 0.3s;
+  font-size: 24rpx;
+  min-width: 80rpx;
+  text-align: center;
 }
 
-.status-badge.status-off {
-  background-color: #ffeaea;
-  color: #ff4757;
+.status-off {
+  background: #ff6b35;
 }
 
 .batch-setting {
-  margin-top: 24rpx;
+  background: #f8f9fa;
+  padding: 20rpx;
+  border-top: 1rpx solid #e0e0e0;
 }
 
 .batch-label {
-  display: block;
-  margin-bottom: 16rpx;
-  color: #666;
   font-size: 26rpx;
+  color: #333;
+  margin-bottom: 15rpx;
+  display: block;
+  font-weight: bold;
 }
 
 .batch-inputs {
   display: flex;
-  gap: 16rpx;
-  align-items: flex-start;
+  gap: 15rpx;
+  align-items: center;
 }
 
 .batch-inputs .uni-easyinput {
@@ -1354,42 +1877,45 @@ export default {
 }
 
 .batch-btn {
-  width: 120rpx;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   white-space: nowrap;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 8rpx;
+  padding: 15rpx 25rpx;
+  font-size: 24rpx;
 }
 
 .price-section {
-  background-color: #f8f9fa;
-  padding: 30rpx;
+  background: #f8f9fa;
   border-radius: 12rpx;
-  margin-top: 40rpx;
+  padding: 30rpx;
+  margin-top: 30rpx;
+  border: 2rpx solid #e0e0e0;
 }
 
 .price-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 20rpx;
 }
 
 .price-title {
   font-size: 28rpx;
-  display: block;
-  margin-bottom: 8rpx;
-  font-weight: 500;
+  font-weight: bold;
+  color: #333;
 }
 
 .price-tip {
-  display: block;
-  color: #999;
   font-size: 24rpx;
+  color: #666;
 }
 
 .reference-price {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 20rpx;
 }
 
 .reference-price .uni-easyinput {
@@ -1397,49 +1923,376 @@ export default {
 }
 
 .price-unit {
-  color: #666;
   font-size: 28rpx;
+  color: #333;
+  font-weight: bold;
+  min-width: 60rpx;
 }
 
 .action-buttons {
   display: flex;
   justify-content: space-between;
-  margin-top: 60rpx;
-  gap: 24rpx;
+  margin-top: 50rpx;
+  gap: 20rpx;
 }
 
-.action-buttons .btn {
+.btn {
   flex: 1;
+  border: none;
+  border-radius: 12rpx;
+  padding: 25rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* 隐藏价格库存输入框的清除按钮 */
-.table-cell ::v-deep .uni-easyinput__icon-clear,
-.batch-inputs ::v-deep .uni-easyinput__icon-clear,
-.reference-price ::v-deep .uni-easyinput__icon-clear {
-  display: none !important;
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-/* 规格名称输入框样式 */
-.spec-header ::v-deep .uni-easyinput__content {
-  border: none !important;
-  background: transparent !important;
-  padding: 0 !important;
+.btn-secondary {
+  background: #6c757d;
+  color: white;
 }
 
-.spec-header ::v-deep .uni-easyinput__content-input {
-  font-size: 30rpx !important;
-  font-weight: 500 !important;
-  color: #333 !important;
-  padding: 0 !important;
+.btn-primary {
+  background: #007AFF;
+  color: white;
 }
 
-/* 确保 uni-easyinput 在表格中的样式 */
-.table-cell .uni-easyinput__content {
-  min-height: auto !important;
+.btn-success {
+  background: #4CAF50;
+  color: white;
 }
 
-.table-cell .uni-easyinput__content-input {
-  text-align: center;
-  font-size: 24rpx !important;
+.btn-mini {
+  padding: 15rpx 25rpx;
+  font-size: 24rpx;
+  flex: none;
+}
+
+.btn-mini.add-btn {
+  background: #2196F3;
+  color: white;
+}
+
+.btn-mini.batch-btn {
+  background: #ff9800;
+  color: white;
+}
+
+/* 响应式设计 */
+@media (max-width: 750rpx) {
+  .container {
+    padding: 15rpx;
+  }
+  
+  .upload-container {
+    padding: 20rpx;
+  }
+  
+  .steps {
+    margin-bottom: 30rpx;
+  }
+  
+  .step-number {
+    width: 60rpx;
+    height: 60rpx;
+    font-size: 28rpx;
+  }
+  
+  .step-text {
+    font-size: 22rpx;
+  }
+  
+  .picker-group {
+    margin-bottom: 20rpx;
+  }
+  
+  .upload-area {
+    padding: 40rpx 20rpx;
+  }
+  
+  .preview-item {
+    width: 150rpx;
+    height: 150rpx;
+  }
+  
+  .spec-header {
+    padding: 15rpx;
+  }
+  
+  .spec-body {
+    padding: 15rpx;
+  }
+  
+  .spec-value-item {
+    padding: 8rpx 15rpx;
+    font-size: 22rpx;
+  }
+  
+  .table-header-cell {
+    padding: 15rpx 10rpx;
+    font-size: 24rpx;
+  }
+  
+  .table-cell {
+    padding: 10rpx 5rpx;
+    font-size: 24rpx;
+  }
+  
+  .batch-inputs {
+    flex-direction: column;
+    gap: 10rpx;
+  }
+  
+  .batch-inputs .uni-easyinput {
+    width: 100%;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 15rpx;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+}
+
+/* 动画效果 */
+.preview-item, .specification-container, .category-status {
+  transition: all 0.3s ease;
+}
+
+.preview-item:hover, .specification-container:hover {
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.15);
+  transform: translateY(-2rpx);
+}
+
+.btn {
+  transition: all 0.3s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+/* 滚动条样式 */
+.step-content ::-webkit-scrollbar {
+  width: 6rpx;
+}
+
+.step-content ::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10rpx;
+}
+
+.step-content ::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10rpx;
+}
+
+.step-content ::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 输入框聚焦样式 */
+.uni-easyinput:focus {
+  border-color: #007AFF !important;
+  box-shadow: 0 0 0 2rpx rgba(0, 122, 255, 0.2);
+}
+
+/* 禁用状态样式 */
+.picker-text.disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* 加载动画 */
+@keyframes loading {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-container {
+  animation: loading 1.5s linear infinite;
+}
+
+/* 错误状态样式 */
+.error-message {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-10rpx); }
+  75% { transform: translateX(10rpx); }
+}
+
+/* 成功状态样式 */
+.category-status {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 图片预览悬停效果 */
+.preview-item .remove {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.preview-item:hover .remove {
+  opacity: 1;
+}
+
+/* 表格行悬停效果 */
+.table-body .table-row:hover {
+  background: #f0f8ff;
+}
+
+/* 规格值项悬停效果 */
+.spec-value-item:hover {
+  background: #bbdefb;
+  transform: translateY(-1rpx);
+}
+
+/* 添加按钮悬停效果 */
+.add-spec-btn:hover {
+  background: #e3f2fd;
+  border-color: #2196F3;
+}
+
+/* 批量设置区域样式 */
+.batch-setting {
+  transition: all 0.3s ease;
+}
+
+.batch-setting:hover {
+  background: #e8f5e8;
+}
+
+/* 价格区域强调样式 */
+.price-section {
+  border-left: 4rpx solid #4CAF50;
+}
+
+/* 步骤指示器动画 */
+.step-number {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.step.active .step-number {
+  box-shadow: 0 4rpx 12rpx rgba(0, 122, 255, 0.3);
+}
+
+/* 分类选择器交互反馈 */
+.picker:active {
+  background: #f0f8ff;
+  border-color: #007AFF;
+}
+
+/* 图片上传区域拖拽效果 */
+.upload-area.drag-over {
+  background: #e3f2fd;
+  border-color: #2196F3;
+  border-style: solid;
+}
+
+/* 状态徽章点击反馈 */
+.status-badge:active {
+  transform: scale(0.95);
+}
+
+/* 删除按钮危险色强调 */
+.delete-spec:active {
+  background: #ff4757;
+  color: white;
+}
+
+/* 移动端优化 */
+@media (max-width: 480rpx) {
+  .title {
+    font-size: 32rpx;
+  }
+  
+  .subtitle {
+    font-size: 22rpx;
+  }
+  
+  .form-label {
+    font-size: 26rpx;
+  }
+  
+  .picker-text {
+    font-size: 26rpx;
+  }
+  
+  .upload-text {
+    font-size: 26rpx;
+  }
+  
+  .spec-value-item {
+    font-size: 20rpx;
+    padding: 6rpx 12rpx;
+  }
+  
+  .table-header-cell {
+    font-size: 22rpx;
+    padding: 12rpx 8rpx;
+  }
+  
+  .table-cell {
+    font-size: 22rpx;
+    padding: 8rpx 4rpx;
+  }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  .container {
+    background: #000;
+    color: #fff;
+  }
+  
+  .upload-container {
+    background: #111;
+    border: 2rpx solid #fff;
+  }
+  
+  .step-number {
+    border: 2rpx solid #fff;
+  }
+  
+  .picker {
+    border: 2rpx solid #fff;
+    background: #222;
+  }
+  
+  .picker-text {
+    color: #fff;
+  }
+}
+
+/* 减少动画模式 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>
