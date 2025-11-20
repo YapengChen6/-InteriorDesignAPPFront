@@ -16,7 +16,7 @@
         <view class="menu-item-box">
           <view class="menu-icon">📋</view>
           <view class="menu-content">
-            <view class="menu-text">发布订单</view>
+            <view class="menu-text">发布需求</view>
             <view class="menu-desc">创建服务需求，寻找合适的服务商</view>
           </view>
           <view class="arrow">›</view>
