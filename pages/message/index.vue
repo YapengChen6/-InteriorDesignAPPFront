@@ -164,6 +164,13 @@
           >
             标记已读
           </button>
+          <button
+            v-if="(selectedMessage.messageType === 1 || selectedMessage.messageType === 2) && selectedMessage.conversationId"
+            class="popup-btn confirm-btn"
+            @click="goToChatFromMessage(selectedMessage)"
+          >
+            前往聊天
+          </button>
         </view>
       </view>
     </uni-popup>
@@ -331,7 +338,9 @@ export default {
             sender,
             messageType: item.messageType,
             rawContent: item.content,
-            fromUserId
+            fromUserId,
+            conversationId: item.conversationId,
+            senderId: item.senderId
           }
         })
         this.hasMore = false
@@ -537,7 +546,7 @@ export default {
       }
     },
     goToChatList() {
-      uni.navigateTo({ url: '/pages/chat/chatList' })
+      uni.navigateTo({ url: '/pages/chat/chatMain' })
     }
   },
   async onLoad() {

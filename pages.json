@@ -76,6 +76,11 @@
       "navigationBarTitleText": "消息"
     }
   },{
+    "path": "pages/chat/chatMain",
+    "style": {
+      "navigationBarTitleText": "聊天"
+    }
+  },{
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
@@ -211,20 +216,7 @@
     }
   },
   {
-    "path": "pages/chat/chatList",
-    "style": {
-      "navigationBarTitleText": "聊天列表"
-    }
-  },
-  {
-    "path": "pages/chat/chatDetail",
-    "style": {
-      "navigationBarTitleText": "聊天"
-    }
-  },
-
-  {
-    "path": "pages/post/post",
+    "path": "pages/post/order",
     "style": {
       "navigationBarTitleText": "发布总订单页面"
     }
