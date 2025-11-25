@@ -312,7 +312,7 @@ export default {
                 fromUserId = parsed.fromUserId || null
                 const fromName = parsed.fromNickName || (parsed.fromUserId ? `用户${parsed.fromUserId}` : '对方')
                 title = `${fromName} 请求和你聊天`
-                content = '对方向你发起了聊天请求，点击“同意聊天”开始会话。'
+                content = '对方向你发起了聊天请求，点击"同意聊天"开始会话。'
                 sender = fromName
               }
             } catch (e) {
@@ -561,7 +561,6 @@ export default {
   }
 }
 </script>
-
 
 <style scoped>
 .message-center {

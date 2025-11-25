@@ -7,7 +7,9 @@
         <text>帖子类型</text>
       </view>
       <view class="type-selector">
+        <!-- 设计师角色显示：作品集 -->
         <view 
+          v-if="showType('works')"
           class="type-item" 
           :class="{ active: threadType === 1 }"
           @click="handleTypeChange(1)">
@@ -17,7 +19,10 @@
           <view class="type-name">作品集</view>
           <view class="type-desc">展示个人作品</view>
         </view>
+        
+        <!-- 监工角色显示：案例集 -->
         <view 
+          v-if="showType('cases')"
           class="type-item" 
           :class="{ active: threadType === 2 }"
           @click="handleTypeChange(2)">
@@ -27,7 +32,10 @@
           <view class="type-name">案例集</view>
           <view class="type-desc">项目案例分析</view>
         </view>
+        
+        <!-- 所有角色都显示：普通帖 -->
         <view 
+          v-if="showType('normal')"
           class="type-item" 
           :class="{ active: threadType === 3 }"
           @click="handleTypeChange(3)">
@@ -37,7 +45,10 @@
           <view class="type-name">普通帖</view>
           <view class="type-desc">日常交流分享</view>
         </view>
+        
+        <!-- 材料商角色显示：材料展示 -->
         <view 
+          v-if="showType('materials')"
           class="type-item" 
           :class="{ active: threadType === 4 }"
           @click="handleTypeChange(4)">
@@ -163,10 +174,50 @@ export default {
       editingPostId: null, // 编辑时的帖子ID
       isSubmitting: false, // 防止重复提交
       uploadProgress: 0, // 上传进度
-      roleType: null, // 用户角色类型（仅用于前端逻辑，不发送到后端）
+      roleType: null, // 用户角色类型字符串：'user', 'designer', 'supervisor', 'material_supplier'
+      
+      // 角色权限配置
+      rolePermissions: {
+        user: {
+          name: '普通用户',
+          allowedTypes: ['normal'] // 只能发布普通帖
+        },
+        designer: {
+          name: '设计师',
+          allowedTypes: ['normal', 'works'] // 可以发布普通帖和作品集
+        },
+        supervisor: {
+          name: '监工',
+          allowedTypes: ['normal', 'cases'] // 可以发布普通帖和案例集
+        },
+        material_supplier: {
+          name: '材料商',
+          allowedTypes: ['normal', 'materials'] // 可以发布普通帖和材料展示
+        }
+      },
       
       // 富文本编辑器相关
       editor: null
+    }
+  },
+  
+  computed: {
+    // 计算当前角色的默认帖子类型
+    defaultThreadType() {
+      const role = this.roleType || 'user'
+      const permissions = this.rolePermissions[role]
+      
+      if (permissions.allowedTypes.includes('normal')) {
+        return 3 // 普通帖
+      } else if (permissions.allowedTypes.includes('works')) {
+        return 1 // 作品集
+      } else if (permissions.allowedTypes.includes('cases')) {
+        return 2 // 案例集
+      } else if (permissions.allowedTypes.includes('materials')) {
+        return 4 // 材料展示
+      }
+      
+      return 3 // 默认普通帖
     }
   },
   
@@ -193,29 +244,36 @@ export default {
         const response = await getUserProfile()
         if (response.code === 200 && response.data) {
           const userData = response.data
-          // 转换角色类型为数字（仅用于前端逻辑）
-          this.roleType = this.convertRoleType(userData.role_type)
+          // 直接使用后端返回的角色类型字符串
+          this.roleType = userData.role_type || userData.currentRoleType || 'user'
           console.log('用户角色信息:', {
-            originalRole: userData.role_type,
-            convertedRoleType: this.roleType
+            roleType: this.roleType,
+            roleName: this.rolePermissions[this.roleType]?.name || '未知角色'
           })
+          
+          // 根据角色设置默认帖子类型
+          this.threadType = this.defaultThreadType
+          console.log('设置默认帖子类型:', this.threadType)
         }
       } catch (error) {
         console.error('获取用户角色信息失败:', error)
         // 如果获取失败，默认设为普通用户
-        this.roleType = 1
+        this.roleType = 'user'
+        this.threadType = this.defaultThreadType
       }
     },
     
-    // 转换角色类型为数字
-    convertRoleType(roleString) {
-      const roleMap = {
-        'user': 1,
-        'designer': 2,
-        'supervisor': 3,
-        'material_supplier': 4
+    // 判断是否显示某个帖子类型
+    showType(type) {
+      const role = this.roleType || 'user'
+      const permissions = this.rolePermissions[role]
+      
+      if (!permissions) {
+        // 如果没有权限配置，默认只显示普通帖
+        return type === 'normal'
       }
-      return roleMap[roleString] || 1 // 默认为普通用户
+      
+      return permissions.allowedTypes.includes(type)
     },
     
     // 处理类型切换

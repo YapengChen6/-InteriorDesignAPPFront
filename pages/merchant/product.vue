@@ -32,10 +32,11 @@
           @change="onCategoryChange" 
           :value="categoryIndex" 
           :range="categoryOptions"
+          range-key="name"
           class="filter-picker"
         >
           <view class="filter-box">
-            <text class="filter-text">{{ categoryOptions[categoryIndex] }}</text>
+            <text class="filter-text">{{ categoryOptions[categoryIndex] ? categoryOptions[categoryIndex].name : '全部' }}</text>
             <uni-icons type="arrowdown" size="14" color="#666"></uni-icons>
           </view>
         </picker>
@@ -92,7 +93,7 @@
           <!-- 商品信息 -->
           <view class="product-info">
             <text class="product-name">{{ product.productName }}</text>
-            <text class="product-category">{{ product.category }}</text>
+            <text class="product-category">{{ product.categoryName || product.category }}</text>
             <text class="product-detail">{{ product.productDetail }}</text>
             <view class="price-section">
               <text class="market-price">￥{{ formatPrice(product.marketPrice) }}</text>
@@ -148,6 +149,8 @@
 
 <script>
 import productApi from '@/api/productSpu.js';
+// 导入分类API
+import { getLevel1Categories, getLevel2CategoriesByLevel1, getLevel3CategoriesByLevel2 } from '@/api/product.js';
 
 export default {
   data() {
@@ -155,7 +158,8 @@ export default {
       searchQuery: '',
       categoryIndex: 0,
       statusIndex: 0,
-      categoryOptions: ['全部', '建材', '家具', '灯具', '厨卫', '软装', '饰品', '家电', '全屋定制', '其他'],
+      // 修改为动态获取的分类选项
+      categoryOptions: [{ id: '', name: '全部' }], // 初始包含"全部"选项
       statusOptions: ['全部', '上架', '下架'],
       products: [],
       loading: false,
@@ -167,7 +171,11 @@ export default {
         total: 0
       },
       searchTimer: null,
-      actionLoading: false
+      actionLoading: false,
+      
+      // 分类加载状态
+      loadingCategories: false,
+      categoryError: ''
     }
   },
   
@@ -181,16 +189,20 @@ export default {
         filtered = filtered.filter(product => 
           product.productName.toLowerCase().includes(query) || 
           (product.category && product.category.toLowerCase().includes(query)) ||
+          (product.categoryName && product.categoryName.toLowerCase().includes(query)) ||
           (product.productDetail && product.productDetail.toLowerCase().includes(query))
         );
       }
       
       // 类别过滤
       if (this.categoryIndex > 0) {
-        const category = this.categoryOptions[this.categoryIndex];
-        filtered = filtered.filter(product => 
-          product.category === category
-        );
+        const selectedCategory = this.categoryOptions[this.categoryIndex];
+        if (selectedCategory && selectedCategory.id) {
+          filtered = filtered.filter(product => 
+            product.categoryId === selectedCategory.id || 
+            product.category === selectedCategory.name
+          );
+        }
       }
       
       // 状态过滤 ('0':上架, '2':下架)
@@ -254,7 +266,108 @@ export default {
       });
     },
 
-    // 加载商品列表 - 使用新的接口
+    // 加载分类数据 - 新增方法
+    async loadCategories() {
+      try {
+        this.loadingCategories = true;
+        this.categoryError = '';
+        
+        console.log('开始加载三级分类数据...');
+        
+        // 1. 加载一级分类
+        const level1Response = await getLevel1Categories();
+        if (level1Response.code !== 200) {
+          throw new Error('加载一级分类失败');
+        }
+        
+        const level1Categories = level1Response.data || [];
+        console.log('一级分类加载成功:', level1Categories.length);
+        
+        // 2. 遍历一级分类，获取所有二级分类
+        let allLevel3Categories = [];
+        
+        for (const level1Cat of level1Categories) {
+          try {
+            // 获取二级分类
+            const level2Response = await getLevel2CategoriesByLevel1(level1Cat.id);
+            if (level2Response.code === 200 && level2Response.data) {
+              const level2Categories = level2Response.data;
+              
+              // 遍历二级分类，获取三级分类
+              for (const level2Cat of level2Categories) {
+                try {
+                  const level3Response = await getLevel3CategoriesByLevel2(level2Cat.id);
+                  if (level3Response.code === 200 && level3Response.data) {
+                    const level3Categories = level3Response.data;
+                    // 将三级分类添加到总列表
+                    allLevel3Categories = allLevel3Categories.concat(level3Categories);
+                  }
+                } catch (error) {
+                  console.warn(`获取三级分类失败 (二级分类ID: ${level2Cat.id}):`, error);
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(`获取二级分类失败 (一级分类ID: ${level1Cat.id}):`, error);
+          }
+        }
+        
+        console.log('所有三级分类:', allLevel3Categories);
+        
+        // 3. 去重并格式化分类选项
+        const uniqueCategories = this.removeDuplicateCategories(allLevel3Categories);
+        
+        // 4. 更新分类选项（保留"全部"选项）
+        this.categoryOptions = [
+          { id: '', name: '全部' },
+          ...uniqueCategories
+        ];
+        
+        console.log('分类选项更新完成:', this.categoryOptions);
+        
+      } catch (error) {
+        console.error('加载分类数据失败:', error);
+        this.categoryError = error.message || '分类加载失败';
+        
+        // 使用默认分类作为备选
+        this.categoryOptions = [
+          { id: '', name: '全部' },
+          { id: '1', name: '建材' },
+          { id: '2', name: '家具' },
+          { id: '3', name: '灯具' },
+          { id: '4', name: '厨卫' },
+          { id: '5', name: '软装' },
+          { id: '6', name: '饰品' },
+          { id: '7', name: '家电' },
+          { id: '8', name: '全屋定制' },
+          { id: '9', name: '其他' }
+        ];
+        
+        uni.showToast({
+          title: '分类加载失败，使用默认分类',
+          icon: 'none',
+          duration: 2000
+        });
+      } finally {
+        this.loadingCategories = false;
+      }
+    },
+
+    // 去重分类 - 新增方法
+    removeDuplicateCategories(categories) {
+      const seen = new Set();
+      return categories.filter(category => {
+        // 使用ID和名称组合作为唯一标识
+        const identifier = `${category.id}-${category.name}`;
+        if (seen.has(identifier)) {
+          return false;
+        }
+        seen.add(identifier);
+        return true;
+      });
+    },
+
+    // 加载商品列表
     async loadProducts() {
       if (this.loading && this.pageParams.pageNum > 1) {
         return;
@@ -278,7 +391,10 @@ export default {
         
         // 添加分类条件
         if (this.categoryIndex > 0) {
-          requestParams.category = this.categoryOptions[this.categoryIndex];
+          const selectedCategory = this.categoryOptions[this.categoryIndex];
+          if (selectedCategory && selectedCategory.id) {
+            requestParams.categoryId = selectedCategory.id;
+          }
         }
         
         // 添加状态条件
@@ -346,6 +462,8 @@ export default {
         id: product.productSpuId,
         productName: product.productName,
         category: product.category,
+        categoryName: product.categoryName, // 新增分类名称字段
+        categoryId: product.categoryId, // 新增分类ID字段
         productDetail: product.productDetail,
         marketPrice: product.marketPrice,
         costPrice: product.costPrice,
@@ -365,7 +483,6 @@ export default {
     
     onImageError(product) {
       console.log('🖼️ 图片加载失败，使用默认图片');
-      // 这里可以设置一个默认图片标记，但实际图片URL已经在getProductImage中处理
     },
     
     handleSearch() {
@@ -603,8 +720,10 @@ export default {
     }
   },
   
-  onLoad() {
+  async onLoad() {
     console.log('🚀 商品管理页面加载');
+    // 先加载分类数据，然后加载商品数据
+    await this.loadCategories();
     this.loadProducts();
   },
   
@@ -627,6 +746,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+/* 样式保持不变，与之前相同 */
 .product-management {
   padding: 30rpx;
   background-color: #f5f7fa;
