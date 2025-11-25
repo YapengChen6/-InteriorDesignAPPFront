@@ -391,8 +391,17 @@ export default {
     
     formatTime(date) {
       if (!date) return ''
+      // 字符串先按日期字符串解析
       if (typeof date === 'string') {
         date = this.parseDate(date)
+      }
+      // 数字（时间戳）或其它类型，统一尝试用 Date 包一层
+      if (!(date instanceof Date)) {
+        try {
+          date = new Date(date)
+        } catch (e) {
+          return ''
+        }
       }
       const now = new Date()
       const diff = now - date
@@ -934,7 +943,8 @@ export default {
     },
     
     connectWebSocket() {
-      const wsUrl = `ws://192.168.101.153:8081/ws/chat?userId=${this.currentUserId}`
+      // 本地联调：直接连本机后端 8081 端口的 WebSocket
+      const wsUrl = `ws://localhost:8081/ws/chat?userId=${this.currentUserId}`
       console.log('🔌 WebSocket 连接地址:', wsUrl)
       this.ws = new WebSocket(wsUrl)
 
