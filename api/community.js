@@ -107,6 +107,7 @@ export function getThreadTypes() {
   })
 }
 
+
 export default {
   getPostList,
   getPostDetail,

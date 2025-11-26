@@ -79,6 +79,26 @@
           maxlength="100"
         />
       </view>
+
+      <!-- 封面图上传 -->
+      <view class="form-group">
+        <view class="form-label">封面图</view>
+        <view class="cover-upload" @click="handleCoverUpload">
+          <view class="upload-icon">
+            <uni-icons type="image" size="40" color="#95a5a6"></uni-icons>
+          </view>
+          <view class="upload-text">点击上传封面图</view>
+          <view class="upload-tip">建议尺寸 750x400 像素</view>
+        </view>
+        
+        <!-- 封面预览 -->
+        <view class="cover-preview" v-if="coverUrl && coverUrl !== defaultCoverUrl">
+          <image :src="coverUrl" class="cover-image" mode="aspectFill" @click="previewCover"></image>
+          <view class="cover-remove" @click="removeCover">
+            <uni-icons type="close" size="16" color="#fff"></uni-icons>
+          </view>
+        </view>
+      </view>
       
       <view class="form-group">
         <view class="form-label">插入图片或视频</view>
@@ -157,7 +177,7 @@
 
 <script>
 import { createPost, updatePost, getPostDetail } from '@/api/community'
-import { uploadImage, uploadVideo } from '@/api/join.js' // 导入图片和视频上传接口
+import { uploadImage, uploadVideo } from '@/api/join.js'
 import { getUserProfile } from '@/api/users.js'
 
 export default {
@@ -167,6 +187,7 @@ export default {
       threadType: 3, // 帖子类型：1-作品集, 2-案例集, 3-普通帖, 4-材料展示
       title: '',
       content: '',
+      coverUrl: '', // 封面图URL - 必填字段
       categoryId: null, // 分类ID
       status: 1, // 帖子状态：0-草稿，1-发布
       previewMediaFiles: [], // 预览媒体文件（临时路径）
@@ -197,7 +218,17 @@ export default {
       },
       
       // 富文本编辑器相关
-      editor: null
+      editor: null,
+      
+      // 默认封面图
+      defaultCoverUrl: '/static/images/default-cover.jpg',
+      
+      // 封面图临时路径和上传状态
+      coverTempFilePath: '',
+      isCoverUploading: false,
+      
+      // 新增：封面图在媒体资源中的信息
+      coverMediaInfo: null
     }
   },
   
@@ -224,6 +255,9 @@ export default {
   onLoad(options) {
     // 初始化时获取用户信息
     this.getUserRoleInfo()
+    
+    // 设置默认封面
+    this.coverUrl = this.defaultCoverUrl
     
     // 如果是编辑模式，从参数获取帖子ID并加载数据
     if (options.postId) {
@@ -281,6 +315,50 @@ export default {
       this.threadType = type
     },
     
+    // 处理封面图上传
+    handleCoverUpload() {
+      uni.chooseImage({
+        count: 1,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera'],
+        success: (res) => {
+          const tempFilePath = res.tempFilePaths[0]
+          // 保存临时路径用于后续上传
+          this.coverTempFilePath = tempFilePath
+          // 预览用临时路径
+          this.coverUrl = tempFilePath
+          console.log('封面图选择成功:', tempFilePath)
+        },
+        fail: (error) => {
+          console.error('选择封面图失败:', error)
+        }
+      })
+    },
+    
+    // 预览封面图
+    previewCover() {
+      if (this.coverUrl) {
+        uni.previewImage({
+          urls: [this.coverUrl]
+        })
+      }
+    },
+    
+    // 移除封面图
+    removeCover() {
+      uni.showModal({
+        title: '提示',
+        content: '确定要移除封面图吗？',
+        success: (res) => {
+          if (res.confirm) {
+            this.coverUrl = this.defaultCoverUrl
+            this.coverTempFilePath = ''
+            this.coverMediaInfo = null
+          }
+        }
+      })
+    },
+    
     // 加载帖子数据（编辑模式）
     async loadPostData(postId) {
       try {
@@ -297,6 +375,7 @@ export default {
         this.threadType = postData.threadType
         this.categoryId = postData.categoryId
         this.status = postData.status
+        this.coverUrl = postData.coverUrl || this.defaultCoverUrl
         
         // 处理媒体文件（如果有的话，用于前端展示）
         if (postData.mediaUrls && postData.mediaUrls.length > 0) {
@@ -457,6 +536,45 @@ export default {
       })
     },
     
+    // 上传封面图片
+    async uploadCoverImage(postId) {
+      if (!this.coverTempFilePath || this.coverTempFilePath.startsWith('http')) {
+        console.log('无需上传封面图，使用默认封面或已有封面')
+        return this.coverUrl
+      }
+      
+      this.isCoverUploading = true
+      
+      try {
+        const response = await uploadImage(
+          this.coverTempFilePath,
+          3, // relatedType: 固定为3（帖子类型）
+          Number(postId), // relatedId: 帖子ID
+          '帖子封面图', // description
+          'post', // stage
+          0 // sequence: 封面图序号为0
+        )
+        
+        if (response.code === 200) {
+          const coverUrl = response.data.fileUrl
+          this.coverMediaInfo = {
+            fileUrl: coverUrl,
+            mediaId: response.data.mediaId,
+            fileName: response.data.fileName
+          }
+          console.log('封面图上传成功:', coverUrl)
+          return coverUrl
+        } else {
+          throw new Error(response.msg || '封面图上传失败')
+        }
+      } catch (error) {
+        console.error('封面图上传失败:', error)
+        throw error
+      } finally {
+        this.isCoverUploading = false
+      }
+    },
+    
     // 批量上传媒体文件
     async uploadAllMediaFiles(postId) {
       const pendingMedia = this.previewMediaFiles.filter(media => media.uploadStatus === 'pending')
@@ -483,7 +601,8 @@ export default {
               media.tempFilePath, 
               media.type, 
               media.fileInfo, 
-              postId
+              postId,
+              i + 1 // sequence从1开始（封面图是0）
             )
             
             if (result.code === 200) {
@@ -519,18 +638,17 @@ export default {
     },
     
     // 上传单个媒体文件
-    async uploadSingleMediaFile(filePath, fileType, fileInfo, postId) {
+    async uploadSingleMediaFile(filePath, fileType, fileInfo, postId, sequence = 1) {
       try {
         if (fileInfo.size > 50 * 1024 * 1024) {
           throw new Error('文件大小不能超过50MB')
         }
         
         // 统一的参数
-        const relatedType = 3 // 固定为3，根据你的要求
+        const relatedType = 3 // 固定为3，帖子类型
         const relatedId = postId ? Number(postId) : 0 // 使用传入的帖子ID
         const description = `帖子${fileType === 'image' ? '图片' : '视频'}`
         const stage = 'post'
-        const sequence = this.uploadedMediaFiles.length + 1
         
         console.log('📤 上传文件参数:', {
           filePath,
@@ -574,12 +692,14 @@ export default {
       }
     },
     
-    // 构建帖子数据（移除roleType字段）
+    // 构建帖子数据
     buildPostData() {
       const baseData = {
         title: this.title.trim(),
+        coverUrl: this.defaultCoverUrl, // 先使用默认封面，后续上传后再更新
         content: this.content.trim(),
-        threadType: this.threadType
+        threadType: this.threadType,
+        status: this.status
       }
       
       // 添加可选字段
@@ -587,11 +707,7 @@ export default {
         baseData.categoryId = this.categoryId
       }
       
-      if (this.status !== undefined) {
-        baseData.status = this.status
-      }
-      
-      console.log('📦 构建的帖子数据:', baseData)
+      console.log('📦 帖子数据:', baseData)
       return baseData
     },
     
@@ -608,6 +724,15 @@ export default {
       if (this.title.trim().length < 2) {
         uni.showToast({
           title: '标题至少需要2个字符',
+          icon: 'none'
+        })
+        return false
+      }
+      
+      // 检查必填字段coverUrl
+      if (!this.coverUrl || this.coverUrl === this.defaultCoverUrl) {
+        uni.showToast({
+          title: '请上传封面图',
           icon: 'none'
         })
         return false
@@ -635,32 +760,67 @@ export default {
       this.isSubmitting = true
       
       try {
-        let postId = this.editingPostId
-        
-        // 第一步：创建帖子（发布状态）
+        // 第一步：创建帖子（使用默认封面）
         const postData = this.buildPostData()
         postData.status = 1 // 发布状态
         
+        console.log('🚀 发送创建帖子请求数据:', postData)
+        
         let result
+        let postId
+        
         if (this.editingPostId) {
-          // 如果是编辑模式，使用updatePost
+          // 编辑模式
           result = await updatePost(this.editingPostId, postData)
+          postId = this.editingPostId
         } else {
-          // 如果是新建模式，使用createPost
+          // 新建模式
           result = await createPost(postData)
           console.log('📝 创建帖子返回:', result)
           if (result.code === 200 && result.data) {
-            // 提取帖子ID，注意：result.data可能是字符串 "5"
-            postId = String(result.data) // 确保是字符串类型
-            this.editingPostId = postId // 更新编辑帖子ID
+            postId = String(result.data)
+            this.editingPostId = postId
             console.log('✅ 获取到帖子ID:', postId)
           } else {
             throw new Error('创建帖子失败: ' + (result.message || '未知错误'))
           }
         }
         
-        // 第二步：如果有预览文件，使用帖子ID上传文件
-        if (this.previewMediaFiles.length > 0 && postId) {
+        // 第二步：上传封面图（如果有新选择的封面图）
+        let finalCoverUrl = this.defaultCoverUrl
+        if (this.coverTempFilePath && !this.coverTempFilePath.startsWith('http')) {
+          uni.showLoading({
+            title: '上传封面图中...'
+          })
+          try {
+            finalCoverUrl = await this.uploadCoverImage(postId)
+            console.log('✅ 封面图上传成功，URL:', finalCoverUrl)
+          } catch (error) {
+            console.error('封面图上传失败，使用默认封面:', error)
+            // 封面图上传失败，继续使用默认封面
+            finalCoverUrl = this.defaultCoverUrl
+          } finally {
+            uni.hideLoading()
+          }
+        } else if (this.coverUrl && this.coverUrl !== this.defaultCoverUrl) {
+          // 如果封面图已经是网络URL（编辑模式），直接使用
+          finalCoverUrl = this.coverUrl
+        }
+        
+        // 第三步：更新帖子，设置最终的封面图URL
+        if (finalCoverUrl !== this.defaultCoverUrl) {
+          console.log('🔄 更新帖子封面图:', finalCoverUrl)
+          const updateResult = await updatePost(postId, {
+            coverUrl: finalCoverUrl
+          })
+          
+          if (updateResult.code !== 200) {
+            console.warn('更新帖子封面图失败，但帖子已发布')
+          }
+        }
+        
+        // 第四步：上传其他媒体文件
+        if (this.previewMediaFiles.length > 0) {
           uni.showLoading({
             title: '上传文件中...'
           })
@@ -675,6 +835,7 @@ export default {
         
         // 清空预览文件
         this.previewMediaFiles = []
+        this.coverTempFilePath = ''
         
         // 发布成功后返回上一页
         setTimeout(() => {
@@ -684,7 +845,7 @@ export default {
       } catch (error) {
         console.error('发布帖子失败:', error)
         uni.showToast({
-          title: '发布帖子失败: ' + error.message,
+          title: '发布帖子失败: ' + (error.message || '未知错误'),
           icon: 'none'
         })
       } finally {
@@ -801,6 +962,51 @@ export default {
   bottom: 10px;
   font-size: 12px;
   color: #95a5a6;
+}
+
+/* 封面图上传样式 */
+.cover-upload {
+  border: 2px dashed #e1e8ed;
+  border-radius: 8px;
+  padding: 30px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-top: 10px;
+}
+
+.cover-upload:active {
+  border-color: #3498db;
+  background-color: rgba(52, 152, 219, 0.03);
+}
+
+.cover-preview {
+  position: relative;
+  width: 200px;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 15px;
+  border: 1px solid #e1e8ed;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+}
+
+.cover-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .media-upload {
@@ -995,6 +1201,11 @@ export default {
   
   .editor {
     min-height: 250px;
+  }
+  
+  .cover-preview {
+    width: 150px;
+    height: 90px;
   }
 }
 </style>
