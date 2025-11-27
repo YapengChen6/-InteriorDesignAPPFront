@@ -1,26 +1,24 @@
 <template>	
 	<view class="login-container">
 		<view class="login-card">
-			<view class="login-title">欢迎登录入住</view>
+			<view class="login-title">手机号登录</view>
 			
 			<view class="login-form">
 				<!-- 手机号输入 -->
 				<view class="form-group">
 					<text class="form-label">手机号</text>
-					<view class="input-wrapper" :class="{ 'focused': phoneFocused, 'error': phoneError }">
-						<uni-easyinput
-							ref="phoneInput"
-							v-model="form.phoneNumber"
-							type="number"
-							placeholder="请输入11位手机号"
-							maxlength="11"
-							:inputBorder="false"
-							:styles="inputStyles"
-							@focus="handlePhoneFocus"
-							@blur="handlePhoneBlur"
-							@input="clearPhoneError"
-						/>
-					</view>
+					<uni-easyinput
+						ref="phoneInput"
+						v-model="form.phoneNumber"
+						type="number"
+						placeholder="请输入11位手机号"
+						maxlength="11"
+						:inputBorder="false"
+						:styles="inputStyles"
+						:class="{ 'error': phoneError }"
+						@blur="validatePhone"
+						@input="clearPhoneError"
+					/>
 					<view v-if="phoneError" class="error-message">{{ phoneError }}</view>
 				</view>
 
@@ -28,21 +26,18 @@
 				<view class="form-group">
 					<text class="form-label">验证码</text>
 					<view class="code-input-group">
-						<view class="input-wrapper" :class="{ 'focused': codeFocused, 'error': codeError }">
-							<uni-easyinput
-								ref="codeInput"
-								v-model="form.verificationCode"
-								type="number"
-								placeholder="请输入6位验证码"
-								maxlength="6"
-								:inputBorder="false"
-								:styles="inputStyles"
-								@focus="handleCodeFocus"
-								@blur="handleCodeBlur"
-								@input="clearCodeError"
-								class="code-input"
-							/>
-						</view>
+						<uni-easyinput
+							ref="codeInput"
+							v-model="form.verificationCode"
+							type="number"
+							placeholder="请输入6位验证码"
+							maxlength="6"
+							:inputBorder="false"
+							:styles="inputStyles"
+							:class="{ 'error': codeError }"
+							@input="clearCodeError"
+							class="code-input"
+						/>
 						<button
 							@click="getVerificationCode"
 							class="code-btn"
@@ -104,22 +99,22 @@ export default {
       countdown: 0,
       phoneError: '',
       codeError: '',
-      agreementError: '',
+      agreementError: '', // 添加协议错误提示
       isGettingCode: false,
       isLogging: false,
-      isAgreementChecked: false,
+      isAgreementChecked: false, // 添加协议勾选状态
       timer: null,
+      // 验证码有效期（秒）
       codeExpireTime: 120,
+      // 验证码发送时间戳
       codeSentTime: null,
-      phoneFocused: false,
-      codeFocused: false,
       inputStyles: {
         color: '#333',
-        borderColor: 'transparent', // 设置为透明，由外层容器控制边框
-        borderWidth: '0',
+        borderColor: '#007aff',
+        borderWidth: '2rpx',
         borderStyle: 'solid',
         borderRadius: '16rpx',
-        backgroundColor: 'transparent', // 设置为透明
+        backgroundColor: '#f8f9fa',
         padding: '24rpx 32rpx'
       }
     }
@@ -131,6 +126,7 @@ export default {
       return phoneRegex.test(this.form.phoneNumber)
     },
 
+    // 计算验证码是否已过期
     isCodeExpired() {
       if (!this.codeSentTime) return false
       const currentTime = Date.now()
@@ -140,26 +136,6 @@ export default {
   },
 
   methods: {
-    // 手机号输入框焦点事件
-    handlePhoneFocus() {
-      this.phoneFocused = true
-    },
-
-    handlePhoneBlur() {
-      this.phoneFocused = false
-      this.validatePhone()
-    },
-
-    // 验证码输入框焦点事件
-    handleCodeFocus() {
-      this.codeFocused = true
-    },
-
-    handleCodeBlur() {
-      this.codeFocused = false
-      this.validateCode()
-    },
-
     validatePhone() {
       if (!this.form.phoneNumber.trim()) {
         this.phoneError = '请输入手机号'
@@ -173,6 +149,7 @@ export default {
       }
     },
 
+    // 添加验证码验证方法
     validateCode() {
       if (!this.form.verificationCode.trim()) {
         this.codeError = '请输入验证码'
@@ -201,6 +178,7 @@ export default {
     // 切换协议勾选状态
     toggleAgreement() {
       this.isAgreementChecked = !this.isAgreementChecked
+      // 清除错误提示
       if (this.isAgreementChecked && this.agreementError) {
         this.agreementError = ''
       }
@@ -218,6 +196,7 @@ export default {
 
     // 显示用户协议
     showUserAgreement() {
+      // 这里可以跳转到用户协议页面或显示弹窗
       uni.showModal({
         title: '用户协议',
         content: '请仔细阅读用户协议内容，了解您的权利和义务。',
@@ -229,6 +208,7 @@ export default {
 
     // 显示隐私政策
     showPrivacyPolicy() {
+      // 这里可以跳转到隐私政策页面或显示弹窗
       uni.showModal({
         title: '隐私政策',
         content: '请仔细阅读隐私政策，了解我们如何收集、使用和保护您的个人信息。',
@@ -239,10 +219,12 @@ export default {
     },
 
     async getVerificationCode() {
+      // 验证协议是否勾选
       if (!this.validateAgreement()) {
         return
       }
 
+      // 验证手机号格式
       if (!this.validatePhone()) {
         this.phoneError = '请输入正确的手机号'
         this.$nextTick(() => {
@@ -254,6 +236,7 @@ export default {
         return
       }
 
+      // 防止重复点击
       if (this.isGettingCode || this.countdown > 0) {
         return
       }
@@ -264,6 +247,7 @@ export default {
         const response = await sendCode(this.form.phoneNumber)
         
         if (response.code === 200) {
+          // 记录验证码发送时间
           this.codeSentTime = Date.now()
           this.startCountdown()
           
@@ -276,6 +260,7 @@ export default {
           if (process.env.NODE_ENV === 'development') {
             console.log('验证码接口调用成功，手机号:', this.form.phoneNumber)
             console.log('验证码发送时间:', new Date(this.codeSentTime).toLocaleString())
+            console.log('验证码有效期至:', new Date(this.codeSentTime + this.codeExpireTime * 1000).toLocaleString())
           }
         } else {
           throw new Error(response.msg || response.message || '发送失败')
@@ -308,9 +293,11 @@ export default {
       this.timer = setInterval(() => {
         this.countdown--
         
+        // 验证码过期时的处理
         if (this.countdown <= 0) {
           clearInterval(this.timer)
           this.timer = null
+          // 可以在这里添加过期提示
           if (this.form.verificationCode) {
             uni.showToast({
               title: '验证码已过期，请重新获取',
@@ -368,16 +355,20 @@ export default {
     },
 
     async handleLogin() {
+      // 防止重复点击
       if (this.isLogging) {
         return
       }
 
+      // 验证协议是否勾选
       if (!this.validateAgreement()) {
         return
       }
 
+      // 空值验证
       if (!this.form.phoneNumber.trim()) {
         this.phoneError = '请输入手机号'
+        // 自动聚焦到手机号输入框
         this.$nextTick(() => {
           const phoneInput = this.$refs.phoneInput
           if (phoneInput && phoneInput.focus) {
@@ -389,6 +380,7 @@ export default {
 
       if (!this.form.verificationCode.trim()) {
         this.codeError = '请输入验证码'
+        // 自动聚焦到验证码输入框
         this.$nextTick(() => {
           const codeInput = this.$refs.codeInput
           if (codeInput && codeInput.focus) {
@@ -404,6 +396,7 @@ export default {
         return
       }
 
+      // 检查验证码是否过期
       if (!this.checkCodeExpiry()) {
         return
       }
@@ -411,13 +404,17 @@ export default {
       try {
         this.isLogging = true
         
+        // 根据API图片中的格式，确保参数格式正确
         const loginForm = {
-          phone: this.form.phoneNumber.toString(),
-          code: this.form.verificationCode.toString()
+          phone: this.form.phoneNumber.toString(), // 确保是字符串
+          code: this.form.verificationCode.toString() // 确保是字符串
         }
         
         console.log('开始登录，参数:', loginForm)
+        console.log('验证码发送时间:', this.codeSentTime ? new Date(this.codeSentTime).toLocaleString() : '未记录')
+        console.log('当前时间:', new Date().toLocaleString())
         
+        // 1. 调用登录接口获取token
         const loginResponse = await login(loginForm)
         
         console.log('登录接口响应:', loginResponse)
@@ -428,19 +425,24 @@ export default {
             throw new Error('登录失败：未获取到token')
           }
           
+          // 存储token
           uni.setStorageSync('token', token)
           console.log('token存储成功:', token)
           
           try {
+            // 2. 获取用户信息
             await this.fetchUserInfo()
           } catch (userInfoError) {
             console.warn('获取用户信息失败，但继续流程:', userInfoError)
+            // 即使获取用户信息失败，也继续流程
           }
           
           try {
+            // 3. 获取用户路由
             await this.fetchUserRouters()
           } catch (routerError) {
             console.warn('获取路由信息失败，但继续流程:', routerError)
+            // 即使获取路由失败，也继续流程
           }
           
           uni.showToast({
@@ -449,6 +451,7 @@ export default {
             duration: 2000
           })
           
+          // 跳转到首页
           setTimeout(() => {
             uni.reLaunch({
               url: '/pages/index'
@@ -456,11 +459,14 @@ export default {
           }, 1500)
           
         } else {
+          // 更详细的错误信息
           let errorMsg = loginResponse.msg || loginResponse.message || `登录失败，错误码: ${loginResponse.code}`
           
+          // 专门处理手机号不存在的情况
           if (loginResponse.code === 404 || errorMsg.includes('不存在') || errorMsg.includes('未注册') || errorMsg.includes('未找到')) {
             errorMsg = '手机号不存在'
             this.phoneError = errorMsg
+            // 高亮手机号输入框
             this.$nextTick(() => {
               const phoneInput = this.$refs.phoneInput
               if (phoneInput && phoneInput.focus) {
@@ -489,6 +495,7 @@ export default {
           if (error.message.includes('手机号不存在')) {
             errorMessage = '手机号不存在'
             this.phoneError = errorMessage
+            // 自动聚焦到手机号输入框
             this.$nextTick(() => {
               const phoneInput = this.$refs.phoneInput
               if (phoneInput && phoneInput.focus) {
@@ -499,6 +506,7 @@ export default {
             errorMessage = '验证码已过期，请重新获取验证码'
             this.codeError = errorMessage
             this.form.verificationCode = ''
+            // 重置倒计时
             this.countdown = 0
             if (this.timer) {
               clearInterval(this.timer)
@@ -536,6 +544,7 @@ export default {
   },
 
   onShow() {
+    // 页面显示时检查验证码是否过期
     if (this.codeSentTime && this.isCodeExpired && this.countdown > 0) {
       this.countdown = 0
       if (this.timer) {
@@ -589,33 +598,20 @@ export default {
 	font-size: 28rpx;
 }
 
-/* 输入框外层容器 */
-.input-wrapper {
-	border: 2rpx solid #e1e5e9;
-	border-radius: 16rpx;
-	background-color: #f8f9fa;
-	transition: all 0.3s ease;
-	overflow: hidden;
-}
-
-.input-wrapper.focused {
-	border-color: #007aff;
-}
-
-.input-wrapper.error {
-	border-color: #ff3b30;
-}
-
 /* uni-easyinput 样式调整 */
 .uni-easyinput__content {
-	border: none !important;
-	background-color: transparent !important;
+	border: 2rpx solid #007aff !important;
+	border-radius: 16rpx !important;
+	background-color: #f8f9fa !important;
+}
+
+.uni-easyinput__content.is-input-error {
+	border-color: #ff3b30 !important;
 }
 
 .uni-easyinput__content-input {
 	padding: 24rpx 32rpx !important;
 	font-size: 32rpx !important;
-	background-color: transparent !important;
 }
 
 .code-input-group {
@@ -632,7 +628,7 @@ export default {
 	padding: 24rpx 32rpx;
 	background: #ffffff;
 	color: #007aff;
-	border: 2rpx solid #e1e5e9;
+	border: 2rpx solid #007aff;
 	border-radius: 16rpx;
 	white-space: nowrap;
 	font-size: 28rpx;
@@ -649,7 +645,6 @@ export default {
 	background: #007aff;
 	color: #ffffff;
 	transform: translateY(-2rpx);
-	border-color: #007aff;
 }
 
 .code-btn.disabled {
@@ -807,15 +802,5 @@ export default {
 	.checkbox-icon {
 		margin-top: 4rpx;
 	}
-}
-
-/* 确保输入框内部没有边框 */
-::v-deep .uni-easyinput__content {
-	border: none !important;
-}
-
-::v-deep .uni-easyinput__content-input {
-	border: none !important;
-	background: transparent !important;
 }
 </style>
