@@ -106,7 +106,14 @@ export function getThreadTypes() {
     method: 'get'
   })
 }
-
+/* 预览帖子 */
+export function getImagesPreview(fileUrl) {
+  return request({
+    url: '/api/media/preview',
+    method: 'get',
+    params: { fileUrl } // 或者可能是 query 参数，使用 params
+  })
+}
 
 export default {
   getPostList,
@@ -115,5 +122,6 @@ export default {
   updatePost,
   deletePost,
   getCategories,
-  getThreadTypes
+  getThreadTypes,
+  getImagesPreview
 }
