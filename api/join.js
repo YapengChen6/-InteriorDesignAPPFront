@@ -67,12 +67,11 @@ export function downloadTemplate() {
 
 // ==================== 媒体资源上传相关API ====================
 
-// 图片上传接口 - 调试版本
+// 图片上传接口
 export function uploadImage(file, relatedType, relatedId, description, stage, sequence) {
   return new Promise((resolve, reject) => {
     console.log('🔍 DEBUG UPLOAD - Starting upload process')
     console.log('🔍 DEBUG UPLOAD - File:', file)
-    console.log('🔍 DEBUG UPLOAD - File type:', typeof file)
     
     // 构建 formData
     const formData = {
@@ -84,9 +83,6 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
     }
 
     console.log('🔍 DEBUG UPLOAD - FormData:', formData)
-    console.log('🔍 DEBUG UPLOAD - Base URL:', getBaseUrl())
-    console.log('🔍 DEBUG UPLOAD - Full URL:', getBaseUrl() + '/api/media/uploadImage')
-    console.log('🔍 DEBUG UPLOAD - Token exists:', !!getToken())
 
     // 首先检查文件是否存在
     uni.getFileInfo({
@@ -101,17 +97,14 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
         const uploadTask = uni.uploadFile({
           url: getBaseUrl() + '/api/media/upload',
           filePath: file,
-          name: 'file', // 必须和后端 @RequestParam("file") 一致
+          name: 'file',
           formData: formData,
           header: {
             'Authorization': 'Bearer ' + getToken(),
-            // 不要手动设置 Content-Type，uni.uploadFile 会自动设置
           },
           success: (res) => {
             console.log('📡 DEBUG UPLOAD - Upload response received')
             console.log('📡 DEBUG UPLOAD - Status code:', res.statusCode)
-            console.log('📡 DEBUG UPLOAD - Response data:', res.data)
-            console.log('📡 DEBUG UPLOAD - Error message:', res.errMsg)
 
             if (res.statusCode === 200) {
               try {
@@ -141,29 +134,21 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
                 }
               } catch (e) {
                 console.error('❌ DEBUG UPLOAD - JSON parse error:', e)
-                console.error('❌ DEBUG UPLOAD - Raw response that failed to parse:', res.data)
                 reject(new Error('服务器响应格式错误'))
               }
             } else {
               console.error('❌ DEBUG UPLOAD - HTTP error, status:', res.statusCode)
-              // 尝试解析错误信息
               let errorMessage = `上传失败，状态码: ${res.statusCode}`
               try {
                 const errorData = JSON.parse(res.data)
                 errorMessage = errorData.message || errorData.error || errorMessage
-                console.error('❌ DEBUG UPLOAD - Error details:', errorData)
-              } catch (parseError) {
-                console.error('❌ DEBUG UPLOAD - Cannot parse error response')
-              }
+              } catch (parseError) {}
               reject(new Error(errorMessage))
             }
           },
           fail: (error) => {
             console.error('❌ DEBUG UPLOAD - Upload request failed:', error)
             reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
-          },
-          complete: (completeRes) => {
-            console.log('📡 DEBUG UPLOAD - Upload completed:', completeRes)
           }
         })
 
@@ -171,7 +156,6 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
         uploadTask.onProgressUpdate((res) => {
           console.log('📊 DEBUG UPLOAD - Upload progress:', res.progress + '%')
         })
-
       },
       fail: (fileError) => {
         console.error('❌ DEBUG UPLOAD - File check failed:', fileError)
@@ -181,40 +165,112 @@ export function uploadImage(file, relatedType, relatedId, description, stage, se
   })
 }
 
-// 简单上传测试方法
-export function testUpload() {
+// 文档上传接口
+export function uploadDocument(file, relatedType, relatedId, description, stage, sequence) {
   return new Promise((resolve, reject) => {
-    // 先选择一张图片
-    uni.chooseImage({
-      count: 1,
-      sizeType: ['compressed'],
-      sourceType: ['album'],
-      success: (chooseRes) => {
-        const tempFilePath = chooseRes.tempFilePaths[0]
-        console.log('🧪 TEST UPLOAD - Selected test file:', tempFilePath)
-        
-        // 使用最简单的参数测试
-        uploadImage(
-          tempFilePath,
-          1, // relatedType
-          0, // relatedId
-          '测试图片',
-          'TEST',
-          0
-        ).then(resolve).catch(reject)
+    console.log('🔍 DEBUG DOCUMENT UPLOAD - Starting document upload process')
+    console.log('🔍 DEBUG DOCUMENT UPLOAD - File:', file)
+    
+    // 构建 formData
+    const formData = {
+      relatedType: Number(relatedType),
+      relatedId: Number(relatedId),
+      sequence: Number(sequence || 0),
+      description: description || '',
+      stage: stage || ''
+    }
+
+    console.log('🔍 DEBUG DOCUMENT UPLOAD - FormData:', formData)
+
+    // 检查文件是否存在
+    uni.getFileInfo({
+      filePath: file,
+      success: (fileInfo) => {
+        console.log('✅ DEBUG DOCUMENT UPLOAD - File info:', {
+          size: fileInfo.size,
+          exists: true
+        })
+
+        // 开始上传文档
+        const uploadTask = uni.uploadFile({
+          url: getBaseUrl() + '/api/media/upload/document',
+          filePath: file,
+          name: 'file',
+          formData: formData,
+          header: {
+            'Authorization': 'Bearer ' + getToken(),
+          },
+          success: (res) => {
+            console.log('📡 DEBUG DOCUMENT UPLOAD - Upload response received')
+            console.log('📡 DEBUG DOCUMENT UPLOAD - Status code:', res.statusCode)
+
+            if (res.statusCode === 200) {
+              try {
+                const data = JSON.parse(res.data)
+                console.log('📡 DEBUG DOCUMENT UPLOAD - Parsed response:', data)
+                
+                if (data.code === 200) {
+                  console.log('✅ DEBUG DOCUMENT UPLOAD - Document upload successful')
+                  // 提取文档URL信息
+                  const result = {
+                    ...data,
+                    fileUrl: data.data?.fileUrl,
+                    documentInfo: {
+                      filename: data.data?.filename,
+                      size: data.data?.size,
+                      mediaType: data.data?.mediaType,
+                      mediaTypeName: data.data?.mediaTypeName,
+                      sequence: data.data?.sequence,
+                      relatedType: data.data?.relatedType,
+                      relatedId: data.data?.relatedId,
+                      stage: data.data?.stage,
+                      description: data.data?.description,
+                      mediaId: data.data?.mediaId,
+                      uploadTime: data.data?.uploadTime
+                    }
+                  }
+                  resolve(result)
+                } else {
+                  console.error('❌ DEBUG DOCUMENT UPLOAD - Business logic error:', data.msg)
+                  reject(new Error(data.msg || '文档上传失败'))
+                }
+              } catch (e) {
+                console.error('❌ DEBUG DOCUMENT UPLOAD - JSON parse error:', e)
+                reject(new Error('服务器响应格式错误'))
+              }
+            } else {
+              console.error('❌ DEBUG DOCUMENT UPLOAD - HTTP error, status:', res.statusCode)
+              let errorMessage = `文档上传失败，状态码: ${res.statusCode}`
+              try {
+                const errorData = JSON.parse(res.data)
+                errorMessage = errorData.message || errorData.error || errorMessage
+              } catch (parseError) {}
+              reject(new Error(errorMessage))
+            }
+          },
+          fail: (error) => {
+            console.error('❌ DEBUG DOCUMENT UPLOAD - Upload request failed:', error)
+            reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
+          }
+        })
+
+        // 监听上传进度
+        uploadTask.onProgressUpdate((res) => {
+          console.log('📊 DEBUG DOCUMENT UPLOAD - Upload progress:', res.progress + '%')
+        })
       },
-      fail: (error) => {
-        reject(new Error('选择测试图片失败: ' + error.errMsg))
+      fail: (fileError) => {
+        console.error('❌ DEBUG DOCUMENT UPLOAD - File check failed:', fileError)
+        reject(new Error('文件不存在或无法访问: ' + fileError.errMsg))
       }
     })
   })
 }
 
-// 批量图片上传接口 - 简化版本
+// 批量图片上传接口
 export function batchUploadImages(files, relatedType, relatedId, stage) {
   console.log('🔍 DEBUG BATCH - Starting batch upload, file count:', files.length)
   
-  // 逐个上传文件
   const uploadPromises = files.map((file, index) => {
     return uploadImage(
       file,
@@ -234,6 +290,34 @@ export function batchUploadImages(files, relatedType, relatedId, stage) {
       images: results.map(result => ({
         imageUrl: result.imageUrl,
         imageInfo: result.imageInfo
+      }))
+    }
+  })
+}
+
+// 批量文档上传
+export function batchUploadDocuments(files, relatedType, relatedId, stage) {
+  console.log('🔍 DEBUG BATCH DOCUMENT - Starting batch document upload, file count:', files.length)
+  
+  const uploadPromises = files.map((file, index) => {
+    return uploadDocument(
+      file,
+      relatedType,
+      relatedId,
+      `文档${index + 1}`,
+      stage,
+      index
+    )
+  })
+  
+  return Promise.all(uploadPromises).then(results => {
+    return {
+      code: 200,
+      msg: '批量文档上传成功',
+      data: results.map(result => result.data),
+      documents: results.map(result => ({
+        fileUrl: result.fileUrl,
+        documentInfo: result.documentInfo
       }))
     }
   })
@@ -320,12 +404,11 @@ export function getRouters() {
   })
 }
 
-// 退出登录 - 修改后的版本
+// 退出登录
 export function logout() {
   return request({
-    url: '/logout',  // 修正路径
+    url: '/logout',
     method: 'post'
-    // 移除 token 参数，让拦截器自动添加 Authorization header
   })
 }
 
@@ -353,186 +436,6 @@ export function getCodeImg() {
   })
 }
 
-// ==================== 图片上传测试页面相关API ====================
-
-/**
- * 测试服务连接状态
- * @param {string} type - 接口类型: 'media' | 'test'
- */
-export function testConnection(type) {
-  let url, name;
-
-  switch(type) {
-    case 'media':
-      url = '/api/media/health';
-      name = '媒体接口';
-      break;
-    case 'test':
-      url = '/test/health';
-      name = '测试接口';
-      break;
-    default:
-      return Promise.reject(new Error('未知的接口类型'));
-  }
-
-  return request({
-    url: url,
-    method: 'get',
-    headers: {
-      isToken: false
-    }
-  }).then(response => {
-    return {
-      success: true,
-      name: name,
-      status: 200,
-      data: response
-    };
-  }).catch(error => {
-    return {
-      success: false,
-      name: name,
-      error: error
-    };
-  });
-}
-
-/**
- * 测试所有服务连接
- */
-export function testAllConnections() {
-  return Promise.allSettled([
-    testConnection('media'),
-    testConnection('test')
-  ]);
-}
-
-/**
- * 上传文件测试 - 修复版本
- * @param {Object} uploadConfig - 上传配置
- * @param {File} uploadConfig.file - 文件对象
- * @param {string} uploadConfig.apiUrl - 接口地址
- * @param {number} uploadConfig.relatedType - 关联类型
- * @param {number} uploadConfig.relatedId - 关联ID
- * @param {string} uploadConfig.description - 描述
- */
-export function uploadFileTest(uploadConfig) {
-  const { file, apiUrl, relatedType, relatedId, description } = uploadConfig;
-  
-  return new Promise((resolve, reject) => {
-    // 构建 formData
-    const formData = {
-      relatedType: Number(relatedType),
-      relatedId: Number(relatedId),
-      description: description || '',
-      sequence: 0,
-      stage: 'TEST'
-    };
-
-    console.log('🔍 UPLOAD TEST - Starting upload with config:', {
-      apiUrl,
-      relatedType,
-      relatedId,
-      description,
-      file: file.name || file.path
-    });
-
-    // 使用 uni.uploadFile 进行上传
-    const uploadTask = uni.uploadFile({
-      url: getBaseUrl() + apiUrl,
-      filePath: file.path || file,
-      name: 'file',
-      formData: formData,
-      header: {
-        'Authorization': 'Bearer ' + getToken(),
-      },
-      success: (res) => {
-        console.log('📡 UPLOAD TEST - Upload response received');
-        console.log('📡 UPLOAD TEST - Status code:', res.statusCode);
-        console.log('📡 UPLOAD TEST - Response data:', res.data);
-
-        if (res.statusCode === 200) {
-          try {
-            const data = JSON.parse(res.data);
-            console.log('✅ UPLOAD TEST - Upload successful:', data);
-            
-            // 提取图片URL和其他信息
-            const result = {
-              success: true,
-              code: data.code,
-              message: data.msg,
-              imageUrl: data.data?.fileUrl, // 提取图片URL
-              imageInfo: {
-                filename: data.data?.filename,
-                size: data.data?.size,
-                sequence: data.data?.sequence,
-                relatedType: data.data?.relatedType,
-                relatedId: data.data?.relatedId,
-                stage: data.data?.stage,
-                description: data.data?.description
-              },
-              originalData: data // 保留原始数据
-            };
-            
-            resolve(result);
-          } catch (e) {
-            console.error('❌ UPLOAD TEST - JSON parse error:', e);
-            reject(new Error('服务器响应格式错误'));
-          }
-        } else {
-          console.error('❌ UPLOAD TEST - HTTP error, status:', res.statusCode);
-          let errorMessage = `上传失败，状态码: ${res.statusCode}`;
-          try {
-            const errorData = JSON.parse(res.data);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } catch (parseError) {
-            // 忽略解析错误
-          }
-          reject(new Error(errorMessage));
-        }
-      },
-      fail: (error) => {
-        console.error('❌ UPLOAD TEST - Upload request failed:', error);
-        reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')));
-      }
-    });
-
-    // 监听上传进度（可选）
-    uploadTask.onProgressUpdate((res) => {
-      console.log('📊 UPLOAD TEST - Upload progress:', res.progress + '%');
-    });
-  });
-}
-
-/**
- * 简化的上传测试方法
- */
-export function simpleUploadTest(file) {
-  return uploadFileTest({
-    file: file,
-    apiUrl: '/api/media/upload',
-    relatedType: 1,
-    relatedId: 123,
-    description: '测试上传'
-  });
-}
-
-/**
- * 获取上传测试日志
- */
-export function getUploadTestLogs() {
-  // 这里可以返回存储在本地或全局的日志信息
-  return Promise.resolve([]);
-}
-
-/**
- * 清空测试日志
- */
-export function clearTestLogs() {
-  // 这里可以清空本地或全局的日志信息
-  return Promise.resolve();
-}
-
 // ==================== 工具函数和常量 ====================
 
 // 获取基础URL
@@ -545,36 +448,35 @@ function getBaseUrl() {
     return baseUrl
   } catch (error) {
     console.error('❌ DEBUG - Cannot get base URL from config:', error)
-    // 默认URL，根据你的实际情况修改
     return 'https://your-api-domain.com'
   }
 }
 
 export const RELATED_TYPES = {
-  MATERIAL_SUPPLIER: 1,      // 物料供应商
-  MERCHANT_APPLICATION: 2,   // 商户申请
-  SHOP: 3,                   // 店铺
-  PRODUCT: 4,                // 商品
-  ID_CARD: 5,                // 身份证
-  BUSINESS_LICENSE: 6,       // 营业执照
-  STORE_PHOTO: 7,            // 门店照片
-  USER_AVATAR: 8,            // 用户头像 - 确保这个存在
-  TEST: 99                   // 测试
+  MATERIAL_SUPPLIER: 1,
+  MERCHANT_APPLICATION: 2,
+  SHOP: 3,
+  PRODUCT: 4,
+  ID_CARD: 5,
+  BUSINESS_LICENSE: 6,
+  STORE_PHOTO: 7,
+  USER_AVATAR: 8,
+  TEST: 99
 }
 
 export const MEDIA_TYPES = {
-  IMAGE: 1,      // 图片
-  VIDEO: 2,      // 视频
-  DOCUMENT: 3,   // 文档
-  OTHER: 4       // 其他
+  IMAGE: 1,
+  VIDEO: 2,
+  DOCUMENT: 3,
+  OTHER: 4
 }
 
 export const UPLOAD_STAGES = {
-  APPLICATION: 'APPLICATION',        // 申请阶段
-  VERIFICATION: 'VERIFICATION',      // 验证阶段
-  APPROVAL: 'APPROVAL',             // 审批阶段
-  COMPLETED: 'COMPLETED',           // 完成阶段
-  TEST: 'TEST'                      // 测试阶段
+  APPLICATION: 'APPLICATION',
+  VERIFICATION: 'VERIFICATION',
+  APPROVAL: 'APPROVAL',
+  COMPLETED: 'COMPLETED',
+  TEST: 'TEST'
 }
 
 // 工具函数：获取文件描述
@@ -650,8 +552,9 @@ export default {
   
   // 媒体上传
   uploadImage,
-  testUpload,
+  uploadDocument,
   batchUploadImages,
+  batchUploadDocuments,
   getImagesByRelatedInfo,
   deleteImage,
   getImageDetail,
@@ -665,14 +568,6 @@ export default {
   logout,
   register,
   getCodeImg,
-  
-  // 图片上传测试
-  testConnection,
-  testAllConnections,
-  uploadFileTest,
-  simpleUploadTest,
-  getUploadTestLogs,
-  clearTestLogs,
   
   // 常量和工具函数
   RELATED_TYPES,

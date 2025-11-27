@@ -1,0 +1,920 @@
+<template>
+	<view class="container">
+		<!-- 顶部标题栏 -->
+		<view class="header-section">
+			<view class="header-back" @click="goBack">
+				<text class="back-icon">←</text>
+				<text class="back-text">返回</text>
+			</view>
+			<view class="header-title">订单详情</view>
+			<view class="header-placeholder"></view>
+		</view>
+
+		<!-- 内容区域 -->
+		<scroll-view class="content" scroll-y="true" refresher-enabled @refresherrefresh="onRefresh">
+			<!-- 下拉刷新 -->
+			<view class="refresh-container" v-if="refreshing">
+				<text class="refresh-text">刷新中...</text>
+			</view>
+
+			<!-- 订单状态卡片 -->
+			<view class="status-card">
+				<view class="status-icon">✅</view>
+				<view class="status-info">
+					<text class="status-text">订单已完成</text>
+					<text class="status-desc">感谢您的信任与支持</text>
+				</view>
+			</view>
+
+			<!-- 订单基本信息 -->
+			<view class="info-card">
+				<view class="card-title">订单信息</view>
+				<view class="info-list">
+					<view class="info-item">
+						<text class="info-label">订单编号</text>
+						<text class="info-value">DD{{ orderInfo.orderId }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">下单时间</text>
+						<text class="info-value">{{ formatTime(orderInfo.createTime) }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">完成时间</text>
+						<text class="info-value">{{ formatTime(orderInfo.updateTime) || '--' }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">订单金额</text>
+						<text class="info-value amount">¥{{ orderInfo.totalAmount || 0 }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">订单类型</text>
+						<text class="info-value">{{ getOrderTypeText(orderInfo.type) }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">订单状态</text>
+						<text class="info-value status-completed">{{ getStatusText(orderInfo.status) }}</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 项目信息 -->
+			<view class="info-card" v-if="orderInfo.projectInfo">
+				<view class="card-title">项目信息</view>
+				<view class="project-content">
+					<text class="project-title">{{ orderInfo.projectInfo.title || '设计项目' }}</text>
+					<text class="project-desc">{{ orderInfo.projectInfo.description || orderInfo.remark || '暂无描述' }}</text>
+					<view class="project-tags">
+						<text class="tag" v-if="orderInfo.projectInfo.budget">预算 {{ orderInfo.projectInfo.budget }}元</text>
+						<text class="tag" v-if="orderInfo.projectInfo.area">{{ orderInfo.projectInfo.area }}㎡</text>
+						<text class="tag" v-if="orderInfo.projectInfo.address">{{ orderInfo.projectInfo.address }}</text>
+						<text class="tag" v-if="orderInfo.expectedEndTime">预计 {{ formatDate(orderInfo.expectedEndTime) }}完成</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 设计师信息 -->
+			<view class="info-card" v-if="orderInfo.contractorInfo">
+				<view class="card-title">设计师信息</view>
+				<view class="designer-content">
+					<view class="designer-avatar">
+						<image :src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" mode="aspectFill" class="avatar-img" />
+					</view>
+					<view class="designer-info">
+						<text class="designer-name">{{ orderInfo.contractorInfo.name || '设计师' }}</text>
+						<text class="designer-role">{{ orderInfo.contractorInfo.role || '设计师' }}</text>
+						<text class="designer-phone">电话: {{ orderInfo.contractorInfo.phone || '暂无联系方式' }}</text>
+					</view>
+					<view class="contact-btn" @click="contactDesigner(orderInfo.contractorId)">
+						联系
+					</view>
+				</view>
+			</view>
+
+			<!-- 合同文件 -->
+			<view class="info-card" v-if="orderInfo.contractUrl">
+				<view class="card-title">合同文件</view>
+				<view class="file-section">
+					<view class="file-item" @click="previewFile(orderInfo.contractUrl, '合同文件')">
+						<view class="file-icon">📄</view>
+						<view class="file-info">
+							<text class="file-name">设计服务合同</text>
+							<text class="file-desc">点击查看合同详情</text>
+						</view>
+						<view class="file-action">查看</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 设计方案文件 -->
+			<view class="info-card" v-if="designSchemes.length > 0">
+				<view class="card-title">设计方案</view>
+				<view class="file-section">
+					<!-- 效果图方案 -->
+					<view class="file-item" v-for="scheme in effectSchemes" :key="scheme.designSchemeId" 
+							@click="previewDesignScheme(scheme)">
+						<view class="file-icon">🎨</view>
+						<view class="file-info">
+							<text class="file-name">{{ scheme.schemeName || '效果图设计方案' }}</text>
+							<text class="file-desc">{{ getSchemeStatusText(scheme.status) }} · {{ formatTime(scheme.createTime) }}</text>
+						</view>
+						<view class="file-action">查看</view>
+					</view>
+
+					<!-- 施工设计图方案 -->
+					<view class="file-item" v-for="scheme in constructionSchemes" :key="scheme.designSchemeId" 
+							@click="previewDesignScheme(scheme)">
+						<view class="file-icon">🏗️</view>
+						<view class="file-info">
+							<text class="file-name">{{ scheme.schemeName || '施工设计图方案' }}</text>
+							<text class="file-desc">{{ getSchemeStatusText(scheme.status) }} · {{ formatTime(scheme.createTime) }}</text>
+						</view>
+						<view class="file-action">查看</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 操作按钮 -->
+			<view class="action-section">
+				<button class="action-btn secondary" @click="contactDesigner(orderInfo.contractorId)" 
+						v-if="orderInfo.contractorId">
+					联系设计师
+				</button>
+				<button class="action-btn primary" @click="goToReview" v-if="!hasReviewed">
+					评价订单
+				</button>
+				<button class="action-btn secondary" @click="shareOrder" v-if="hasReviewed">
+					分享订单
+				</button>
+			</view>
+
+			<!-- 加载状态 -->
+			<view v-if="loading" class="loading-state">
+				<text class="loading-text">加载中...</text>
+			</view>
+
+			<!-- 空状态 -->
+			<view v-if="!loading && !orderInfo.orderId" class="empty-state">
+				<view class="empty-icon">📋</view>
+				<view class="empty-text">订单信息不存在</view>
+				<view class="empty-desc">请检查订单编号是否正确</view>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script>
+	import { orderService, OrderStatus, OrderType } from '@/api/order.js'
+	import { getDesignSchemeList } from '@/api/designScheme.js'
+	import { getUserProfile } from '@/api/users.js'
+
+	export default {
+		data() {
+			return {
+				// 页面参数
+				orderId: null,
+				userId: null,
+				
+				// 加载状态
+				loading: false,
+				refreshing: false,
+				
+				// 订单信息
+				orderInfo: {
+					orderId: null,
+					projectId: null,
+					userId: null,
+					contractorId: null,
+					type: OrderType.DESIGN,
+					status: OrderStatus.COMPLETED,
+					totalAmount: 0,
+					createTime: null,
+					updateTime: null,
+					contractUrl: null,
+					remark: '',
+					projectInfo: {},
+					contractorInfo: {}
+				},
+				
+				// 设计方案列表
+				designSchemes: [],
+				
+				// 评价状态
+				hasReviewed: false
+			}
+		},
+		
+		computed: {
+			// 效果图方案
+			effectSchemes() {
+				return this.designSchemes.filter(scheme => {
+					const type = scheme.schemeType || scheme.type;
+					return String(type) === "1"; // 效果图类型
+				});
+			},
+			
+			// 施工设计图方案
+			constructionSchemes() {
+				return this.designSchemes.filter(scheme => {
+					const type = scheme.schemeType || scheme.type;
+					return String(type) === "2"; // 施工设计图类型
+				});
+			}
+		},
+		
+		onLoad(options) {
+			console.log('📋 订单详情页面参数:', options);
+			this.orderId = options.orderId;
+			this.userId = options.userId;
+			
+			if (!this.orderId) {
+				uni.showToast({
+					title: '订单ID不能为空',
+					icon: 'none'
+				});
+				setTimeout(() => {
+					this.goBack();
+				}, 1500);
+				return;
+			}
+			
+			this.loadOrderDetail();
+		},
+		
+		methods: {
+			// 加载订单详情
+			async loadOrderDetail() {
+				try {
+					this.loading = true;
+					
+					console.log('📋 开始加载订单详情，订单ID:', this.orderId);
+					
+					// 1. 加载订单基本信息 - 使用列表接口查询单个订单
+					await this.loadOrderInfo();
+					
+					// 2. 加载设计方案
+					await this.loadDesignSchemes();
+					
+					// 3. 检查评价状态
+					await this.checkReviewStatus();
+					
+					console.log('✅ 订单详情加载完成:', this.orderInfo);
+					
+				} catch (error) {
+					console.error('❌ 加载订单详情失败:', error);
+					this.handleApiError(error, '加载订单详情失败');
+				} finally {
+					this.loading = false;
+					this.refreshing = false;
+				}
+			},
+			
+			// 加载订单基本信息 - 使用列表接口查询单个订单
+			async loadOrderInfo() {
+				try {
+					console.log('📋 通过列表接口获取订单信息，订单ID:', this.orderId);
+					
+					// 使用订单列表接口，通过订单ID筛选
+					const queryParams = {
+						pageNum: 1,
+						pageSize: 100,
+						orderId: this.orderId
+					};
+					
+					const result = await orderService.getOrderList(queryParams);
+					console.log('✅ 订单列表查询响应:', result);
+					
+					let orderList = [];
+					if (Array.isArray(result)) {
+						orderList = result;
+					} else if (result && result.records) {
+						orderList = result.records;
+					} else if (result && result.list) {
+						orderList = result.list;
+					} else if (result && result.data) {
+						orderList = result.data.records || result.data.list || [];
+					}
+					
+					// 查找当前订单
+					const currentOrder = orderList.find(order => order.orderId == this.orderId);
+					
+					if (currentOrder) {
+						this.orderInfo = {
+							...this.orderInfo,
+							...currentOrder
+						};
+						
+						// 加载设计师信息
+						if (currentOrder.contractorId) {
+							await this.loadDesignerInfo(currentOrder.contractorId);
+						}
+						
+						console.log('✅ 订单信息加载成功:', this.orderInfo);
+					} else {
+						throw new Error('未找到订单信息');
+					}
+					
+				} catch (error) {
+					console.error('❌ 加载订单基本信息失败:', error);
+					throw error;
+				}
+			},
+			
+			// 加载设计师信息
+			async loadDesignerInfo(designerId) {
+				try {
+					console.log('👨‍🎨 加载设计师信息，设计师ID:', designerId);
+					const designerInfo = await getUserProfile(designerId);
+					
+					if (designerInfo && designerInfo.code === 200) {
+						this.orderInfo.contractorInfo = {
+							name: designerInfo.data.name || designerInfo.data.nickname || '设计师',
+							avatar: designerInfo.data.avatar || '/static/images/default-avatar.png',
+							role: '设计师',
+							phone: designerInfo.data.phone || designerInfo.data.mobile || '暂无联系方式'
+						};
+					}
+				} catch (error) {
+					console.error('❌ 加载设计师信息失败:', error);
+					// 不影响主要功能，使用默认信息
+					this.orderInfo.contractorInfo = {
+						name: '设计师',
+						avatar: '/static/images/default-avatar.png',
+						role: '设计师',
+						phone: '暂无联系方式'
+					};
+				}
+			},
+			
+			// 加载设计方案
+			async loadDesignSchemes() {
+				try {
+					console.log('🎨 加载设计方案，订单ID:', this.orderId);
+					
+					const queryParams = {
+						pageNum: 1,
+						pageSize: 100,
+						orderId: this.orderId
+					};
+					
+					const result = await getDesignSchemeList(queryParams);
+					console.log('✅ 设计方案响应:', result);
+					
+					let list = [];
+					if (result && result.code === 200) {
+						if (result.data) {
+							if (Array.isArray(result.data)) {
+								list = result.data;
+							} 
+							else if (result.data.records) {
+								list = result.data.records;
+							}
+							else if (result.data.list) {
+								list = result.data.list;
+							}
+							else if (Array.isArray(result.data.data)) {
+								list = result.data.data;
+							}
+						}
+					} else if (Array.isArray(result)) {
+						list = result;
+					}
+					
+					this.designSchemes = list.map(scheme => ({
+						designSchemeId: scheme.designSchemeId,
+						schemeName: scheme.schemeName,
+						schemeType: scheme.schemeType || scheme.type,
+						status: scheme.status,
+						createTime: scheme.createTime,
+						description: scheme.description,
+						imageList: scheme.imageList || [],
+						fileUrl: scheme.fileUrl || scheme.coverImage
+					}));
+					
+					console.log('✅ 解析后的设计方案:', this.designSchemes);
+					
+				} catch (error) {
+					console.error('❌ 加载设计方案失败:', error);
+					this.designSchemes = [];
+				}
+			},
+			
+			// 检查评价状态
+			async checkReviewStatus() {
+				try {
+					// 这里可以调用评价API检查是否已评价
+					// 暂时设置为未评价
+					this.hasReviewed = false;
+				} catch (error) {
+					console.error('❌ 检查评价状态失败:', error);
+					this.hasReviewed = false;
+				}
+			},
+			
+			// 预览文件
+			previewFile(fileUrl, fileName) {
+				if (!fileUrl) {
+					uni.showToast({
+						title: '文件不存在',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				console.log('📄 预览文件:', fileUrl, fileName);
+				
+				// 如果是图片文件
+				if (fileUrl.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+					uni.previewImage({
+						urls: [fileUrl],
+						current: fileUrl,
+						success: () => {
+							console.log('✅ 图片预览成功');
+						},
+						fail: (error) => {
+							console.error('❌ 图片预览失败:', error);
+							this.handleApiError(error, '预览失败');
+						}
+					});
+				} else {
+					// 其他文件类型，尝试在浏览器中打开
+					uni.showToast({
+						title: '暂不支持预览此文件类型',
+						icon: 'none'
+					});
+				}
+			},
+			
+			// 预览设计方案
+			previewDesignScheme(scheme) {
+				console.log('🎨 预览设计方案:', scheme);
+				
+				if (scheme.imageList && scheme.imageList.length > 0) {
+					// 如果有图片列表，预览图片
+					const imageUrls = scheme.imageList.map(img => img.url || img);
+					uni.previewImage({
+						urls: imageUrls,
+						current: imageUrls[0],
+						success: () => {
+							console.log('✅ 设计方案预览成功');
+						},
+						fail: (error) => {
+							console.error('❌ 设计方案预览失败:', error);
+							this.handleApiError(error, '预览失败');
+						}
+					});
+				} else if (scheme.fileUrl) {
+					// 如果有文件URL，预览文件
+					this.previewFile(scheme.fileUrl, scheme.schemeName);
+				} else {
+					uni.showToast({
+						title: '暂无设计方案文件',
+						icon: 'none'
+					});
+				}
+			},
+			
+			// 联系设计师
+			contactDesigner(designerId) {
+				if (!designerId) {
+					uni.showToast({
+						title: '暂无设计师信息',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				console.log('💬 联系设计师，设计师ID:', designerId);
+				uni.navigateTo({
+					url: `/pages/chat/designer?id=${designerId}`
+				});
+			},
+			
+			// 去评价
+			goToReview() {
+				console.log('📝 去评价，订单ID:', this.orderId, '用户ID:', this.userId);
+				uni.navigateTo({
+					url: `/pages/review/review?orderId=${this.orderId}&userId=${this.userId}`
+				});
+			},
+			
+			// 分享订单
+			shareOrder() {
+				console.log('📤 分享订单，订单ID:', this.orderId);
+				uni.showToast({
+					title: '分享功能开发中',
+					icon: 'none'
+				});
+			},
+			
+			// 下拉刷新
+			onRefresh() {
+				if (this.refreshing) return;
+				this.refreshing = true;
+				this.loadOrderDetail();
+			},
+			
+			// 返回上一页
+			goBack() {
+				uni.navigateBack();
+			},
+			
+			// 获取方案状态文本
+			getSchemeStatusText(status) {
+				const statusMap = {
+					'0': '待确认',
+					'1': '待确认',
+					'2': '已确认'
+				};
+				return statusMap[status] || '未知状态';
+			},
+			
+			// 获取订单状态文本
+			getStatusText(status) {
+				return orderService.getOrderStatusText(status);
+			},
+			
+			// 获取订单类型文本
+			getOrderTypeText(type) {
+				return orderService.getOrderTypeText(type);
+			},
+			
+			// 格式化时间
+			formatTime(timeStr) {
+				if (!timeStr) return '--';
+				if (typeof timeStr === 'number') {
+					const date = new Date(timeStr);
+					return date.toLocaleDateString();
+				}
+				return timeStr.split(' ')[0];
+			},
+			
+			// 格式化日期
+			formatDate(dateStr) {
+				if (!dateStr) return '--';
+				if (dateStr.includes('T')) {
+					return dateStr.split('T')[0];
+				}
+				return dateStr.split(' ')[0];
+			},
+			
+			// 统一的错误处理
+			handleApiError(error, defaultMessage = '操作失败') {
+				console.error('API Error:', error);
+				
+				let message = defaultMessage;
+				if (error && error.errMsg) {
+					message = error.errMsg;
+				} else if (error && error.message) {
+					message = error.message;
+				} else if (typeof error === 'string') {
+					message = error;
+				}
+				
+				uni.showToast({
+					title: message,
+					icon: 'none',
+					duration: 3000
+				});
+				
+				return message;
+			}
+		},
+		
+		onPullDownRefresh() {
+			this.onRefresh();
+			uni.stopPullDownRefresh();
+		}
+	}
+</script>
+
+<style scoped>
+	.container {
+		min-height: 100vh;
+		background-color: #f5f5f5;
+	}
+	
+	/* 头部样式 */
+	.header-section {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 20rpx 30rpx;
+		background: white;
+		border-bottom: 1rpx solid #eee;
+		position: sticky;
+		top: 0;
+		z-index: 10;
+	}
+	
+	.header-back {
+		display: flex;
+		align-items: center;
+		font-size: 28rpx;
+		color: #333;
+	}
+	
+	.back-icon {
+		margin-right: 10rpx;
+		font-size: 32rpx;
+	}
+	
+	.header-title {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: #333;
+	}
+	
+	.header-placeholder {
+		width: 120rpx;
+	}
+	
+	/* 内容区域 */
+	.content {
+		height: calc(100vh - 120rpx);
+		padding: 30rpx;
+	}
+	
+	/* 状态卡片 */
+	.status-card {
+		background: linear-gradient(135deg, #67C23A, #85CE61);
+		border-radius: 16rpx;
+		padding: 40rpx 30rpx;
+		display: flex;
+		align-items: center;
+		margin-bottom: 30rpx;
+		color: white;
+	}
+	
+	.status-icon {
+		font-size: 60rpx;
+		margin-right: 20rpx;
+	}
+	
+	.status-info {
+		display: flex;
+		flex-direction: column;
+	}
+	
+	.status-text {
+		font-size: 36rpx;
+		font-weight: bold;
+		margin-bottom: 8rpx;
+	}
+	
+	.status-desc {
+		font-size: 26rpx;
+		opacity: 0.9;
+	}
+	
+	/* 信息卡片 */
+	.info-card {
+		background: white;
+		border-radius: 16rpx;
+		padding: 30rpx;
+		margin-bottom: 30rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+	}
+	
+	.card-title {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: #333;
+		margin-bottom: 20rpx;
+		border-left: 6rpx solid #3498db;
+		padding-left: 20rpx;
+	}
+	
+	/* 信息列表 */
+	.info-list {
+		display: flex;
+		flex-direction: column;
+		gap: 20rpx;
+	}
+	
+	.info-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	
+	.info-label {
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	.info-value {
+		font-size: 28rpx;
+		color: #333;
+		font-weight: 500;
+	}
+	
+	.info-value.amount {
+		color: #e74c3c;
+		font-weight: bold;
+		font-size: 32rpx;
+	}
+	
+	.status-completed {
+		color: #67C23A;
+		font-weight: bold;
+	}
+	
+	/* 项目内容 */
+	.project-content {
+		display: flex;
+		flex-direction: column;
+		gap: 15rpx;
+	}
+	
+	.project-title {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: #333;
+	}
+	
+	.project-desc {
+		font-size: 28rpx;
+		color: #666;
+		line-height: 1.5;
+	}
+	
+	.project-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 15rpx;
+	}
+	
+	.tag {
+		font-size: 24rpx;
+		color: #666;
+		background: #f8f9fa;
+		padding: 8rpx 16rpx;
+		border-radius: 20rpx;
+	}
+	
+	/* 设计师内容 */
+	.designer-content {
+		display: flex;
+		align-items: center;
+	}
+	
+	.designer-avatar {
+		width: 100rpx;
+		height: 100rpx;
+		border-radius: 50%;
+		overflow: hidden;
+		margin-right: 20rpx;
+	}
+	
+	.avatar-img {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.designer-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	
+	.designer-name {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: #333;
+		margin-bottom: 8rpx;
+	}
+	
+	.designer-role {
+		font-size: 26rpx;
+		color: #999;
+		margin-bottom: 5rpx;
+	}
+	
+	.designer-phone {
+		font-size: 26rpx;
+		color: #666;
+	}
+	
+	.contact-btn {
+		background: #3498db;
+		color: white;
+		padding: 15rpx 30rpx;
+		border-radius: 25rpx;
+		font-size: 26rpx;
+	}
+	
+	/* 文件区域 */
+	.file-section {
+		display: flex;
+		flex-direction: column;
+		gap: 20rpx;
+	}
+	
+	.file-item {
+		display: flex;
+		align-items: center;
+		padding: 25rpx;
+		background: #f8f9fa;
+		border-radius: 12rpx;
+		border: 1rpx solid #e9ecef;
+	}
+	
+	.file-icon {
+		font-size: 48rpx;
+		margin-right: 20rpx;
+	}
+	
+	.file-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	
+	.file-name {
+		font-size: 28rpx;
+		font-weight: 500;
+		color: #333;
+		margin-bottom: 8rpx;
+	}
+	
+	.file-desc {
+		font-size: 24rpx;
+		color: #999;
+	}
+	
+	.file-action {
+		color: #3498db;
+		font-size: 26rpx;
+	}
+	
+	/* 操作区域 */
+	.action-section {
+		display: flex;
+		gap: 20rpx;
+		padding: 40rpx 0;
+	}
+	
+	.action-btn {
+		flex: 1;
+		height: 80rpx;
+		border: none;
+		border-radius: 40rpx;
+		font-size: 28rpx;
+		font-weight: bold;
+	}
+	
+	.action-btn.primary {
+		background: linear-gradient(135deg, #3498db, #2980b9);
+		color: white;
+	}
+	
+	.action-btn.secondary {
+		background: #f8f9fa;
+		color: #666;
+		border: 2rpx solid #e9ecef;
+	}
+	
+	/* 加载状态 */
+	.loading-state {
+		text-align: center;
+		padding: 60rpx;
+	}
+	
+	.loading-text {
+		font-size: 28rpx;
+		color: #999;
+	}
+	
+	/* 空状态 */
+	.empty-state {
+		text-align: center;
+		padding: 100rpx 30rpx;
+	}
+	
+	.empty-icon {
+		font-size: 120rpx;
+		margin-bottom: 30rpx;
+	}
+	
+	.empty-text {
+		font-size: 32rpx;
+		color: #333;
+		margin-bottom: 15rpx;
+	}
+	
+	.empty-desc {
+		font-size: 28rpx;
+		color: #999;
+	}
+	
+	/* 刷新容器 */
+	.refresh-container {
+		text-align: center;
+		padding: 20rpx;
+	}
+	
+	.refresh-text {
+		font-size: 28rpx;
+		color: #999;
+	}
+</style>

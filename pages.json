@@ -274,6 +274,30 @@
     "style": {
       "navigationBarTitleText": "设计师详情页面"
     }
+  },
+  {
+    "path": "pages/design/upload",
+    "style": {
+      "navigationBarTitleText": "设计师上传文件页面"
+    }
+  },
+  {
+    "path": "pages/design/xgt",
+    "style": {
+      "navigationBarTitleText": "查看效果图文件页面"
+    }
+  },
+  {
+    "path": "pages/review/review",
+    "style": {
+      "navigationBarTitleText": "评价设计师订单页面"
+    }
+  },
+  {
+    "path": "pages/finishedorder-detail/finishedorder-detail",
+    "style": {
+      "navigationBarTitleText": "已完成订单的详情页面"
+    }
   }
   ],
   "tabBar": {
