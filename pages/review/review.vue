@@ -6,87 +6,196 @@
 				<text class="back-icon">←</text>
 				<text class="back-text">返回</text>
 			</view>
-			<view class="header-title">评价订单</view>
+			<view class="header-title">订单详情</view>
 			<view class="header-placeholder"></view>
 		</view>
 
-		<!-- 评价内容区域 -->
-		<scroll-view class="review-content" scroll-y="true">
-			<!-- 订单信息 -->
-			<view class="order-info-card">
+		<!-- 内容区域 -->
+		<scroll-view class="content" scroll-y="true" refresher-enabled @refresherrefresh="onRefresh">
+			<!-- 下拉刷新 -->
+			<view class="refresh-container" v-if="refreshing">
+				<text class="refresh-text">刷新中...</text>
+			</view>
+
+			<!-- 订单状态卡片 -->
+			<view class="status-card">
+				<view class="status-icon">✅</view>
+				<view class="status-info">
+					<text class="status-text">订单已完成</text>
+					<text class="status-desc">感谢您的信任与支持</text>
+				</view>
+			</view>
+
+			<!-- 订单基本信息 -->
+			<view class="info-card">
 				<view class="card-title">订单信息</view>
-				<view class="order-details">
-					<text class="order-number">订单号：DD{{ orderInfo.orderId }}</text>
-					<text class="order-time">下单时间：{{ formatTime(orderInfo.createTime) }}</text>
-					<text class="order-amount">订单金额：¥{{ orderInfo.totalAmount || 0 }}</text>
+				<view class="info-list">
+					<view class="info-item">
+						<text class="info-label">订单编号</text>
+						<text class="info-value">DD{{ orderInfo.orderId }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">下单时间</text>
+						<text class="info-value">{{ formatTime(orderInfo.createTime) }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">完成时间</text>
+						<text class="info-value">{{ formatTime(orderInfo.updateTime) || '--' }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">订单金额</text>
+						<text class="info-value amount">¥{{ orderInfo.totalAmount || 0 }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">订单类型</text>
+						<text class="info-value">{{ getOrderTypeText(orderInfo.type) }}</text>
+					</view>
+					<view class="info-item">
+						<text class="info-label">订单状态</text>
+						<text class="info-value status-completed">{{ getStatusText(orderInfo.status) }}</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 项目信息 -->
+			<view class="info-card" v-if="orderInfo.projectInfo">
+				<view class="card-title">项目信息</view>
+				<view class="project-content">
+					<text class="project-title">{{ orderInfo.projectInfo.title || '设计项目' }}</text>
+					<text class="project-desc">{{ orderInfo.projectInfo.description || orderInfo.remark || '暂无描述' }}</text>
+					<view class="project-tags">
+						<text class="tag" v-if="orderInfo.projectInfo.budget">预算 {{ orderInfo.projectInfo.budget }}元</text>
+						<text class="tag" v-if="orderInfo.projectInfo.area">{{ orderInfo.projectInfo.area }}㎡</text>
+						<text class="tag" v-if="orderInfo.projectInfo.address">{{ orderInfo.projectInfo.address }}</text>
+						<text class="tag" v-if="orderInfo.expectedEndTime">预计 {{ formatDate(orderInfo.expectedEndTime) }}完成</text>
+					</view>
 				</view>
 			</view>
 
 			<!-- 设计师信息 -->
-			<view class="designer-info-card" v-if="orderInfo.contractorInfo">
+			<view class="info-card" v-if="orderInfo.contractorInfo">
 				<view class="card-title">设计师信息</view>
-				<view class="designer-details">
+				<view class="designer-content">
 					<view class="designer-avatar">
 						<image :src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" mode="aspectFill" class="avatar-img" />
 					</view>
 					<view class="designer-info">
 						<text class="designer-name">{{ orderInfo.contractorInfo.name || '设计师' }}</text>
 						<text class="designer-role">{{ orderInfo.contractorInfo.role || '设计师' }}</text>
+						<text class="designer-phone">电话: {{ orderInfo.contractorInfo.phone || '暂无联系方式' }}</text>
+					</view>
+					<view class="contact-btn" @click="contactDesigner(orderInfo.contractorId)">
+						联系
 					</view>
 				</view>
 			</view>
 
-			<!-- 评分区域 -->
-			<view class="rating-card">
-				<view class="card-title">总体评分</view>
-				<view class="rating-section">
-					<view class="stars-container">
-						<text 
-							v-for="star in 5" 
-							:key="star"
-							class="star"
-							:class="star <= rating ? 'star-active' : 'star-inactive'"
-							@click="setRating(star)"
-						>
-							⭐
-						</text>
+			<!-- 评价信息 -->
+			<view class="info-card" v-if="hasReviewed && orderReview">
+				<view class="card-title">订单评价</view>
+				<view class="review-content">
+					<!-- 评分 -->
+					<view class="rating-section">
+						<text class="rating-label">综合评分</text>
+						<view class="rating-stars">
+							<text v-for="i in 5" :key="i" class="star" 
+								  :class="i <= orderReview.rating ? 'star-active' : 'star-inactive'">
+								{{ i <= orderReview.rating ? '★' : '☆' }}
+							</text>
+						</view>
+						<text class="rating-value">{{ orderReview.rating }}分</text>
 					</view>
-					<text class="rating-text">{{ ratingText }}</text>
+					
+					<!-- 评价内容 -->
+					<view class="review-text-section" v-if="orderReview.content">
+						<text class="review-label">评价内容</text>
+						<text class="review-text">{{ orderReview.content }}</text>
+					</view>
+					
+					<!-- 评价时间 -->
+					<view class="review-time">
+						<text class="review-time-text">评价时间：{{ formatTime(orderReview.createTime) }}</text>
+					</view>
 				</view>
 			</view>
 
-			<!-- 评价内容 -->
-			<view class="content-card">
-				<view class="card-title">评价内容</view>
-				<textarea 
-					class="review-textarea"
-					v-model="reviewContent"
-					placeholder="请写下您对这次服务的评价，您的评价对其他用户很有帮助..."
-					maxlength="500"
-					:show-confirm-bar="false"
-				></textarea>
-				<view class="word-count">{{ reviewContent.length }}/500</view>
+			<!-- 合同文件 -->
+			<view class="info-card" v-if="orderInfo.contractUrl">
+				<view class="card-title">合同文件</view>
+				<view class="file-section">
+					<view class="file-item" @click="previewFile(orderInfo.contractUrl, '合同文件')">
+						<view class="file-icon">📄</view>
+						<view class="file-info">
+							<text class="file-name">设计服务合同</text>
+							<text class="file-desc">点击查看合同详情</text>
+						</view>
+						<view class="file-action">查看</view>
+					</view>
+				</view>
 			</view>
 
-			<!-- 提交按钮 -->
-			<view class="submit-section">
-				<button 
-					class="submit-btn" 
-					:class="{ 'btn-disabled': !canSubmit }"
-					:disabled="!canSubmit"
-					@click="submitReview"
-					:loading="submitting"
-				>
-					{{ submitting ? '提交中...' : '提交评价' }}
+			<!-- 设计方案文件 -->
+			<view class="info-card" v-if="designSchemes.length > 0">
+				<view class="card-title">设计方案</view>
+				<view class="file-section">
+					<!-- 效果图方案 -->
+					<view class="file-item" v-for="scheme in effectSchemes" :key="scheme.designSchemeId" 
+							@click="previewDesignScheme(scheme)">
+						<view class="file-icon">🎨</view>
+						<view class="file-info">
+							<text class="file-name">{{ scheme.schemeName || '效果图设计方案' }}</text>
+							<text class="file-desc">{{ getSchemeStatusText(scheme.status) }} · {{ formatTime(scheme.createTime) }}</text>
+						</view>
+						<view class="file-action">查看</view>
+					</view>
+
+					<!-- 施工设计图方案 -->
+					<view class="file-item" v-for="scheme in constructionSchemes" :key="scheme.designSchemeId" 
+							@click="previewDesignScheme(scheme)">
+						<view class="file-icon">🏗️</view>
+						<view class="file-info">
+							<text class="file-name">{{ scheme.schemeName || '施工设计图方案' }}</text>
+							<text class="file-desc">{{ getSchemeStatusText(scheme.status) }} · {{ formatTime(scheme.createTime) }}</text>
+						</view>
+						<view class="file-action">查看</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 操作按钮 -->
+			<view class="action-section">
+				<button class="action-btn secondary" @click="contactDesigner(orderInfo.contractorId)" 
+						v-if="orderInfo.contractorId">
+					联系设计师
 				</button>
+				<button class="action-btn primary" @click="goToReview" v-if="!hasReviewed">
+					评价订单
+				</button>
+				<button class="action-btn secondary" @click="shareOrder" v-if="hasReviewed">
+					分享订单
+				</button>
+			</view>
+
+			<!-- 加载状态 -->
+			<view v-if="loading" class="loading-state">
+				<text class="loading-text">加载中...</text>
+			</view>
+
+			<!-- 空状态 -->
+			<view v-if="!loading && !orderInfo.orderId" class="empty-state">
+				<view class="empty-icon">📋</view>
+				<view class="empty-text">订单信息不存在</view>
+				<view class="empty-desc">请检查订单编号是否正确</view>
 			</view>
 		</scroll-view>
 	</view>
 </template>
 
 <script>
-	import { orderService } from '@/api/order.js'
+	import { orderService, OrderStatus, OrderType } from '@/api/order.js'
+	import { getDesignSchemeList } from '@/api/designScheme.js'
 	import { getUserProfile } from '@/api/users.js'
+	import { orderReviewApi } from '@/api/orderReview.js' // 导入评价API
 
 	export default {
 		data() {
@@ -95,269 +204,446 @@
 				orderId: null,
 				userId: null,
 				
+				// 加载状态
+				loading: false,
+				refreshing: false,
+				
 				// 订单信息
 				orderInfo: {
 					orderId: null,
-					createTime: null,
+					projectId: null,
+					userId: null,
+					contractorId: null,
+					type: OrderType.DESIGN,
+					status: OrderStatus.COMPLETED,
 					totalAmount: 0,
+					createTime: null,
+					updateTime: null,
+					contractUrl: null,
+					remark: '',
+					projectInfo: {},
 					contractorInfo: {}
 				},
 				
-				// 评价数据
-				rating: 0,
-				reviewContent: '',
-				submitting: false
+				// 设计方案列表
+				designSchemes: [],
+				
+				// 评价状态
+				hasReviewed: false,
+				orderReview: null // 评价详情
 			}
 		},
 		
 		computed: {
-			// 评分文本
-			ratingText() {
-				const texts = ['请评分', '很不满意', '不满意', '一般', '满意', '非常满意']
-				return texts[this.rating]
+			// 效果图方案
+			effectSchemes() {
+				return this.designSchemes.filter(scheme => {
+					const type = scheme.schemeType || scheme.type;
+					return String(type) === "1"; // 效果图类型
+				});
 			},
 			
-			// 是否可以提交
-			canSubmit() {
-				return this.rating > 0 && this.reviewContent.trim().length >= 5
+			// 施工设计图方案
+			constructionSchemes() {
+				return this.designSchemes.filter(scheme => {
+					const type = scheme.schemeType || scheme.type;
+					return String(type) === "2"; // 施工设计图类型
+				});
 			}
 		},
 		
 		onLoad(options) {
-			console.log('📝 评价页面参数:', options)
-			this.orderId = options.orderId
-			this.userId = options.userId
+			console.log('📋 订单详情页面参数:', options);
+			this.orderId = options.orderId;
+			this.userId = options.userId;
 			
 			if (!this.orderId) {
 				uni.showToast({
 					title: '订单ID不能为空',
 					icon: 'none'
-				})
+				});
 				setTimeout(() => {
-					uni.navigateBack()
-				}, 1500)
-				return
+					this.goBack();
+				}, 1500);
+				return;
 			}
 			
-			this.loadOrderInfo()
+			this.loadOrderDetail();
 		},
 		
 		methods: {
-			// 加载订单信息
+			// 加载订单详情
+			async loadOrderDetail() {
+				try {
+					this.loading = true;
+					
+					console.log('📋 开始加载订单详情，订单ID:', this.orderId);
+					
+					// 1. 加载订单基本信息 - 使用列表接口查询单个订单
+					await this.loadOrderInfo();
+					
+					// 2. 加载设计方案
+					await this.loadDesignSchemes();
+					
+					// 3. 检查评价状态
+					await this.checkReviewStatus();
+					
+					console.log('✅ 订单详情加载完成:', this.orderInfo);
+					
+				} catch (error) {
+					console.error('❌ 加载订单详情失败:', error);
+					this.handleApiError(error, '加载订单详情失败');
+				} finally {
+					this.loading = false;
+					this.refreshing = false;
+				}
+			},
+			
+			// 加载订单基本信息 - 使用列表接口查询单个订单
 			async loadOrderInfo() {
 				try {
-					uni.showLoading({ title: '加载中...' })
+					console.log('📋 通过列表接口获取订单信息，订单ID:', this.orderId);
 					
-					console.log('📋 加载订单信息，订单ID:', this.orderId)
-					
-					// 使用现有的订单服务获取订单详情
-					const result = await orderService.getOrderListByUserId(this.userId, {
+					// 使用订单列表接口，通过订单ID筛选
+					const queryParams = {
 						pageNum: 1,
-						pageSize: 100
-					})
+						pageSize: 100,
+						orderId: this.orderId
+					};
 					
-					console.log('✅ 订单列表响应:', result)
+					const result = await orderService.getOrderList(queryParams);
+					console.log('✅ 订单列表查询响应:', result);
 					
-					let orderList = []
+					let orderList = [];
 					if (Array.isArray(result)) {
-						orderList = result
+						orderList = result;
 					} else if (result && result.records) {
-						orderList = result.records
+						orderList = result.records;
 					} else if (result && result.list) {
-						orderList = result.list
+						orderList = result.list;
 					} else if (result && result.data) {
-						orderList = result.data.records || result.data.list || []
+						orderList = result.data.records || result.data.list || [];
 					}
 					
 					// 查找当前订单
-					const currentOrder = orderList.find(order => order.orderId == this.orderId)
+					const currentOrder = orderList.find(order => order.orderId == this.orderId);
 					
 					if (currentOrder) {
 						this.orderInfo = {
-							orderId: currentOrder.orderId,
-							createTime: currentOrder.createTime,
-							totalAmount: currentOrder.totalAmount || 0,
-							contractorInfo: currentOrder.contractorInfo || {}
+							...this.orderInfo,
+							...currentOrder
+						};
+						
+						// 加载设计师信息
+						if (currentOrder.contractorId) {
+							await this.loadDesignerInfo(currentOrder.contractorId);
 						}
 						
-						// 如果设计师信息不完整，尝试获取
-						if (currentOrder.contractorId && (!currentOrder.contractorInfo || !currentOrder.contractorInfo.name)) {
-							await this.loadDesignerInfo(currentOrder.contractorId)
-						}
-						
-						console.log('✅ 订单信息加载完成:', this.orderInfo)
+						console.log('✅ 订单信息加载成功:', this.orderInfo);
 					} else {
-						throw new Error('未找到订单信息')
+						throw new Error('未找到订单信息');
 					}
 					
-					uni.hideLoading()
-					
 				} catch (error) {
-					uni.hideLoading()
-					console.error('❌ 加载订单信息失败:', error)
-					this.handleApiError(error, '加载订单信息失败')
-					setTimeout(() => {
-						uni.navigateBack()
-					}, 2000)
+					console.error('❌ 加载订单基本信息失败:', error);
+					throw error;
 				}
 			},
 			
 			// 加载设计师信息
 			async loadDesignerInfo(designerId) {
 				try {
-					console.log('👨‍🎨 加载设计师信息，ID:', designerId)
-					const designerInfo = await getUserProfile(designerId)
+					console.log('👨‍🎨 加载设计师信息，设计师ID:', designerId);
+					const designerInfo = await getUserProfile(designerId);
 					
 					if (designerInfo && designerInfo.code === 200) {
 						this.orderInfo.contractorInfo = {
 							name: designerInfo.data.name || designerInfo.data.nickname || '设计师',
 							avatar: designerInfo.data.avatar || '/static/images/default-avatar.png',
-							role: '设计师'
-						}
+							role: '设计师',
+							phone: designerInfo.data.phone || designerInfo.data.mobile || '暂无联系方式'
+						};
 					}
 				} catch (error) {
-					console.error('❌ 加载设计师信息失败:', error)
+					console.error('❌ 加载设计师信息失败:', error);
 					// 不影响主要功能，使用默认信息
 					this.orderInfo.contractorInfo = {
 						name: '设计师',
 						avatar: '/static/images/default-avatar.png',
-						role: '设计师'
-					}
+						role: '设计师',
+						phone: '暂无联系方式'
+					};
 				}
 			},
 			
-			// 设置评分
-			setRating(score) {
-				this.rating = score
-				console.log('⭐ 设置评分:', score)
-			},
-			
-			// 提交评价
-			async submitReview() {
-				if (!this.canSubmit) {
-					uni.showToast({
-						title: '请完成评分并填写至少5个字的评价',
-						icon: 'none'
-					})
-					return
-				}
-				
+			// 加载设计方案
+			async loadDesignSchemes() {
 				try {
-					this.submitting = true
+					console.log('🎨 加载设计方案，订单ID:', this.orderId);
 					
-					console.log('📤 提交评价数据:', {
-						orderId: this.orderId,
-						rating: this.rating,
-						content: this.reviewContent.trim()
-					})
+					const queryParams = {
+						pageNum: 1,
+						pageSize: 100,
+						orderId: this.orderId
+					};
 					
-					// 使用现有的订单服务提交评价
-					// 这里假设 orderService 有 submitReview 方法
-					// 如果没有，可以使用通用的请求方法
-					const reviewData = {
-						orderId: this.orderId,
-						reviewerId: this.userId,
-						rating: this.rating,
-						content: this.reviewContent.trim(),
-						createTime: new Date().toISOString()
+					const result = await getDesignSchemeList(queryParams);
+					console.log('✅ 设计方案响应:', result);
+					
+					let list = [];
+					if (result && result.code === 200) {
+						if (result.data) {
+							if (Array.isArray(result.data)) {
+								list = result.data;
+							} 
+							else if (result.data.records) {
+								list = result.data.records;
+							}
+							else if (result.data.list) {
+								list = result.data.list;
+							}
+							else if (Array.isArray(result.data.data)) {
+								list = result.data.data;
+							}
+						}
+					} else if (Array.isArray(result)) {
+						list = result;
 					}
 					
-					console.log('📤 评价提交数据:', reviewData)
+					this.designSchemes = list.map(scheme => ({
+						designSchemeId: scheme.designSchemeId,
+						schemeName: scheme.schemeName,
+						schemeType: scheme.schemeType || scheme.type,
+						status: scheme.status,
+						createTime: scheme.createTime,
+						description: scheme.description,
+						imageList: scheme.imageList || [],
+						fileUrl: scheme.fileUrl || scheme.coverImage
+					}));
 					
-					// 使用 uni.request 直接调用接口
-					const result = await this.submitReviewRequest(reviewData)
-					
-					console.log('✅ 评价提交成功:', result)
-					
-					uni.showToast({
-						title: '评价成功',
-						icon: 'success',
-						duration: 2000
-					})
-					
-					// 评价成功后返回上一页
-					setTimeout(() => {
-						uni.navigateBack({
-							delta: 1
-						})
-					}, 1500)
+					console.log('✅ 解析后的设计方案:', this.designSchemes);
 					
 				} catch (error) {
-					console.error('❌ 提交评价失败:', error)
-					this.handleApiError(error, '提交评价失败')
-				} finally {
-					this.submitting = false
+					console.error('❌ 加载设计方案失败:', error);
+					this.designSchemes = [];
 				}
 			},
 			
-			// 提交评价请求
-			submitReviewRequest(reviewData) {
-				return new Promise((resolve, reject) => {
-					uni.request({
-						url: 'http://localhost:8081/api/order/review/submit',
-						method: 'POST',
-						data: reviewData,
-						header: {
-							'Content-Type': 'application/json',
-							'Authorization': 'Bearer ' + uni.getStorageSync('token')
-						},
-						success: (res) => {
-							console.log('📡 评价提交响应:', res)
-							
-							if (res.statusCode === 200) {
-								if (res.data && (res.data.code === 200 || res.data.success)) {
-									resolve(res.data)
-								} else {
-									reject(new Error(res.data?.msg || '评价提交失败'))
-								}
-							} else {
-								reject(new Error(`请求失败，状态码: ${res.statusCode}`))
-							}
+			// 检查评价状态
+			async checkReviewStatus() {
+				try {
+					console.log('🔍 检查订单评价状态，订单ID:', this.orderId);
+					const result = await orderReviewApi.getList({ orderId: this.orderId });
+					console.log('📋 评价查询结果:', result);
+					
+					if (result && result.code === 200) {
+						let reviewList = [];
+						
+						// 解析评价列表
+						if (Array.isArray(result.data)) {
+							reviewList = result.data;
+						} else if (result.data && Array.isArray(result.data.records)) {
+							reviewList = result.data.records;
+						} else if (result.data && Array.isArray(result.data.list)) {
+							reviewList = result.data.list;
+						}
+						
+						console.log('📝 订单评价列表:', reviewList);
+						
+						if (reviewList.length > 0) {
+							// 获取第一个评价（假设一个订单只有一个评价）
+							this.orderReview = reviewList[0];
+							this.hasReviewed = true;
+							console.log('✅ 订单已评价:', this.orderReview);
+						} else {
+							this.hasReviewed = false;
+							this.orderReview = null;
+							console.log('📝 订单未评价');
+						}
+					} else {
+						this.hasReviewed = false;
+						this.orderReview = null;
+					}
+				} catch (error) {
+					console.error('❌ 检查评价状态失败:', error);
+					this.hasReviewed = false;
+					this.orderReview = null;
+				}
+			},
+			
+			// 预览文件
+			previewFile(fileUrl, fileName) {
+				if (!fileUrl) {
+					uni.showToast({
+						title: '文件不存在',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				console.log('📄 预览文件:', fileUrl, fileName);
+				
+				// 如果是图片文件
+				if (fileUrl.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+					uni.previewImage({
+						urls: [fileUrl],
+						current: fileUrl,
+						success: () => {
+							console.log('✅ 图片预览成功');
 						},
 						fail: (error) => {
-							console.error('❌ 评价提交请求失败:', error)
-							reject(error)
+							console.error('❌ 图片预览失败:', error);
+							this.handleApiError(error, '预览失败');
 						}
-					})
-				})
+					});
+				} else {
+					// 其他文件类型，尝试在浏览器中打开
+					uni.showToast({
+						title: '暂不支持预览此文件类型',
+						icon: 'none'
+					});
+				}
+			},
+			
+			// 预览设计方案
+			previewDesignScheme(scheme) {
+				console.log('🎨 预览设计方案:', scheme);
+				
+				if (scheme.imageList && scheme.imageList.length > 0) {
+					// 如果有图片列表，预览图片
+					const imageUrls = scheme.imageList.map(img => img.url || img);
+					uni.previewImage({
+						urls: imageUrls,
+						current: imageUrls[0],
+						success: () => {
+							console.log('✅ 设计方案预览成功');
+						},
+						fail: (error) => {
+							console.error('❌ 设计方案预览失败:', error);
+							this.handleApiError(error, '预览失败');
+						}
+					});
+				} else if (scheme.fileUrl) {
+					// 如果有文件URL，预览文件
+					this.previewFile(scheme.fileUrl, scheme.schemeName);
+				} else {
+					uni.showToast({
+						title: '暂无设计方案文件',
+						icon: 'none'
+					});
+				}
+			},
+			
+			// 联系设计师
+			contactDesigner(designerId) {
+				if (!designerId) {
+					uni.showToast({
+						title: '暂无设计师信息',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				console.log('💬 联系设计师，设计师ID:', designerId);
+				uni.navigateTo({
+					url: `/pages/chat/designer?id=${designerId}`
+				});
+			},
+			
+			// 去评价
+			goToReview() {
+				console.log('📝 去评价，订单ID:', this.orderId, '用户ID:', this.userId);
+				uni.navigateTo({
+					url: `/pages/review/review?orderId=${this.orderId}&userId=${this.userId}`
+				});
+			},
+			
+			// 分享订单
+			shareOrder() {
+				console.log('📤 分享订单，订单ID:', this.orderId);
+				uni.showToast({
+					title: '分享功能开发中',
+					icon: 'none'
+				});
+			},
+			
+			// 下拉刷新
+			onRefresh() {
+				if (this.refreshing) return;
+				this.refreshing = true;
+				this.loadOrderDetail();
+			},
+			
+			// 返回上一页
+			goBack() {
+				uni.navigateBack();
+			},
+			
+			// 获取方案状态文本
+			getSchemeStatusText(status) {
+				const statusMap = {
+					'0': '待确认',
+					'1': '待确认',
+					'2': '已确认'
+				};
+				return statusMap[status] || '未知状态';
+			},
+			
+			// 获取订单状态文本
+			getStatusText(status) {
+				return orderService.getOrderStatusText(status);
+			},
+			
+			// 获取订单类型文本
+			getOrderTypeText(type) {
+				return orderService.getOrderTypeText(type);
+			},
+			
+			// 格式化时间
+			formatTime(timeStr) {
+				if (!timeStr) return '--';
+				if (typeof timeStr === 'number') {
+					const date = new Date(timeStr);
+					return date.toLocaleDateString();
+				}
+				return timeStr.split(' ')[0];
+			},
+			
+			// 格式化日期
+			formatDate(dateStr) {
+				if (!dateStr) return '--';
+				if (dateStr.includes('T')) {
+					return dateStr.split('T')[0];
+				}
+				return dateStr.split(' ')[0];
 			},
 			
 			// 统一的错误处理
 			handleApiError(error, defaultMessage = '操作失败') {
-				console.error('API Error:', error)
+				console.error('API Error:', error);
 				
-				let message = defaultMessage
+				let message = defaultMessage;
 				if (error && error.errMsg) {
-					message = error.errMsg
+					message = error.errMsg;
 				} else if (error && error.message) {
-					message = error.message
+					message = error.message;
 				} else if (typeof error === 'string') {
-					message = error
+					message = error;
 				}
 				
 				uni.showToast({
 					title: message,
 					icon: 'none',
 					duration: 3000
-				})
+				});
 				
-				return message
-			},
-			
-			// 格式化时间
-			formatTime(timeStr) {
-				if (!timeStr) return ''
-				if (typeof timeStr === 'number') {
-					const date = new Date(timeStr)
-					return date.toLocaleDateString()
-				}
-				return timeStr.split(' ')[0]
-			},
-			
-			// 返回上一页
-			goBack() {
-				uni.navigateBack()
+				return message;
 			}
+		},
+		
+		onPullDownRefresh() {
+			this.onRefresh();
+			uni.stopPullDownRefresh();
 		}
 	}
 </script>
@@ -404,16 +690,45 @@
 	}
 	
 	/* 内容区域 */
-	.review-content {
+	.content {
 		height: calc(100vh - 120rpx);
 		padding: 30rpx;
 	}
 	
-	/* 卡片样式 */
-	.order-info-card,
-	.designer-info-card,
-	.rating-card,
-	.content-card {
+	/* 状态卡片 */
+	.status-card {
+		background: linear-gradient(135deg, #67C23A, #85CE61);
+		border-radius: 16rpx;
+		padding: 40rpx 30rpx;
+		display: flex;
+		align-items: center;
+		margin-bottom: 30rpx;
+		color: white;
+	}
+	
+	.status-icon {
+		font-size: 60rpx;
+		margin-right: 20rpx;
+	}
+	
+	.status-info {
+		display: flex;
+		flex-direction: column;
+	}
+	
+	.status-text {
+		font-size: 36rpx;
+		font-weight: bold;
+		margin-bottom: 8rpx;
+	}
+	
+	.status-desc {
+		font-size: 26rpx;
+		opacity: 0.9;
+	}
+	
+	/* 信息卡片 */
+	.info-card {
 		background: white;
 		border-radius: 16rpx;
 		padding: 30rpx;
@@ -426,29 +741,80 @@
 		font-weight: bold;
 		color: #333;
 		margin-bottom: 20rpx;
+		border-left: 6rpx solid #3498db;
+		padding-left: 20rpx;
 	}
 	
-	/* 订单信息 */
-	.order-details {
+	/* 信息列表 */
+	.info-list {
+		display: flex;
+		flex-direction: column;
+		gap: 20rpx;
+	}
+	
+	.info-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	
+	.info-label {
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	.info-value {
+		font-size: 28rpx;
+		color: #333;
+		font-weight: 500;
+	}
+	
+	.info-value.amount {
+		color: #e74c3c;
+		font-weight: bold;
+		font-size: 32rpx;
+	}
+	
+	.status-completed {
+		color: #67C23A;
+		font-weight: bold;
+	}
+	
+	/* 项目内容 */
+	.project-content {
 		display: flex;
 		flex-direction: column;
 		gap: 15rpx;
 	}
 	
-	.order-number,
-	.order-time,
-	.order-amount {
+	.project-title {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: #333;
+	}
+	
+	.project-desc {
 		font-size: 28rpx;
 		color: #666;
+		line-height: 1.5;
 	}
 	
-	.order-amount {
-		color: #e74c3c;
-		font-weight: bold;
+	.project-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 15rpx;
 	}
 	
-	/* 设计师信息 */
-	.designer-details {
+	.tag {
+		font-size: 24rpx;
+		color: #666;
+		background: #f8f9fa;
+		padding: 8rpx 16rpx;
+		border-radius: 20rpx;
+	}
+	
+	/* 设计师内容 */
+	.designer-content {
 		display: flex;
 		align-items: center;
 	}
@@ -467,6 +833,7 @@
 	}
 	
 	.designer-info {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
 	}
@@ -481,81 +848,206 @@
 	.designer-role {
 		font-size: 26rpx;
 		color: #999;
+		margin-bottom: 5rpx;
 	}
 	
-	/* 评分区域 */
-	.rating-section {
+	.designer-phone {
+		font-size: 26rpx;
+		color: #666;
+	}
+	
+	.contact-btn {
+		background: #3498db;
+		color: white;
+		padding: 15rpx 30rpx;
+		border-radius: 25rpx;
+		font-size: 26rpx;
+	}
+	
+	/* 评价内容 */
+	.review-content {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
+		gap: 25rpx;
 	}
 	
-	.stars-container {
+	.rating-section {
 		display: flex;
-		gap: 20rpx;
-		margin-bottom: 20rpx;
+		align-items: center;
+		justify-content: space-between;
 	}
 	
-	.star {
-		font-size: 60rpx;
-		transition: all 0.3s;
-	}
-	
-	.star-active {
-		color: #f39c12;
-		transform: scale(1.1);
-	}
-	
-	.star-inactive {
-		color: #ddd;
-	}
-	
-	.rating-text {
+	.rating-label {
 		font-size: 28rpx;
 		color: #666;
 	}
 	
-	/* 评价内容 */
-	.review-textarea {
-		width: 100%;
-		height: 300rpx;
-		padding: 20rpx;
-		border: 2rpx solid #eee;
-		border-radius: 12rpx;
+	.rating-stars {
+		display: flex;
+		align-items: center;
+	}
+	
+	.star {
+		font-size: 36rpx;
+		margin-right: 8rpx;
+	}
+	
+	.star-active {
+		color: #ffc107;
+	}
+	
+	.star-inactive {
+		color: #e0e0e0;
+	}
+	
+	.rating-value {
 		font-size: 28rpx;
-		line-height: 1.5;
-		background: #fafafa;
-	}
-	
-	.word-count {
-		text-align: right;
-		font-size: 24rpx;
-		color: #999;
-		margin-top: 10rpx;
-	}
-	
-	/* 提交按钮 */
-	.submit-section {
-		padding: 40rpx 0;
-	}
-	
-	.submit-btn {
-		width: 100%;
-		height: 88rpx;
-		background: linear-gradient(135deg, #3498db, #2980b9);
-		color: white;
-		border: none;
-		border-radius: 44rpx;
-		font-size: 32rpx;
+		color: #ff6b35;
 		font-weight: bold;
 	}
 	
-	.btn-disabled {
-		background: #ccc !important;
-		color: #999 !important;
+	.review-text-section {
+		display: flex;
+		flex-direction: column;
+		gap: 15rpx;
 	}
 	
-	.submit-btn:not(.btn-disabled):active {
-		transform: scale(0.98);
+	.review-label {
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	.review-text {
+		font-size: 28rpx;
+		color: #333;
+		line-height: 1.6;
+		background: #f8f9fa;
+		padding: 20rpx;
+		border-radius: 12rpx;
+		border-left: 4rpx solid #3498db;
+	}
+	
+	.review-time {
+		text-align: right;
+	}
+	
+	.review-time-text {
+		font-size: 24rpx;
+		color: #999;
+	}
+	
+	/* 文件区域 */
+	.file-section {
+		display: flex;
+		flex-direction: column;
+		gap: 20rpx;
+	}
+	
+	.file-item {
+		display: flex;
+		align-items: center;
+		padding: 25rpx;
+		background: #f8f9fa;
+		border-radius: 12rpx;
+		border: 1rpx solid #e9ecef;
+	}
+	
+	.file-icon {
+		font-size: 48rpx;
+		margin-right: 20rpx;
+	}
+	
+	.file-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	
+	.file-name {
+		font-size: 28rpx;
+		font-weight: 500;
+		color: #333;
+		margin-bottom: 8rpx;
+	}
+	
+	.file-desc {
+		font-size: 24rpx;
+		color: #999;
+	}
+	
+	.file-action {
+		color: #3498db;
+		font-size: 26rpx;
+	}
+	
+	/* 操作区域 */
+	.action-section {
+		display: flex;
+		gap: 20rpx;
+		padding: 40rpx 0;
+	}
+	
+	.action-btn {
+		flex: 1;
+		height: 80rpx;
+		border: none;
+		border-radius: 40rpx;
+		font-size: 28rpx;
+		font-weight: bold;
+	}
+	
+	.action-btn.primary {
+		background: linear-gradient(135deg, #3498db, #2980b9);
+		color: white;
+	}
+	
+	.action-btn.secondary {
+		background: #f8f9fa;
+		color: #666;
+		border: 2rpx solid #e9ecef;
+	}
+	
+	/* 加载状态 */
+	.loading-state {
+		text-align: center;
+		padding: 60rpx;
+	}
+	
+	.loading-text {
+		font-size: 28rpx;
+		color: #999;
+	}
+	
+	/* 空状态 */
+	.empty-state {
+		text-align: center;
+		padding: 100rpx 30rpx;
+	}
+	
+	.empty-icon {
+		font-size: 120rpx;
+		margin-bottom: 30rpx;
+	}
+	
+	.empty-text {
+		font-size: 32rpx;
+		color: #333;
+		margin-bottom: 15rpx;
+	}
+	
+	.empty-desc {
+		font-size: 28rpx;
+		color: #999;
+	}
+	
+	/* 刷新容器 */
+	.refresh-container {
+		text-align: center;
+		padding: 20rpx;
+	}
+	
+	.refresh-text {
+		font-size: 28rpx;
+		color: #999;
 	}
 </style>

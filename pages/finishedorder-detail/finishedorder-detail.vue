@@ -90,6 +90,44 @@
 				</view>
 			</view>
 
+			<!-- 评价信息 -->
+			<view class="info-card" v-if="hasReviewed && orderReview">
+				<view class="card-title">订单评价</view>
+				<view class="review-content">
+					<!-- 评分 -->
+					<view class="rating-section">
+						<text class="rating-label">综合评分</text>
+						<view class="rating-stars">
+							<text v-for="i in 5" :key="i" class="star" 
+								  :class="i <= orderReview.rating ? 'star-active' : 'star-inactive'">
+								{{ i <= orderReview.rating ? '★' : '☆' }}
+							</text>
+						</view>
+						<text class="rating-value">{{ orderReview.rating }}分</text>
+					</view>
+					
+					<!-- 评价内容 -->
+					<view class="review-text-section" v-if="orderReview.content">
+						<text class="review-label">评价内容</text>
+						<text class="review-text">{{ orderReview.content }}</text>
+					</view>
+					
+					<!-- 设计师回复 -->
+					<view class="reply-section" v-if="orderReview.replyContent">
+						<text class="reply-label">设计师回复</text>
+						<text class="reply-text">{{ orderReview.replyContent }}</text>
+						<text class="reply-time" v-if="orderReview.replyTime">
+							回复时间：{{ formatTime(orderReview.replyTime) }}
+						</text>
+					</view>
+					
+					<!-- 评价时间 -->
+					<view class="review-time">
+						<text class="review-time-text">评价时间：{{ formatTime(orderReview.createTime) }}</text>
+					</view>
+				</view>
+			</view>
+
 			<!-- 合同文件 -->
 			<view class="info-card" v-if="orderInfo.contractUrl">
 				<view class="card-title">合同文件</view>
@@ -166,6 +204,7 @@
 	import { orderService, OrderStatus, OrderType } from '@/api/order.js'
 	import { getDesignSchemeList } from '@/api/designScheme.js'
 	import { getUserProfile } from '@/api/users.js'
+	import { orderReviewApi } from '@/api/orderReview.js' // 导入评价API
 
 	export default {
 		data() {
@@ -199,7 +238,8 @@
 				designSchemes: [],
 				
 				// 评价状态
-				hasReviewed: false
+				hasReviewed: false,
+				orderReview: null // 评价详情
 			}
 		},
 		
@@ -398,15 +438,72 @@
 				}
 			},
 			
-			// 检查评价状态
+			// 检查评价状态 - 根据数据库表结构修改
 			async checkReviewStatus() {
 				try {
-					// 这里可以调用评价API检查是否已评价
-					// 暂时设置为未评价
-					this.hasReviewed = false;
+					console.log('🔍 检查订单评价状态，订单ID:', this.orderId);
+					
+					// 使用你提供的getList接口，传入orderId参数
+					const result = await orderReviewApi.getList({ 
+						orderId: this.orderId 
+					});
+					
+					console.log('📋 评价查询结果:', result);
+					
+					if (result && result.code === 200) {
+						let reviewList = [];
+						
+						// 根据你的API响应结构解析数据
+						if (Array.isArray(result.data)) {
+							reviewList = result.data;
+						} else if (result.data && Array.isArray(result.data.records)) {
+							reviewList = result.data.records;
+						} else if (result.data && Array.isArray(result.data.list)) {
+							reviewList = result.data.list;
+						} else if (Array.isArray(result.data.data)) {
+							reviewList = result.data.data;
+						} else if (Array.isArray(result.records)) {
+							reviewList = result.records;
+						} else if (Array.isArray(result.list)) {
+							reviewList = result.list;
+						}
+						
+						console.log('📝 订单评价列表:', reviewList);
+						
+						if (reviewList && reviewList.length > 0) {
+							// 获取第一个评价（假设一个订单只有一个评价）
+							const review = reviewList[0];
+							
+							// 根据数据库字段映射评价信息
+							this.orderReview = {
+								orderReviewId: review.orderReviewId,
+								orderId: review.orderId,
+								reviewerId: review.reviewerId,
+								rating: review.rating,           // 评分(1-5分)
+								content: review.content,         // 评价内容
+								createTime: review.createTime,   // 评价时间
+								updateTime: review.updateTime,   // 更新时间
+								replyContent: review.replyContent, // 承接者回复
+								replyTime: review.replyTime,     // 回复时间
+								remark: review.remark            // 备注
+							};
+							
+							this.hasReviewed = true;
+							console.log('✅ 订单已评价:', this.orderReview);
+						} else {
+							this.hasReviewed = false;
+							this.orderReview = null;
+							console.log('📝 订单未评价');
+						}
+					} else {
+						this.hasReviewed = false;
+						this.orderReview = null;
+						console.log('📝 评价查询失败或未评价');
+					}
 				} catch (error) {
 					console.error('❌ 检查评价状态失败:', error);
 					this.hasReviewed = false;
+					this.orderReview = null;
 				}
 			},
 			
@@ -801,6 +898,107 @@
 		padding: 15rpx 30rpx;
 		border-radius: 25rpx;
 		font-size: 26rpx;
+	}
+	
+	/* 评价内容 */
+	.review-content {
+		display: flex;
+		flex-direction: column;
+		gap: 25rpx;
+	}
+	
+	.rating-section {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	
+	.rating-label {
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	.rating-stars {
+		display: flex;
+		align-items: center;
+	}
+	
+	.star {
+		font-size: 36rpx;
+		margin-right: 8rpx;
+	}
+	
+	.star-active {
+		color: #ffc107;
+	}
+	
+	.star-inactive {
+		color: #e0e0e0;
+	}
+	
+	.rating-value {
+		font-size: 28rpx;
+		color: #ff6b35;
+		font-weight: bold;
+	}
+	
+	.review-text-section {
+		display: flex;
+		flex-direction: column;
+		gap: 15rpx;
+	}
+	
+	.review-label {
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	.review-text {
+		font-size: 28rpx;
+		color: #333;
+		line-height: 1.6;
+		background: #f8f9fa;
+		padding: 20rpx;
+		border-radius: 12rpx;
+		border-left: 4rpx solid #3498db;
+	}
+	
+	/* 设计师回复样式 */
+	.reply-section {
+		display: flex;
+		flex-direction: column;
+		gap: 15rpx;
+		padding: 20rpx;
+		background: #f0f8ff;
+		border-radius: 12rpx;
+		border-left: 4rpx solid #3498db;
+	}
+	
+	.reply-label {
+		font-size: 28rpx;
+		color: #3498db;
+		font-weight: bold;
+	}
+	
+	.reply-text {
+		font-size: 28rpx;
+		color: #333;
+		line-height: 1.6;
+	}
+	
+	.reply-time {
+		font-size: 24rpx;
+		color: #999;
+		text-align: right;
+	}
+	
+	.review-time {
+		text-align: right;
+	}
+	
+	.review-time-text {
+		font-size: 24rpx;
+		color: #999;
 	}
 	
 	/* 文件区域 */
