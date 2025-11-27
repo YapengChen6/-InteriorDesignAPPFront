@@ -738,14 +738,14 @@
 	}
 	
 	.stat-card {
-		background: white;
-		border-radius: 32rpx;
-		box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.05);
-		padding: 32rpx;
-		text-align: center;
-		flex: 1;
-		margin: 0 16rpx;
-		transition: all 0.3s;
+	    background: linear-gradient(135deg, #f0fff3, #e6fff0); /* 浅绿色渐变 */
+	    border-radius: 32rpx;
+	    box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.05);
+	    padding: 32rpx;
+	    text-align: center;
+	    flex: 1;
+	    margin: 0 16rpx;
+	    transition: all 0.3s;
 	}
 	
 	.stat-card:first-child {

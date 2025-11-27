@@ -675,6 +675,14 @@ export const utils = {
   }
 }
 
+export function getImagesPreview(fileUrl) {
+  return request({
+    url: '/api/media/preview',
+    method: 'get',
+    params: { fileUrl } // 或者可能是 query 参数，使用 params
+  })
+}
+
 // ==================== 默认导出 ====================
 
 export default {

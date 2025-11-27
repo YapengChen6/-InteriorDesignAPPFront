@@ -10,9 +10,6 @@
               <button @click="goToChatList" class="chat-btn">
                 <text class="btn-text">💬 聊天</text>
               </button>
-              <button @click="toggleBatchMode" class="batch-btn" :class="{ active: batchMode }">
-                <text class="btn-text">{{ batchMode ? '取消' : '管理' }}</text>
-              </button>
               <button @click="markAllAsRead" class="mark-all-read-btn" :disabled="!hasUnreadMessages || loading">
                 <text class="btn-text">{{ loading ? '处理中...' : '全部已读' }}</text>
               </button>
@@ -89,20 +86,9 @@
       <view
         v-for="message in filteredMessages"
         :key="message.messageId"
-        :class="['message-item', { unread: !message.read, 'batch-selected': selectedMessages.includes(message.messageId) }]"
-        @click="onMessageClick(message)"
+        :class="['message-item', { unread: !message.read }]"
+        @click="openMessage(message)"
       >
-        <!-- 左侧勾选框（批量模式下显示） -->
-        <view v-if="batchMode" class="message-checkbox">
-          <view 
-            class="checkbox" 
-            :class="{ checked: selectedMessages.includes(message.messageId) }"
-            @click.stop="toggleMessageSelection(message.messageId)"
-          >
-            <text v-if="selectedMessages.includes(message.messageId)" class="check-icon">✓</text>
-          </view>
-        </view>
-
         <!-- 左侧图标区域 -->
         <view class="message-left">
           <view class="message-avatar" :class="message.type">
@@ -123,14 +109,9 @@
 
         <!-- 右侧操作区域 -->
         <view class="message-right">
-          <!-- 未读气泡 -->
-          <view v-if="!message.read" class="unread-badge">
-            <text class="unread-count">{{ getUnreadCount(message) > 99 ? '99+' : getUnreadCount(message) }}</text>
-          </view>
-          <!-- 已读按钮（仅在未读时显示） -->
-          <view v-if="!message.read" class="message-actions">
-            <button @click.stop="markAsRead(message)" class="action-btn read-btn" :disabled="loading">
-              <text class="btn-text">已读</text>
+          <view class="message-actions">
+            <button @click.stop="deleteMessage(message)" class="action-btn delete-btn" :disabled="loading">
+              <text class="btn-text">删除</text>
             </button>
           </view>
         </view>
@@ -152,24 +133,23 @@
     <!-- 消息详情弹窗 -->
     <uni-popup ref="messagePopup" type="center" background-color="#fff" :is-mask-click="false">
       <view class="popup-content" v-if="selectedMessage">
-        <!-- 右上角关闭按钮 -->
-        <view class="close-btn" @click="closePopup">
-          <text class="close-icon">×</text>
-        </view>
-        
         <view class="popup-header">
           <text class="popup-title">{{ selectedMessage.title }}</text>
+          <button class="close-btn" @click="closePopup">
+            <text class="close-icon">×</text>
+          </button>
         </view>
         <view class="popup-body">
           <view class="message-meta">
-            <text class="sender">对方用户昵称：{{ selectedMessage.sender }}</text>
-            <text class="time">发送时间：{{ formatFullTime(selectedMessage.time) }}</text>
+            <text class="sender">发件人：{{ selectedMessage.sender }}</text>
+            <text class="time">{{ formatFullTime(selectedMessage.time) }}</text>
           </view>
           <view class="message-detail">
             <text>{{ selectedMessage.content }}</text>
           </view>
         </view>
         <view class="popup-footer">
+          <button class="popup-btn cancel-btn" @click="closePopup">关闭</button>
           <button
             v-if="selectedMessage.type === 'chat-request' && !selectedMessage.read"
             class="popup-btn confirm-btn"
@@ -195,39 +175,6 @@
       </view>
     </uni-popup>
 
-    <!-- 批量操作栏 -->
-    <view v-if="batchMode && selectedMessages.length > 0" class="batch-actions-bar">
-      <view class="batch-info">
-        <text class="batch-count">已选择 {{ selectedMessages.length }} 条消息</text>
-      </view>
-      <view class="batch-buttons">
-        <button @click="batchMarkAsRead" class="batch-action-btn mark-read-btn" :disabled="loading">
-          <text class="btn-text">标记已读</text>
-        </button>
-        <button @click="showDeleteConfirm" class="batch-action-btn delete-btn" :disabled="loading">
-          <text class="btn-text">删除</text>
-        </button>
-      </view>
-    </view>
-
-    <!-- 删除确认弹窗 -->
-    <uni-popup ref="deleteConfirmPopup" type="center" background-color="#fff" :is-mask-click="false">
-      <view class="confirm-popup">
-        <view class="confirm-header">
-          <text class="confirm-title">确认删除</text>
-        </view>
-        <view class="confirm-body">
-          <text class="confirm-text">确定要删除选中的 {{ selectedMessages.length }} 条消息吗？删除后无法恢复。</text>
-        </view>
-        <view class="confirm-footer">
-          <button class="confirm-btn cancel-btn" @click="closeDeleteConfirm">取消</button>
-          <button class="confirm-btn delete-btn" @click="confirmDelete" :disabled="loading">
-            <text class="btn-text">{{ loading ? '删除中...' : '确认删除' }}</text>
-          </button>
-        </view>
-      </view>
-    </uni-popup>
-
     <!-- 操作反馈 Toast -->
     <view v-if="toast.show" class="toast-message" :class="toast.type">
       <text class="toast-icon">{{ toast.icon }}</text>
@@ -242,7 +189,7 @@ import {
   getUnreadMessages,
   markMessageAsRead,
   deleteMessage
-} from '@/api/message_new'
+} from '@/api/message'
 import request from '@/utils/request'
 import { getUserProfile } from '@/api/users'
 
@@ -279,10 +226,7 @@ export default {
       currentUser: {
         userId: 1,
         conversationId: 1
-      },
-      // 批量操作相关
-      batchMode: false,
-      selectedMessages: []
+      }
     }
   },
   computed: {
@@ -316,39 +260,11 @@ export default {
       const icons = { project: '🏠', system: '🔔', chat: '💬', 'chat-request': '🤝' }
       return icons[type] || '✉️'
     },
-    getUnreadCount(message) {
-      // 返回消息的未读数量，最多显示99+
-      if (!message || message.read) return 0
-      return message.unreadCount || 1
-    },
     formatTime(time) {
-      if (!time) return '暂无时间'
-      
-      // 确保 time 是 Date 对象
-      if (!(time instanceof Date)) {
-        try {
-          // 如果是字符串，替换 - 为 / 以兼容 iOS
-          if (typeof time === 'string') {
-            time = new Date(time.replace(/-/g, '/'))
-          } else {
-            time = new Date(time)
-          }
-        } catch (e) {
-          console.error('时间解析失败:', time, e)
-          return '时间错误'
-        }
-      }
-      
-      // 检查日期是否有效
-      if (isNaN(time.getTime())) {
-        console.error('无效的日期:', time)
-        return '无效时间'
-      }
-      
+      if (!(time instanceof Date)) time = new Date(time)
       const now = new Date()
       const diff = now - time
       const oneDay = 24 * 60 * 60 * 1000
-      
       if (diff < oneDay) {
         return time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
       } else if (diff < 7 * oneDay) {
@@ -358,29 +274,7 @@ export default {
       return `${time.getMonth() + 1}/${time.getDate()}`
     },
     formatFullTime(time) {
-      if (!time) return '暂无时间'
-      
-      // 确保 time 是 Date 对象
-      if (!(time instanceof Date)) {
-        try {
-          // 如果是字符串，替换 - 为 / 以兼容 iOS
-          if (typeof time === 'string') {
-            time = new Date(time.replace(/-/g, '/'))
-          } else {
-            time = new Date(time)
-          }
-        } catch (e) {
-          console.error('时间解析失败:', time, e)
-          return '时间错误'
-        }
-      }
-      
-      // 检查日期是否有效
-      if (isNaN(time.getTime())) {
-        console.error('无效的日期:', time)
-        return '无效时间'
-      }
-      
+      if (!(time instanceof Date)) time = new Date(time)
       return time.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
@@ -407,82 +301,30 @@ export default {
             console.warn('读取本地 userId 失败:', e)
           }
         }
-        console.log('📩 加载未读消息')
-        const res = await getUnreadMessages()
+        console.log('📩 加载未读消息, userId =', userId)
+        const res = await getUnreadMessages(userId)
         const list = (res && res.data) || []
-        
-        // 调试：查看第一条消息的原始数据
-        if (list.length > 0) {
-          console.log('🔍 第一条消息原始数据:', JSON.stringify(list[0], null, 2))
-        }
-        
         this.messages = list.map((item, index) => {
-          // 解析时间，支持多种格式
-          let time = null
-          if (item.sendTime) {
-            try {
-              // 判断是否为时间戳（数字或纯数字字符串）
-              const timestamp = typeof item.sendTime === 'number' 
-                ? item.sendTime 
-                : (typeof item.sendTime === 'string' && /^\d+$/.test(item.sendTime))
-                  ? parseInt(item.sendTime)
-                  : null
-              
-              if (timestamp) {
-                // 时间戳格式
-                time = new Date(timestamp)
-              } else if (typeof item.sendTime === 'string') {
-                // 日期字符串格式，替换 - 为 / 兼容 iOS
-                const timeStr = item.sendTime.replace(/-/g, '/')
-                time = new Date(timeStr)
-              }
-              
-              // 检查日期是否有效
-              if (!time || isNaN(time.getTime())) {
-                console.warn('⚠️ 时间解析失败，原始值:', item.sendTime)
-                time = null
-              }
-            } catch (e) {
-              console.error('❌ 时间解析异常:', item.sendTime, e)
-              time = null
-            }
-          }
-          
-          // 如果时间解析失败，使用当前时间作为最后的默认值
-          if (!time) {
-            console.warn('⚠️ 消息没有有效时间，使用当前时间')
-            time = new Date()
-          }
+          const time = item.sendTime ? new Date(item.sendTime) : new Date()
           let type = 'system'
           let title = '未读消息 #' + (item.messageId || index + 1)
           let content = item.content || ''
-          // 将系统消息转换为实际发送消息的人
-          let sender = item.senderName || (item.senderId ? `用户${item.senderId}` : '系统消息')
+          let sender = item.senderName || '系统消息'
           let fromUserId = null
-          
-          // 处理聊天请求消息
           if (item.messageType === 3 && item.content) {
             try {
               const parsed = JSON.parse(item.content)
               if (parsed && parsed.type === 'CHAT_REQUEST') {
                 type = 'chat-request'
-                fromUserId = parsed.fromUserId || item.senderId || null
-                const fromName = parsed.fromNickName || sender || '对方用户'
+                fromUserId = parsed.fromUserId || null
+                const fromName = parsed.fromNickName || (parsed.fromUserId ? `用户${parsed.fromUserId}` : '对方')
                 title = `${fromName} 请求和你聊天`
-                // 列表与详情中统一展示为固定文案
-                content = '对方用户申请与您进行沟通'
+                content = '对方向你发起了聊天请求，点击“同意聊天”开始会话。'
                 sender = fromName
               }
             } catch (e) {
               console.warn('解析系统消息内容失败:', item.content, e)
             }
-          }
-          
-          // 对于普通消息，如果有发送者信息，使用发送者作为消息来源
-          if (item.senderId && !sender.includes('系统')) {
-            type = item.messageType === 1 ? 'chat' : 'system'
-            title = sender
-            content = item.content || content
           }
           return {
             id: item.messageId || index + 1,
@@ -498,8 +340,7 @@ export default {
             rawContent: item.content,
             fromUserId,
             conversationId: item.conversationId,
-            senderId: item.senderId,
-            unreadCount: item.readStatus === 1 ? 0 : 1 // 未读消息数量
+            senderId: item.senderId
           }
         })
         this.hasMore = false
@@ -517,7 +358,7 @@ export default {
     },
     async updateUnreadCounts() {
       try {
-        const res = await getUnreadCount()
+        const res = await getUnreadCount(this.currentUser.userId)
         if (res.code === 200) {
           const totalUnread = res.data
           const projectUnread = this.messages.filter(m => m.type === 'project' && !m.read).length
@@ -536,7 +377,6 @@ export default {
     openMessage(message) {
       this.selectedMessage = message
       this.$refs.messagePopup.open()
-      // 点击查看消息后自动标记为已读
       if (!message.read && message.type !== 'chat-request') {
         this.markAsRead(message)
       }
@@ -707,86 +547,6 @@ export default {
     },
     goToChatList() {
       uni.navigateTo({ url: '/pages/chat/chatMain' })
-    },
-    // 批量操作相关方法
-    toggleBatchMode() {
-      this.batchMode = !this.batchMode
-      if (!this.batchMode) {
-        this.selectedMessages = []
-      }
-    },
-    onMessageClick(message) {
-      if (this.batchMode) {
-        this.toggleMessageSelection(message.messageId)
-      } else {
-        this.openMessage(message)
-      }
-    },
-    toggleMessageSelection(messageId) {
-      const index = this.selectedMessages.indexOf(messageId)
-      if (index > -1) {
-        this.selectedMessages.splice(index, 1)
-      } else {
-        this.selectedMessages.push(messageId)
-      }
-    },
-    async batchMarkAsRead() {
-      if (this.loading || this.selectedMessages.length === 0) return
-      try {
-        this.loading = true
-        const promises = this.selectedMessages.map(messageId => {
-          const message = this.messages.find(m => m.messageId === messageId)
-          return message ? markMessageAsRead(messageId, this.currentUser.userId) : Promise.resolve()
-        })
-        await Promise.all(promises)
-        
-        // 更新本地消息状态
-        this.messages.forEach(message => {
-          if (this.selectedMessages.includes(message.messageId)) {
-            message.read = true
-          }
-        })
-        
-        await this.updateUnreadCounts()
-        this.selectedMessages = []
-        this.batchMode = false
-        this.showToast(`已标记 ${promises.length} 条消息为已读`, '✓', 'success')
-      } catch (e) {
-        console.error('批量标记已读异常:', e)
-        this.showToast('操作失败', '❌', 'error')
-      } finally {
-        this.loading = false
-      }
-    },
-    showDeleteConfirm() {
-      this.$refs.deleteConfirmPopup.open()
-    },
-    closeDeleteConfirm() {
-      this.$refs.deleteConfirmPopup.close()
-    },
-    async confirmDelete() {
-      if (this.loading || this.selectedMessages.length === 0) return
-      try {
-        this.loading = true
-        const promises = this.selectedMessages.map(messageId => {
-          return deleteMessage(messageId, this.currentUser.userId)
-        })
-        await Promise.all(promises)
-        
-        // 从本地列表中移除
-        this.messages = this.messages.filter(message => !this.selectedMessages.includes(message.messageId))
-        
-        await this.updateUnreadCounts()
-        this.selectedMessages = []
-        this.batchMode = false
-        this.closeDeleteConfirm()
-        this.showToast(`已删除 ${promises.length} 条消息`, '✓', 'success')
-      } catch (e) {
-        console.error('批量删除异常:', e)
-        this.showToast('删除失败', '❌', 'error')
-      } finally {
-        this.loading = false
-      }
     }
   },
   async onLoad() {
@@ -853,8 +613,7 @@ export default {
   align-items: center;
 }
 .chat-btn,
-.mark-all-read-btn,
-.batch-btn {
+.mark-all-read-btn {
   margin-left: 16rpx;
   padding: 8rpx 20rpx;
   border-radius: 24rpx;
@@ -865,15 +624,6 @@ export default {
   background-color: #007aff;
 }
 .chat-btn .btn-text {
-  color: #ffffff;
-}
-.batch-btn {
-  background-color: #f5f5f5;
-}
-.batch-btn.active {
-  background-color: #007aff;
-}
-.batch-btn.active .btn-text {
   color: #ffffff;
 }
 .mark-all-read-btn:disabled {
@@ -1015,39 +765,9 @@ export default {
   background-color: #ffffff;
   display: flex;
   flex-direction: row;
-  position: relative;
 }
 .message-item.unread {
   background-color: #eaf3ff;
-}
-.message-item.batch-selected {
-  background-color: #f0f8ff;
-  border: 2rpx solid #007aff;
-}
-.message-checkbox {
-  margin-right: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.checkbox {
-  width: 36rpx;
-  height: 36rpx;
-  border-radius: 50%;
-  border: 2rpx solid #cccccc;
-  background-color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.checkbox.checked {
-  background-color: #007aff;
-  border-color: #007aff;
-}
-.check-icon {
-  color: #ffffff;
-  font-size: 20rpx;
-  font-weight: bold;
 }
 .message-left {
   margin-right: 16rpx;
@@ -1091,37 +811,11 @@ export default {
 .message-right {
   margin-left: 12rpx;
   justify-content: center;
-  align-items: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-.unread-badge {
-  background-color: #ff3b30;
-  border-radius: 18rpx;
-  padding: 2rpx 10rpx;
-  min-width: 36rpx;
-  height: 36rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.unread-count {
-  color: #ffffff;
-  font-size: 20rpx;
-  font-weight: bold;
-  line-height: 1;
 }
 .message-actions .action-btn {
   padding: 4rpx 12rpx;
   border-radius: 24rpx;
-  background-color: #007aff;
-}
-.message-actions .action-btn.read-btn {
-  background-color: #34c759;
-}
-.message-actions .action-btn:disabled {
-  background-color: #cccccc;
+  background-color: #ff3b30;
 }
 .message-actions .btn-text {
   color: #ffffff;
@@ -1142,94 +836,6 @@ export default {
   font-size: 24rpx;
   color: #999999;
 }
-
-/* 批量操作栏样式 */
-.batch-actions-bar {
-  position: fixed;
-  bottom: 80rpx; /* 上移80rpx，避免被底部导航栏遮挡 */
-  left: 0;
-  right: 0;
-  background-color: #ffffff;
-  border-top: 1rpx solid #f0f0f0;
-  padding: 20rpx 24rpx;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 10;
-  box-shadow: 0 -2rpx 8rpx rgba(0, 0, 0, 0.1); /* 添加阴影效果 */
-}
-.batch-info {
-  flex: 1;
-}
-.batch-count {
-  font-size: 26rpx;
-  color: #333333;
-  font-weight: 500;
-}
-.batch-buttons {
-  display: flex;
-  gap: 16rpx;
-}
-.batch-action-btn {
-  padding: 12rpx 24rpx;
-  border-radius: 24rpx;
-  border: none;
-  font-size: 24rpx;
-}
-.batch-action-btn.mark-read-btn {
-  background-color: #34c759;
-}
-.batch-action-btn.delete-btn {
-  background-color: #ff3b30;
-}
-.batch-action-btn .btn-text {
-  color: #ffffff;
-}
-
-/* 确认弹窗样式 */
-.confirm-popup {
-  width: 560rpx;
-  background-color: #ffffff;
-  border-radius: 16rpx;
-  overflow: hidden;
-}
-.confirm-header {
-  padding: 32rpx 24rpx 16rpx 24rpx;
-  text-align: center;
-}
-.confirm-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333333;
-}
-.confirm-body {
-  padding: 16rpx 24rpx 32rpx 24rpx;
-  text-align: center;
-}
-.confirm-text {
-  font-size: 26rpx;
-  color: #666666;
-  line-height: 1.5;
-}
-.confirm-footer {
-  display: flex;
-  border-top: 1rpx solid #f0f0f0;
-}
-.confirm-btn {
-  flex: 1;
-  padding: 24rpx 0;
-  border: none;
-  background-color: transparent;
-  font-size: 28rpx;
-}
-.confirm-btn.cancel-btn {
-  color: #666666;
-  border-right: 1rpx solid #f0f0f0;
-}
-.confirm-btn.delete-btn {
-  color: #ff3b30;
-  font-weight: 500;
-}
 .no-more {
   padding: 24rpx 0 40rpx 0;
   align-items: center;
@@ -1241,15 +847,13 @@ export default {
 }
 .popup-content {
   padding: 24rpx 24rpx 32rpx 24rpx;
-  position: relative;
 }
 .popup-header {
   display: flex;
   flex-direction: row;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 16rpx;
-  padding-right: 40rpx; /* 为右上角关闭按钮预留空间 */
 }
 .popup-title {
   font-size: 30rpx;
@@ -1257,21 +861,11 @@ export default {
   color: #333333;
 }
 .close-btn {
-  position: absolute;
-  top: 16rpx;
-  right: 16rpx;
-  width: 40rpx;
-  height: 40rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background-color: #f5f5f5;
+  padding: 4rpx 8rpx;
 }
 .close-icon {
-  font-size: 20rpx; /* 约为字体的1/3大小 */
-  color: #666666;
-  line-height: 1;
+  font-size: 28rpx;
+  color: #999999;
 }
 .popup-body {
   margin-bottom: 24rpx;
@@ -1280,15 +874,6 @@ export default {
   font-size: 24rpx;
   color: #999999;
   margin-bottom: 12rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-.sender {
-  color: #666666;
-}
-.time {
-  color: #999999;
 }
 .message-detail {
   font-size: 26rpx;
@@ -1304,6 +889,9 @@ export default {
   padding: 10rpx 24rpx;
   border-radius: 24rpx;
   margin-left: 12rpx;
+}
+.cancel-btn {
+  background-color: #f5f5f5;
 }
 .confirm-btn {
   background-color: #007aff;
