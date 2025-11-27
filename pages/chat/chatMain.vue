@@ -317,6 +317,41 @@ import * as conversationApi from '@/api/conversation'
 import * as messageApi from '@/api/message'
 import { getRoleSwitchInfo, searchUsers } from '@/api/users'
 import { getUnreadMessages } from '@/api/message_new'
+// 导入新创建的工具函数
+import { formatTime, parseDate, normalizeBackendTime, getValidTimestamp, isWithinTimeWindow } from '@/utils/timeUtils'
+import { 
+  createTextMessage, 
+  createMediaMessage, 
+  createOrderRequestMessage, 
+  createReadConfirmMessage,
+  processReceivedMessage,
+  determineMessageSender,
+  canSendOrderRequest,
+  shouldMergeMessages as utilShouldMergeMessages,
+  MESSAGE_TYPES,
+  ACTION_TYPES,
+  USER_ROLES
+} from '@/utils/websocketUtils'
+import { 
+  ROLE_MAP,
+  normalizeUserRole,
+  convertConversationsToChats,
+  convertMessagesToChatRequests,
+  filterChatsByRole,
+  filterChatsBySearch,
+  updateCategoryCount as utilUpdateCategoryCount,
+  updateChatLastMessage as utilUpdateChatLastMessage,
+  updateLocalUnreadCount as utilUpdateLocalUnreadCount,
+  incrementUnreadCount as utilIncrementUnreadCount
+} from '@/utils/chatDataUtils'
+import { 
+  validateTextMessage, 
+  validatePhoneNumber, 
+  validateMessageParams,
+  validateChatRequestParams,
+  createErrorResponse,
+  createSuccessResponse
+} from '@/utils/messageValidation'
 
 export default {
   name: 'ChatMain',
@@ -357,33 +392,8 @@ export default {
       pendingConversationId: 0,
       pendingOtherUserId: 0,
       
-      // 角色映射 - 与我的页面保持一致
-      roleMap: {
-        user: {
-          name: '普通用户',
-          userRole: 1,
-          icon: 'icon-user',
-          desc: '浏览内容、购买商品'
-        },
-        designer: {
-          name: '设计师',
-          userRole: 2,
-          icon: 'icon-paint-brush',
-          desc: '发布作品、管理内容'
-        },
-        material_supplier: {
-          name: '材料商',
-          userRole: 4,
-          icon: 'icon-store',
-          desc: '管理店铺、处理订单'
-        },
-        supervisor: {
-          name: '监理',
-          userRole: 3,
-          icon: 'icon-user-check',
-          desc: '监督工程、管理案例'
-        }
-      },
+      // 角色映射 - 使用工具类中的配置
+      roleMap: ROLE_MAP,
       
       // 弹窗相关
       addChatDialogVisible: false,
@@ -497,125 +507,16 @@ export default {
   methods: {
     // 聊天列表相关方法
     updateCategoryCount() {
-      const designerCount = this.chats.filter(c => {
-        const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
-        return role === this.roleMap.designer.userRole
-      }).length
-      const supervisorCount = this.chats.filter(c => {
-        const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
-        return role === this.roleMap.supervisor.userRole
-      }).length
-      const userCount = this.chats.filter(c => {
-        const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
-        return role === this.roleMap.user.userRole
-      }).length
-
-      this.categoryTabs[0].count = this.chats.length // 全部
-      this.categoryTabs[1].count = designerCount // 设计师
-      this.categoryTabs[2].count = supervisorCount // 监理
-      this.categoryTabs[3].count = userCount // 普通用户
-      
-      console.log('📊 分类计数更新:', {
-        total: this.chats.length,
-        designer: designerCount,
-        supervisor: supervisorCount,
-        user: userCount
-      })
+      const counts = utilUpdateCategoryCount(this.chats)
+      this.categoryTabs[0].count = counts.all // 全部
+      this.categoryTabs[1].count = counts.designer // 设计师
+      this.categoryTabs[2].count = counts.supervisor // 监理
+      this.categoryTabs[3].count = counts.user // 普通用户
     },
     
-    formatTime(date) {
-      if (!date) return '暂无时间'
-      
-      console.log('🕐 格式化时间:', { date, type: typeof date })
-      
-      // 字符串先按日期字符串解析
-      if (typeof date === 'string') {
-        date = this.parseDate(date)
-      }
-      // 数字（时间戳）或其它类型，统一尝试用 Date 包一层
-      if (!(date instanceof Date)) {
-        try {
-          date = new Date(date)
-        } catch (e) {
-          console.error('❌ 时间解析失败:', e)
-          return '时间错误'
-        }
-      }
-      
-      // 检查日期是否有效
-      if (!date || isNaN(date.getTime())) {
-        console.error('❌ 无效的日期:', date)
-        return '无效时间'
-      }
-      
-      const now = new Date()
-      const diff = now - date
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      
-      console.log('🕐 时间计算:', { 
-        now: now.toISOString(), 
-        date: date.toISOString(), 
-        diff, 
-        days,
-        hours: date.getHours(),
-        minutes: date.getMinutes()
-      })
-      
-      // 格式化时间和日期
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const hours = String(date.getHours()).padStart(2, '0')
-      const minutes = String(date.getMinutes()).padStart(2, '0')
-      
-      if (days === 0) {
-        // 今天：显示"今天 HH:MM"
-        return `今天 ${hours}:${minutes}`
-      } else if (days === 1) {
-        // 昨天：显示"昨天 HH:MM"
-        return `昨天 ${hours}:${minutes}`
-      } else if (days < 7) {
-        // 一周内：显示"X天前 HH:MM"
-        return `${days}天前 ${hours}:${minutes}`
-      } else if (year === now.getFullYear()) {
-        // 今年：显示"MM-DD HH:MM"
-        return `${month}-${day} ${hours}:${minutes}`
-      } else {
-        // 更早：显示"YYYY-MM-DD HH:MM"
-        return `${year}-${month}-${day} ${hours}:${minutes}`
-      }
-    },
-    
-    parseDate(dateInput) {
-      if (!dateInput) return null
-      
-      try {
-        // 如果已经是 Date 对象，直接返回
-        if (dateInput instanceof Date) {
-          return isNaN(dateInput.getTime()) ? null : dateInput
-        }
-        
-        // 如果是数字（时间戳），直接创建 Date 对象
-        if (typeof dateInput === 'number') {
-          const date = new Date(dateInput)
-          return isNaN(date.getTime()) ? null : date
-        }
-        
-        // 如果是字符串，尝试解析
-        if (typeof dateInput === 'string') {
-          // 替换 - 为 / 以兼容 iOS
-          const date = new Date(dateInput.replace(/-/g, '/'))
-          return isNaN(date.getTime()) ? null : date
-        }
-        
-        // 其他类型，尝试直接转换
-        const date = new Date(dateInput)
-        return isNaN(date.getTime()) ? null : date
-      } catch (e) {
-        console.warn('⚠️ 日期解析失败:', dateInput, e)
-        return null
-      }
-    },
+    // 使用工具类中的时间格式化方法
+    formatTime,
+    parseDate,
     
     openChat(chat) {
       if (!chat) {
@@ -728,44 +629,14 @@ export default {
       }
     },
     
-    // 更新本地未读消息数量
+    // 更新本地未读消息数量 - 使用工具类
     updateLocalUnreadCount(conversationId, unreadCount) {
-      const chatIndex = this.chats.findIndex(chat => chat.conversationId === conversationId)
-      if (chatIndex !== -1) {
-        const oldUnreadCount = this.chats[chatIndex].unreadCount
-        this.chats[chatIndex].unreadCount = unreadCount
-        
-        console.log('🔢 更新未读消息数量:', {
-          conversationId: conversationId,
-          oldCount: oldUnreadCount,
-          newCount: unreadCount
-        })
-        
-        // 如果未读数量变为0，移除未读样式
-        if (unreadCount === 0) {
-          this.chats[chatIndex].unread = false
-        } else {
-          // 如果有未读消息，添加未读样式
-          this.chats[chatIndex].unread = true
-        }
-      }
+      this.chats = utilUpdateLocalUnreadCount(this.chats, conversationId, unreadCount)
     },
     
-    // 增加未读消息数量
+    // 增加未读消息数量 - 使用工具类
     incrementUnreadCount(conversationId) {
-      const chatIndex = this.chats.findIndex(chat => chat.conversationId === conversationId)
-      if (chatIndex !== -1) {
-        const oldCount = this.chats[chatIndex].unreadCount || 0
-        this.chats[chatIndex].unreadCount = oldCount + 1
-        this.chats[chatIndex].unread = true
-        
-        console.log('📈 增加未读消息数量:', {
-          conversationId: conversationId,
-          oldCount: oldCount,
-          newCount: this.chats[chatIndex].unreadCount,
-          showBadge: this.chats[chatIndex].unreadCount > 0
-        })
-      }
+      this.chats = utilIncrementUnreadCount(this.chats, conversationId)
     },
     
     // 测试功能：手动添加未读消息（用于调试）
@@ -800,8 +671,11 @@ export default {
     
     async confirmAddChat() {
       const phone = (this.addChatPhone || '').trim()
-      if (!phone) {
-        this.showToast('请输入对方手机号', 'error')
+      
+      // 使用验证工具验证手机号
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.isValid) {
+        this.showToast(phoneValidation.error, 'error')
         return
       }
 
@@ -1000,69 +874,9 @@ export default {
       console.log('📝 输入框失去焦点')
     },
     
-    // 统一的消息发送者判断函数
+    // 统一的消息发送者判断函数 - 使用工具类
     determineMessageSender(messageData) {
-      let isSender = false;
-      
-      console.log('🔍 判断消息发送者:', {
-        messageSenderId: messageData.senderId,
-        messageCreatedBy: messageData.createdBy,
-        currentUserId: this.currentUserId,
-        otherUserId: this.otherUserId,
-        content: messageData.content
-      })
-      
-      // 优先使用senderId判断
-      if (messageData.senderId != null && messageData.senderId !== 0) {
-        // 正常情况：根据senderId判断
-        isSender = messageData.senderId == this.currentUserId;
-        console.log('✅ 使用senderId判断结果:', {
-          senderId: messageData.senderId,
-          currentUserId: this.currentUserId,
-          isSender: isSender,
-          comparison: messageData.senderId + ' == ' + this.currentUserId + ' = ' + (messageData.senderId == this.currentUserId)
-        })
-      } else if (messageData.createdBy != null && messageData.createdBy !== 0) {
-        // 备用方案：使用createdBy判断
-        isSender = messageData.createdBy == this.currentUserId;
-        console.log('✅ 使用createdBy判断结果:', {
-          createdBy: messageData.createdBy,
-          currentUserId: this.currentUserId,
-          isSender: isSender,
-          comparison: messageData.createdBy + ' == ' + this.currentUserId + ' = ' + (messageData.createdBy == this.currentUserId)
-        })
-      } else {
-        // 特殊处理：基于消息内容和对话参与者推断
-        console.log('⚠️ 消息senderId和createdBy都为空，使用特殊推断逻辑:', {
-          content: messageData.content,
-          senderId: messageData.senderId,
-          createdBy: messageData.createdBy,
-          currentUserId: this.currentUserId,
-          otherUserId: this.otherUserId
-        });
-        
-        // 对于系统消息或特殊消息内容的处理
-        if (messageData.content && messageData.content.includes('对方请求与您进行沟通')) {
-          // 这类消息通常是当前用户发送的请求
-          isSender = true;
-          console.log('✅ 推断为系统请求消息（当前用户发送）:', isSender);
-        } else if (messageData.content && (
-          messageData.content.includes('同意') || 
-          messageData.content.includes('拒绝') ||
-          messageData.content.includes('确认')
-        )) {
-          // 这类回复消息通常是对方发送的
-          isSender = false;
-          console.log('✅ 推断为回复消息（对方发送）:', isSender);
-        } else {
-          // 对于普通消息，如果没有明确的发送者信息，默认显示为对方消息
-          // 这样可以避免用户看到自己的消息显示为发送方
-          isSender = false;
-          console.log('✅ 默认推断为对方消息:', isSender);
-        }
-      }
-      
-      return isSender;
+      return determineMessageSender(messageData, this.currentUserId)
     },
     
     // 判断消息是否应该与前一条消息合并
@@ -1073,96 +887,55 @@ export default {
       const currentMessage = this.messages[index]
       const previousMessage = this.messages[index - 1]
       
-      // 如果前一条消息不存在，不合并
-      if (!previousMessage) return false
-      
-      // 检查是否为同一发送者
-      const sameSender = currentMessage.isSender === previousMessage.isSender
-      
-      // 检查时间间隔（5分钟内的消息合并）
-      const currentTime = new Date(currentMessage.createTime || currentMessage.sendTime || Date.now())
-      const previousTime = new Date(previousMessage.createTime || previousMessage.sendTime || Date.now())
-      const timeDiffInMinutes = (currentTime - previousTime) / (1000 * 60)
-      const withinTimeWindow = timeDiffInMinutes <= 5
-      
-      // 只有同一发送者且时间间隔在5分钟内才合并
-      return sameSender && withinTimeWindow
+      // 使用工具函数判断是否应该合并
+      return utilShouldMergeMessages(currentMessage, previousMessage)
     },
     
-    // 统一的消息处理函数
+    // 统一的消息处理函数 - 使用工具类
     addMessageToChat(messageData) {
-      // 使用统一的消息发送者判断函数
-      const isSender = this.determineMessageSender(messageData)
-      
-      // 获取发送者昵称
-      let senderName = '未知用户'
-      if (isSender) {
-        senderName = '我'
-      } else {
-        // 接收方消息：显示对方真实昵称
-        senderName = this.chatUser && this.chatUser.name ? this.chatUser.name : '对方'
-      }
-      
-      console.log('🏷️ 消息发送者昵称:', {
-        content: messageData.content,
-        senderId: messageData.senderId,
-        isSender: isSender,
-        senderName: senderName,
-        chatUserName: this.chatUser?.name
+      const processedMessage = processReceivedMessage(messageData, {
+        currentUserId: this.currentUserId,
+        chatUser: this.chatUser
       })
       
-      // 安全地处理时间戳，确保是有效的数字
-      let validTime = Date.now()
-      if (messageData.sendTime && typeof messageData.sendTime === 'number' && messageData.sendTime > 0) {
-        validTime = messageData.sendTime
-      } else if (messageData.createTime && typeof messageData.createTime === 'number' && messageData.createTime > 0) {
-        validTime = messageData.createTime
-      }
-      
-      const message = {
-        ...messageData,
-        isSender: isSender,
-        senderName: senderName,
-        avatar: messageData.senderAvatar || '/static/images/default-avatar.png',
-        createTime: validTime,
-        sendTime: validTime
-      }
-      
-      this.messages.push(message)
+      this.messages.push(processedMessage)
       this.scrollTop = 999999
       
-      return message
+      return processedMessage
     },
     
     sendMessage() {
-      if (!this.inputText.trim()) {
-        this.showToast('消息不能为空', 'error')
+      // 使用验证工具验证消息内容
+      const contentValidation = validateTextMessage(this.inputText)
+      if (!contentValidation.isValid) {
+        this.showToast(contentValidation.error, 'error')
         return
       }
 
-      if (!this.conversationId) {
-        this.showToast('对话ID无效', 'error')
+      // 验证消息参数
+      const paramsValidation = validateMessageParams({
+        senderId: this.currentUserId,
+        receiverId: this.otherUserId,
+        conversationId: this.conversationId,
+        content: this.inputText,
+        messageType: MESSAGE_TYPES.NORMAL
+      })
+      
+      if (!paramsValidation.isValid) {
+        this.showToast(paramsValidation.errors[0], 'error')
         return
       }
 
       console.log('📤 发送消息:', this.inputText)
-      console.log('📤 发送前检查:', {
-        currentUserId: this.currentUserId,
-        currentUserIdType: typeof this.currentUserId,
-        otherUserId: this.otherUserId,
-        otherUserIdType: typeof this.otherUserId
-      })
 
-      const message = {
-        action: 'send',
-        messageType: 1,
-        senderId: parseInt(this.currentUserId), // 确保是数字类型
-        receiverId: parseInt(this.otherUserId), // 确保是数字类型
+      // 使用工具函数创建消息
+      const message = createTextMessage({
+        senderId: this.currentUserId,
+        receiverId: this.otherUserId,
         conversationId: this.conversationId,
         content: this.inputText,
-        userRole: this.currentUserRole,
-        sendTime: Date.now()
-      }
+        userRole: this.currentUserRole
+      })
 
       if (this.wsConnected && this.ws) {
         this.ws.send(JSON.stringify(message))
@@ -1181,23 +954,20 @@ export default {
     },
     
     sendOrderApplication() {
-      if (!this.isDesigner && !this.isSupervisor) {
+      // 使用工具函数检查权限
+      if (!canSendOrderRequest(this.currentUserRole)) {
         this.showToast('只有设计师和监理可以发送订单申请', 'error')
         return
       }
 
-      const message = {
-        action: 'send',
-        messageType: 2,
+      // 使用工具函数创建订单申请消息
+      const message = createOrderRequestMessage({
         senderId: this.currentUserId,
         receiverId: this.chatUser.id,
         conversationId: this.conversationId,
         content: '我想接取这个订单，请确认',
-        templateId: 1,
-        actionType: 1,
-        userRole: this.currentUserRole,
-        sendTime: Date.now()
-      }
+        userRole: this.currentUserRole
+      })
 
       if (this.wsConnected && this.ws) {
         this.ws.send(JSON.stringify(message))
@@ -1385,19 +1155,8 @@ export default {
               console.warn('⚠️ 获取用户信息失败，使用默认昵称:', error)
             }
 
-            // 解析时间，如果解析失败则使用当前时间
-            let parsedTime = this.parseDate(conv.lastMessageTime)
-            if (!parsedTime) {
-              console.warn('⚠️ 时间解析失败，使用当前时间:', conv.lastMessageTime)
-              parsedTime = new Date()
-            }
-            
-            console.log('🕐 对话时间解析:', {
-              conversationId: conv.conversationId,
-              originalTime: conv.lastMessageTime,
-              parsedTime: parsedTime,
-              parsedTimeISO: parsedTime.toISOString()
-            })
+            // 使用工具函数解析时间
+            const parsedTime = normalizeBackendTime(conv.lastMessageTime)
             
             return {
                 id: conv.conversationId,
@@ -1569,26 +1328,8 @@ export default {
               chatUserName: this.chatUser?.name
             })
             
-            // 确保 sendTime 是有效的时间戳（支持字符串和数字）
-            let validSendTime = Date.now() // 默认使用当前时间
-            
-            if (msg.sendTime) {
-              // 如果是字符串，转换为数字
-              const timestamp = typeof msg.sendTime === 'string' ? parseInt(msg.sendTime, 10) : msg.sendTime
-              console.log('⏰ 时间戳转换:', {
-                original: msg.sendTime,
-                originalType: typeof msg.sendTime,
-                converted: timestamp,
-                convertedType: typeof timestamp,
-                isValid: !isNaN(timestamp) && timestamp > 0
-              })
-              // 验证是否为有效的时间戳
-              if (typeof timestamp === 'number' && !isNaN(timestamp) && timestamp > 0) {
-                validSendTime = timestamp
-              }
-            }
-            
-            console.log('✅ 最终使用的时间戳:', validSendTime, '对应日期:', new Date(validSendTime))
+            // 使用工具函数处理时间戳
+            const validSendTime = getValidTimestamp(msg)
             
             return {
               ...msg,
@@ -1765,25 +1506,11 @@ export default {
       this.messageNotification.show = false
     },
     
-    // 更新聊天列表中的最后一条消息
+    // 更新聊天列表中的最后一条消息 - 使用工具类
     updateChatLastMessage(conversationId, content, time) {
-      const chatIndex = this.chats.findIndex(c => c.conversationId === conversationId)
-      if (chatIndex >= 0) {
-        this.chats[chatIndex].lastMessage = content
-        this.chats[chatIndex].lastMessageTime = time
-        
-        // 如果不是当前用户发送的消息，增加未读数
-        if (this.currentUserId !== this.otherUserId) {
-          this.chats[chatIndex].unreadCount += 1
-        }
-        
-        // 将更新的聊天项移到列表顶部
-        const updatedChat = this.chats.splice(chatIndex, 1)[0]
-        this.chats.unshift(updatedChat)
-        
-        // 更新分类计数
-        this.updateCategoryCount()
-      }
+      this.chats = utilUpdateChatLastMessage(this.chats, conversationId, content, time, this.currentUserId, this.otherUserId)
+      // 更新分类计数
+      this.updateCategoryCount()
     }
   },
   
