@@ -1,1118 +1,1 @@
-<template>
-	<view class="container">
-		<!-- 顶部标题栏 -->
-		<view class="header-section">
-			<view class="header-back" @click="goBack">
-				<text class="back-icon">←</text>
-				<text class="back-text">返回</text>
-			</view>
-			<view class="header-title">订单详情</view>
-			<view class="header-placeholder"></view>
-		</view>
-
-		<!-- 内容区域 -->
-		<scroll-view class="content" scroll-y="true" refresher-enabled @refresherrefresh="onRefresh">
-			<!-- 下拉刷新 -->
-			<view class="refresh-container" v-if="refreshing">
-				<text class="refresh-text">刷新中...</text>
-			</view>
-
-			<!-- 订单状态卡片 -->
-			<view class="status-card">
-				<view class="status-icon">✅</view>
-				<view class="status-info">
-					<text class="status-text">订单已完成</text>
-					<text class="status-desc">感谢您的信任与支持</text>
-				</view>
-			</view>
-
-			<!-- 订单基本信息 -->
-			<view class="info-card">
-				<view class="card-title">订单信息</view>
-				<view class="info-list">
-					<view class="info-item">
-						<text class="info-label">订单编号</text>
-						<text class="info-value">DD{{ orderInfo.orderId }}</text>
-					</view>
-					<view class="info-item">
-						<text class="info-label">下单时间</text>
-						<text class="info-value">{{ formatTime(orderInfo.createTime) }}</text>
-					</view>
-					<view class="info-item">
-						<text class="info-label">完成时间</text>
-						<text class="info-value">{{ formatTime(orderInfo.updateTime) || '--' }}</text>
-					</view>
-					<view class="info-item">
-						<text class="info-label">订单金额</text>
-						<text class="info-value amount">¥{{ orderInfo.totalAmount || 0 }}</text>
-					</view>
-					<view class="info-item">
-						<text class="info-label">订单类型</text>
-						<text class="info-value">{{ getOrderTypeText(orderInfo.type) }}</text>
-					</view>
-					<view class="info-item">
-						<text class="info-label">订单状态</text>
-						<text class="info-value status-completed">{{ getStatusText(orderInfo.status) }}</text>
-					</view>
-				</view>
-			</view>
-
-			<!-- 项目信息 -->
-			<view class="info-card" v-if="orderInfo.projectInfo">
-				<view class="card-title">项目信息</view>
-				<view class="project-content">
-					<text class="project-title">{{ orderInfo.projectInfo.title || '设计项目' }}</text>
-					<text class="project-desc">{{ orderInfo.projectInfo.description || orderInfo.remark || '暂无描述' }}</text>
-					<view class="project-tags">
-						<text class="tag" v-if="orderInfo.projectInfo.budget">预算 {{ orderInfo.projectInfo.budget }}元</text>
-						<text class="tag" v-if="orderInfo.projectInfo.area">{{ orderInfo.projectInfo.area }}㎡</text>
-						<text class="tag" v-if="orderInfo.projectInfo.address">{{ orderInfo.projectInfo.address }}</text>
-						<text class="tag" v-if="orderInfo.expectedEndTime">预计 {{ formatDate(orderInfo.expectedEndTime) }}完成</text>
-					</view>
-				</view>
-			</view>
-
-			<!-- 设计师信息 -->
-			<view class="info-card" v-if="orderInfo.contractorInfo">
-				<view class="card-title">设计师信息</view>
-				<view class="designer-content">
-					<view class="designer-avatar">
-						<image :src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" mode="aspectFill" class="avatar-img" />
-					</view>
-					<view class="designer-info">
-						<text class="designer-name">{{ orderInfo.contractorInfo.name || '设计师' }}</text>
-						<text class="designer-role">{{ orderInfo.contractorInfo.role || '设计师' }}</text>
-						<text class="designer-phone">电话: {{ orderInfo.contractorInfo.phone || '暂无联系方式' }}</text>
-					</view>
-					<view class="contact-btn" @click="contactDesigner(orderInfo.contractorId)">
-						联系
-					</view>
-				</view>
-			</view>
-
-			<!-- 评价信息 -->
-			<view class="info-card" v-if="hasReviewed && orderReview">
-				<view class="card-title">订单评价</view>
-				<view class="review-content">
-					<!-- 评分 -->
-					<view class="rating-section">
-						<text class="rating-label">综合评分</text>
-						<view class="rating-stars">
-							<text v-for="i in 5" :key="i" class="star" 
-								  :class="i <= orderReview.rating ? 'star-active' : 'star-inactive'">
-								{{ i <= orderReview.rating ? '★' : '☆' }}
-							</text>
-						</view>
-						<text class="rating-value">{{ orderReview.rating }}分</text>
-					</view>
-					
-					<!-- 评价内容 -->
-					<view class="review-text-section" v-if="orderReview.content">
-						<text class="review-label">评价内容</text>
-						<text class="review-text">{{ orderReview.content }}</text>
-					</view>
-					
-					<!-- 设计师回复 -->
-					<view class="reply-section" v-if="orderReview.replyContent">
-						<text class="reply-label">设计师回复</text>
-						<text class="reply-text">{{ orderReview.replyContent }}</text>
-						<text class="reply-time" v-if="orderReview.replyTime">
-							回复时间：{{ formatTime(orderReview.replyTime) }}
-						</text>
-					</view>
-					
-					<!-- 评价时间 -->
-					<view class="review-time">
-						<text class="review-time-text">评价时间：{{ formatTime(orderReview.createTime) }}</text>
-					</view>
-				</view>
-			</view>
-
-			<!-- 合同文件 -->
-			<view class="info-card" v-if="orderInfo.contractUrl">
-				<view class="card-title">合同文件</view>
-				<view class="file-section">
-					<view class="file-item" @click="previewFile(orderInfo.contractUrl, '合同文件')">
-						<view class="file-icon">📄</view>
-						<view class="file-info">
-							<text class="file-name">设计服务合同</text>
-							<text class="file-desc">点击查看合同详情</text>
-						</view>
-						<view class="file-action">查看</view>
-					</view>
-				</view>
-			</view>
-
-			<!-- 设计方案文件 -->
-			<view class="info-card" v-if="designSchemes.length > 0">
-				<view class="card-title">设计方案</view>
-				<view class="file-section">
-					<!-- 效果图方案 -->
-					<view class="file-item" v-for="scheme in effectSchemes" :key="scheme.designSchemeId" 
-							@click="previewDesignScheme(scheme)">
-						<view class="file-icon">🎨</view>
-						<view class="file-info">
-							<text class="file-name">{{ scheme.schemeName || '效果图设计方案' }}</text>
-							<text class="file-desc">{{ getSchemeStatusText(scheme.status) }} · {{ formatTime(scheme.createTime) }}</text>
-						</view>
-						<view class="file-action">查看</view>
-					</view>
-
-					<!-- 施工设计图方案 -->
-					<view class="file-item" v-for="scheme in constructionSchemes" :key="scheme.designSchemeId" 
-							@click="previewDesignScheme(scheme)">
-						<view class="file-icon">🏗️</view>
-						<view class="file-info">
-							<text class="file-name">{{ scheme.schemeName || '施工设计图方案' }}</text>
-							<text class="file-desc">{{ getSchemeStatusText(scheme.status) }} · {{ formatTime(scheme.createTime) }}</text>
-						</view>
-						<view class="file-action">查看</view>
-					</view>
-				</view>
-			</view>
-
-			<!-- 操作按钮 -->
-			<view class="action-section">
-				<button class="action-btn secondary" @click="contactDesigner(orderInfo.contractorId)" 
-						v-if="orderInfo.contractorId">
-					联系设计师
-				</button>
-				<button class="action-btn primary" @click="goToReview" v-if="!hasReviewed">
-					评价订单
-				</button>
-				<button class="action-btn secondary" @click="shareOrder" v-if="hasReviewed">
-					分享订单
-				</button>
-			</view>
-
-			<!-- 加载状态 -->
-			<view v-if="loading" class="loading-state">
-				<text class="loading-text">加载中...</text>
-			</view>
-
-			<!-- 空状态 -->
-			<view v-if="!loading && !orderInfo.orderId" class="empty-state">
-				<view class="empty-icon">📋</view>
-				<view class="empty-text">订单信息不存在</view>
-				<view class="empty-desc">请检查订单编号是否正确</view>
-			</view>
-		</scroll-view>
-	</view>
-</template>
-
-<script>
-	import { orderService, OrderStatus, OrderType } from '@/api/order.js'
-	import { getDesignSchemeList } from '@/api/designScheme.js'
-	import { getUserProfile } from '@/api/users.js'
-	import { orderReviewApi } from '@/api/orderReview.js' // 导入评价API
-
-	export default {
-		data() {
-			return {
-				// 页面参数
-				orderId: null,
-				userId: null,
-				
-				// 加载状态
-				loading: false,
-				refreshing: false,
-				
-				// 订单信息
-				orderInfo: {
-					orderId: null,
-					projectId: null,
-					userId: null,
-					contractorId: null,
-					type: OrderType.DESIGN,
-					status: OrderStatus.COMPLETED,
-					totalAmount: 0,
-					createTime: null,
-					updateTime: null,
-					contractUrl: null,
-					remark: '',
-					projectInfo: {},
-					contractorInfo: {}
-				},
-				
-				// 设计方案列表
-				designSchemes: [],
-				
-				// 评价状态
-				hasReviewed: false,
-				orderReview: null // 评价详情
-			}
-		},
-		
-		computed: {
-			// 效果图方案
-			effectSchemes() {
-				return this.designSchemes.filter(scheme => {
-					const type = scheme.schemeType || scheme.type;
-					return String(type) === "1"; // 效果图类型
-				});
-			},
-			
-			// 施工设计图方案
-			constructionSchemes() {
-				return this.designSchemes.filter(scheme => {
-					const type = scheme.schemeType || scheme.type;
-					return String(type) === "2"; // 施工设计图类型
-				});
-			}
-		},
-		
-		onLoad(options) {
-			console.log('📋 订单详情页面参数:', options);
-			this.orderId = options.orderId;
-			this.userId = options.userId;
-			
-			if (!this.orderId) {
-				uni.showToast({
-					title: '订单ID不能为空',
-					icon: 'none'
-				});
-				setTimeout(() => {
-					this.goBack();
-				}, 1500);
-				return;
-			}
-			
-			this.loadOrderDetail();
-		},
-		
-		methods: {
-			// 加载订单详情
-			async loadOrderDetail() {
-				try {
-					this.loading = true;
-					
-					console.log('📋 开始加载订单详情，订单ID:', this.orderId);
-					
-					// 1. 加载订单基本信息 - 使用列表接口查询单个订单
-					await this.loadOrderInfo();
-					
-					// 2. 加载设计方案
-					await this.loadDesignSchemes();
-					
-					// 3. 检查评价状态
-					await this.checkReviewStatus();
-					
-					console.log('✅ 订单详情加载完成:', this.orderInfo);
-					
-				} catch (error) {
-					console.error('❌ 加载订单详情失败:', error);
-					this.handleApiError(error, '加载订单详情失败');
-				} finally {
-					this.loading = false;
-					this.refreshing = false;
-				}
-			},
-			
-			// 加载订单基本信息 - 使用列表接口查询单个订单
-			async loadOrderInfo() {
-				try {
-					console.log('📋 通过列表接口获取订单信息，订单ID:', this.orderId);
-					
-					// 使用订单列表接口，通过订单ID筛选
-					const queryParams = {
-						pageNum: 1,
-						pageSize: 100,
-						orderId: this.orderId
-					};
-					
-					const result = await orderService.getOrderList(queryParams);
-					console.log('✅ 订单列表查询响应:', result);
-					
-					let orderList = [];
-					if (Array.isArray(result)) {
-						orderList = result;
-					} else if (result && result.records) {
-						orderList = result.records;
-					} else if (result && result.list) {
-						orderList = result.list;
-					} else if (result && result.data) {
-						orderList = result.data.records || result.data.list || [];
-					}
-					
-					// 查找当前订单
-					const currentOrder = orderList.find(order => order.orderId == this.orderId);
-					
-					if (currentOrder) {
-						this.orderInfo = {
-							...this.orderInfo,
-							...currentOrder
-						};
-						
-						// 加载设计师信息
-						if (currentOrder.contractorId) {
-							await this.loadDesignerInfo(currentOrder.contractorId);
-						}
-						
-						console.log('✅ 订单信息加载成功:', this.orderInfo);
-					} else {
-						throw new Error('未找到订单信息');
-					}
-					
-				} catch (error) {
-					console.error('❌ 加载订单基本信息失败:', error);
-					throw error;
-				}
-			},
-			
-			// 加载设计师信息
-			async loadDesignerInfo(designerId) {
-				try {
-					console.log('👨‍🎨 加载设计师信息，设计师ID:', designerId);
-					const designerInfo = await getUserProfile(designerId);
-					
-					if (designerInfo && designerInfo.code === 200) {
-						this.orderInfo.contractorInfo = {
-							name: designerInfo.data.name || designerInfo.data.nickname || '设计师',
-							avatar: designerInfo.data.avatar || '/static/images/default-avatar.png',
-							role: '设计师',
-							phone: designerInfo.data.phone || designerInfo.data.mobile || '暂无联系方式'
-						};
-					}
-				} catch (error) {
-					console.error('❌ 加载设计师信息失败:', error);
-					// 不影响主要功能，使用默认信息
-					this.orderInfo.contractorInfo = {
-						name: '设计师',
-						avatar: '/static/images/default-avatar.png',
-						role: '设计师',
-						phone: '暂无联系方式'
-					};
-				}
-			},
-			
-			// 加载设计方案
-			async loadDesignSchemes() {
-				try {
-					console.log('🎨 加载设计方案，订单ID:', this.orderId);
-					
-					const queryParams = {
-						pageNum: 1,
-						pageSize: 100,
-						orderId: this.orderId
-					};
-					
-					const result = await getDesignSchemeList(queryParams);
-					console.log('✅ 设计方案响应:', result);
-					
-					let list = [];
-					if (result && result.code === 200) {
-						if (result.data) {
-							if (Array.isArray(result.data)) {
-								list = result.data;
-							} 
-							else if (result.data.records) {
-								list = result.data.records;
-							}
-							else if (result.data.list) {
-								list = result.data.list;
-							}
-							else if (Array.isArray(result.data.data)) {
-								list = result.data.data;
-							}
-						}
-					} else if (Array.isArray(result)) {
-						list = result;
-					}
-					
-					this.designSchemes = list.map(scheme => ({
-						designSchemeId: scheme.designSchemeId,
-						schemeName: scheme.schemeName,
-						schemeType: scheme.schemeType || scheme.type,
-						status: scheme.status,
-						createTime: scheme.createTime,
-						description: scheme.description,
-						imageList: scheme.imageList || [],
-						fileUrl: scheme.fileUrl || scheme.coverImage
-					}));
-					
-					console.log('✅ 解析后的设计方案:', this.designSchemes);
-					
-				} catch (error) {
-					console.error('❌ 加载设计方案失败:', error);
-					this.designSchemes = [];
-				}
-			},
-			
-			// 检查评价状态 - 根据数据库表结构修改
-			async checkReviewStatus() {
-				try {
-					console.log('🔍 检查订单评价状态，订单ID:', this.orderId);
-					
-					// 使用你提供的getList接口，传入orderId参数
-					const result = await orderReviewApi.getList({ 
-						orderId: this.orderId 
-					});
-					
-					console.log('📋 评价查询结果:', result);
-					
-					if (result && result.code === 200) {
-						let reviewList = [];
-						
-						// 根据你的API响应结构解析数据
-						if (Array.isArray(result.data)) {
-							reviewList = result.data;
-						} else if (result.data && Array.isArray(result.data.records)) {
-							reviewList = result.data.records;
-						} else if (result.data && Array.isArray(result.data.list)) {
-							reviewList = result.data.list;
-						} else if (Array.isArray(result.data.data)) {
-							reviewList = result.data.data;
-						} else if (Array.isArray(result.records)) {
-							reviewList = result.records;
-						} else if (Array.isArray(result.list)) {
-							reviewList = result.list;
-						}
-						
-						console.log('📝 订单评价列表:', reviewList);
-						
-						if (reviewList && reviewList.length > 0) {
-							// 获取第一个评价（假设一个订单只有一个评价）
-							const review = reviewList[0];
-							
-							// 根据数据库字段映射评价信息
-							this.orderReview = {
-								orderReviewId: review.orderReviewId,
-								orderId: review.orderId,
-								reviewerId: review.reviewerId,
-								rating: review.rating,           // 评分(1-5分)
-								content: review.content,         // 评价内容
-								createTime: review.createTime,   // 评价时间
-								updateTime: review.updateTime,   // 更新时间
-								replyContent: review.replyContent, // 承接者回复
-								replyTime: review.replyTime,     // 回复时间
-								remark: review.remark            // 备注
-							};
-							
-							this.hasReviewed = true;
-							console.log('✅ 订单已评价:', this.orderReview);
-						} else {
-							this.hasReviewed = false;
-							this.orderReview = null;
-							console.log('📝 订单未评价');
-						}
-					} else {
-						this.hasReviewed = false;
-						this.orderReview = null;
-						console.log('📝 评价查询失败或未评价');
-					}
-				} catch (error) {
-					console.error('❌ 检查评价状态失败:', error);
-					this.hasReviewed = false;
-					this.orderReview = null;
-				}
-			},
-			
-			// 预览文件
-			previewFile(fileUrl, fileName) {
-				if (!fileUrl) {
-					uni.showToast({
-						title: '文件不存在',
-						icon: 'none'
-					});
-					return;
-				}
-				
-				console.log('📄 预览文件:', fileUrl, fileName);
-				
-				// 如果是图片文件
-				if (fileUrl.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
-					uni.previewImage({
-						urls: [fileUrl],
-						current: fileUrl,
-						success: () => {
-							console.log('✅ 图片预览成功');
-						},
-						fail: (error) => {
-							console.error('❌ 图片预览失败:', error);
-							this.handleApiError(error, '预览失败');
-						}
-					});
-				} else {
-					// 其他文件类型，尝试在浏览器中打开
-					uni.showToast({
-						title: '暂不支持预览此文件类型',
-						icon: 'none'
-					});
-				}
-			},
-			
-			// 预览设计方案
-			previewDesignScheme(scheme) {
-				console.log('🎨 预览设计方案:', scheme);
-				
-				if (scheme.imageList && scheme.imageList.length > 0) {
-					// 如果有图片列表，预览图片
-					const imageUrls = scheme.imageList.map(img => img.url || img);
-					uni.previewImage({
-						urls: imageUrls,
-						current: imageUrls[0],
-						success: () => {
-							console.log('✅ 设计方案预览成功');
-						},
-						fail: (error) => {
-							console.error('❌ 设计方案预览失败:', error);
-							this.handleApiError(error, '预览失败');
-						}
-					});
-				} else if (scheme.fileUrl) {
-					// 如果有文件URL，预览文件
-					this.previewFile(scheme.fileUrl, scheme.schemeName);
-				} else {
-					uni.showToast({
-						title: '暂无设计方案文件',
-						icon: 'none'
-					});
-				}
-			},
-			
-			// 联系设计师
-			contactDesigner(designerId) {
-				if (!designerId) {
-					uni.showToast({
-						title: '暂无设计师信息',
-						icon: 'none'
-					});
-					return;
-				}
-				
-				console.log('💬 联系设计师，设计师ID:', designerId);
-				uni.navigateTo({
-					url: `/pages/chat/designer?id=${designerId}`
-				});
-			},
-			
-			// 去评价
-			goToReview() {
-				console.log('📝 去评价，订单ID:', this.orderId, '用户ID:', this.userId);
-				uni.navigateTo({
-					url: `/pages/review/review?orderId=${this.orderId}&userId=${this.userId}`
-				});
-			},
-			
-			// 分享订单
-			shareOrder() {
-				console.log('📤 分享订单，订单ID:', this.orderId);
-				uni.showToast({
-					title: '分享功能开发中',
-					icon: 'none'
-				});
-			},
-			
-			// 下拉刷新
-			onRefresh() {
-				if (this.refreshing) return;
-				this.refreshing = true;
-				this.loadOrderDetail();
-			},
-			
-			// 返回上一页
-			goBack() {
-				uni.navigateBack();
-			},
-			
-			// 获取方案状态文本
-			getSchemeStatusText(status) {
-				const statusMap = {
-					'0': '待确认',
-					'1': '待确认',
-					'2': '已确认'
-				};
-				return statusMap[status] || '未知状态';
-			},
-			
-			// 获取订单状态文本
-			getStatusText(status) {
-				return orderService.getOrderStatusText(status);
-			},
-			
-			// 获取订单类型文本
-			getOrderTypeText(type) {
-				return orderService.getOrderTypeText(type);
-			},
-			
-			// 格式化时间
-			formatTime(timeStr) {
-				if (!timeStr) return '--';
-				if (typeof timeStr === 'number') {
-					const date = new Date(timeStr);
-					return date.toLocaleDateString();
-				}
-				return timeStr.split(' ')[0];
-			},
-			
-			// 格式化日期
-			formatDate(dateStr) {
-				if (!dateStr) return '--';
-				if (dateStr.includes('T')) {
-					return dateStr.split('T')[0];
-				}
-				return dateStr.split(' ')[0];
-			},
-			
-			// 统一的错误处理
-			handleApiError(error, defaultMessage = '操作失败') {
-				console.error('API Error:', error);
-				
-				let message = defaultMessage;
-				if (error && error.errMsg) {
-					message = error.errMsg;
-				} else if (error && error.message) {
-					message = error.message;
-				} else if (typeof error === 'string') {
-					message = error;
-				}
-				
-				uni.showToast({
-					title: message,
-					icon: 'none',
-					duration: 3000
-				});
-				
-				return message;
-			}
-		},
-		
-		onPullDownRefresh() {
-			this.onRefresh();
-			uni.stopPullDownRefresh();
-		}
-	}
-</script>
-
-<style scoped>
-	.container {
-		min-height: 100vh;
-		background-color: #f5f5f5;
-	}
-	
-	/* 头部样式 */
-	.header-section {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 20rpx 30rpx;
-		background: white;
-		border-bottom: 1rpx solid #eee;
-		position: sticky;
-		top: 0;
-		z-index: 10;
-	}
-	
-	.header-back {
-		display: flex;
-		align-items: center;
-		font-size: 28rpx;
-		color: #333;
-	}
-	
-	.back-icon {
-		margin-right: 10rpx;
-		font-size: 32rpx;
-	}
-	
-	.header-title {
-		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-	}
-	
-	.header-placeholder {
-		width: 120rpx;
-	}
-	
-	/* 内容区域 */
-	.content {
-		height: calc(100vh - 120rpx);
-		padding: 30rpx;
-	}
-	
-	/* 状态卡片 */
-	.status-card {
-		background: linear-gradient(135deg, #67C23A, #85CE61);
-		border-radius: 16rpx;
-		padding: 40rpx 30rpx;
-		display: flex;
-		align-items: center;
-		margin-bottom: 30rpx;
-		color: white;
-	}
-	
-	.status-icon {
-		font-size: 60rpx;
-		margin-right: 20rpx;
-	}
-	
-	.status-info {
-		display: flex;
-		flex-direction: column;
-	}
-	
-	.status-text {
-		font-size: 36rpx;
-		font-weight: bold;
-		margin-bottom: 8rpx;
-	}
-	
-	.status-desc {
-		font-size: 26rpx;
-		opacity: 0.9;
-	}
-	
-	/* 信息卡片 */
-	.info-card {
-		background: white;
-		border-radius: 16rpx;
-		padding: 30rpx;
-		margin-bottom: 30rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
-	}
-	
-	.card-title {
-		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 20rpx;
-		border-left: 6rpx solid #3498db;
-		padding-left: 20rpx;
-	}
-	
-	/* 信息列表 */
-	.info-list {
-		display: flex;
-		flex-direction: column;
-		gap: 20rpx;
-	}
-	
-	.info-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	
-	.info-label {
-		font-size: 28rpx;
-		color: #666;
-	}
-	
-	.info-value {
-		font-size: 28rpx;
-		color: #333;
-		font-weight: 500;
-	}
-	
-	.info-value.amount {
-		color: #e74c3c;
-		font-weight: bold;
-		font-size: 32rpx;
-	}
-	
-	.status-completed {
-		color: #67C23A;
-		font-weight: bold;
-	}
-	
-	/* 项目内容 */
-	.project-content {
-		display: flex;
-		flex-direction: column;
-		gap: 15rpx;
-	}
-	
-	.project-title {
-		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-	}
-	
-	.project-desc {
-		font-size: 28rpx;
-		color: #666;
-		line-height: 1.5;
-	}
-	
-	.project-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 15rpx;
-	}
-	
-	.tag {
-		font-size: 24rpx;
-		color: #666;
-		background: #f8f9fa;
-		padding: 8rpx 16rpx;
-		border-radius: 20rpx;
-	}
-	
-	/* 设计师内容 */
-	.designer-content {
-		display: flex;
-		align-items: center;
-	}
-	
-	.designer-avatar {
-		width: 100rpx;
-		height: 100rpx;
-		border-radius: 50%;
-		overflow: hidden;
-		margin-right: 20rpx;
-	}
-	
-	.avatar-img {
-		width: 100%;
-		height: 100%;
-	}
-	
-	.designer-info {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-	}
-	
-	.designer-name {
-		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 8rpx;
-	}
-	
-	.designer-role {
-		font-size: 26rpx;
-		color: #999;
-		margin-bottom: 5rpx;
-	}
-	
-	.designer-phone {
-		font-size: 26rpx;
-		color: #666;
-	}
-	
-	.contact-btn {
-		background: #3498db;
-		color: white;
-		padding: 15rpx 30rpx;
-		border-radius: 25rpx;
-		font-size: 26rpx;
-	}
-	
-	/* 评价内容 */
-	.review-content {
-		display: flex;
-		flex-direction: column;
-		gap: 25rpx;
-	}
-	
-	.rating-section {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-	
-	.rating-label {
-		font-size: 28rpx;
-		color: #666;
-	}
-	
-	.rating-stars {
-		display: flex;
-		align-items: center;
-	}
-	
-	.star {
-		font-size: 36rpx;
-		margin-right: 8rpx;
-	}
-	
-	.star-active {
-		color: #ffc107;
-	}
-	
-	.star-inactive {
-		color: #e0e0e0;
-	}
-	
-	.rating-value {
-		font-size: 28rpx;
-		color: #ff6b35;
-		font-weight: bold;
-	}
-	
-	.review-text-section {
-		display: flex;
-		flex-direction: column;
-		gap: 15rpx;
-	}
-	
-	.review-label {
-		font-size: 28rpx;
-		color: #666;
-	}
-	
-	.review-text {
-		font-size: 28rpx;
-		color: #333;
-		line-height: 1.6;
-		background: #f8f9fa;
-		padding: 20rpx;
-		border-radius: 12rpx;
-		border-left: 4rpx solid #3498db;
-	}
-	
-	/* 设计师回复样式 */
-	.reply-section {
-		display: flex;
-		flex-direction: column;
-		gap: 15rpx;
-		padding: 20rpx;
-		background: #f0f8ff;
-		border-radius: 12rpx;
-		border-left: 4rpx solid #3498db;
-	}
-	
-	.reply-label {
-		font-size: 28rpx;
-		color: #3498db;
-		font-weight: bold;
-	}
-	
-	.reply-text {
-		font-size: 28rpx;
-		color: #333;
-		line-height: 1.6;
-	}
-	
-	.reply-time {
-		font-size: 24rpx;
-		color: #999;
-		text-align: right;
-	}
-	
-	.review-time {
-		text-align: right;
-	}
-	
-	.review-time-text {
-		font-size: 24rpx;
-		color: #999;
-	}
-	
-	/* 文件区域 */
-	.file-section {
-		display: flex;
-		flex-direction: column;
-		gap: 20rpx;
-	}
-	
-	.file-item {
-		display: flex;
-		align-items: center;
-		padding: 25rpx;
-		background: #f8f9fa;
-		border-radius: 12rpx;
-		border: 1rpx solid #e9ecef;
-	}
-	
-	.file-icon {
-		font-size: 48rpx;
-		margin-right: 20rpx;
-	}
-	
-	.file-info {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-	}
-	
-	.file-name {
-		font-size: 28rpx;
-		font-weight: 500;
-		color: #333;
-		margin-bottom: 8rpx;
-	}
-	
-	.file-desc {
-		font-size: 24rpx;
-		color: #999;
-	}
-	
-	.file-action {
-		color: #3498db;
-		font-size: 26rpx;
-	}
-	
-	/* 操作区域 */
-	.action-section {
-		display: flex;
-		gap: 20rpx;
-		padding: 40rpx 0;
-	}
-	
-	.action-btn {
-		flex: 1;
-		height: 80rpx;
-		border: none;
-		border-radius: 40rpx;
-		font-size: 28rpx;
-		font-weight: bold;
-	}
-	
-	.action-btn.primary {
-		background: linear-gradient(135deg, #3498db, #2980b9);
-		color: white;
-	}
-	
-	.action-btn.secondary {
-		background: #f8f9fa;
-		color: #666;
-		border: 2rpx solid #e9ecef;
-	}
-	
-	/* 加载状态 */
-	.loading-state {
-		text-align: center;
-		padding: 60rpx;
-	}
-	
-	.loading-text {
-		font-size: 28rpx;
-		color: #999;
-	}
-	
-	/* 空状态 */
-	.empty-state {
-		text-align: center;
-		padding: 100rpx 30rpx;
-	}
-	
-	.empty-icon {
-		font-size: 120rpx;
-		margin-bottom: 30rpx;
-	}
-	
-	.empty-text {
-		font-size: 32rpx;
-		color: #333;
-		margin-bottom: 15rpx;
-	}
-	
-	.empty-desc {
-		font-size: 28rpx;
-		color: #999;
-	}
-	
-	/* 刷新容器 */
-	.refresh-container {
-		text-align: center;
-		padding: 20rpx;
-	}
-	
-	.refresh-text {
-		font-size: 28rpx;
-		color: #999;
-	}
-</style>
+<template>	<view class="container">		<!-- 顶部导航栏 -->		<view class="header-section">			<view class="header-back" @click="goBack">				<view class="back-btn">					<text class="back-icon">‹</text>					<text class="back-text">返回</text>				</view>			</view>			<view class="header-title">{{ pageTitle }}</view>		</view>		<!-- 内容区域 -->		<scroll-view class="content" scroll-y="true">			<!-- 加载状态 -->			<view class="loading-state" v-if="loading">				<view class="loading-spinner large"></view>				<text class="loading-text">加载中...</text>			</view>			<!-- 空状态 -->			<view class="empty-state" v-else-if="!schemeData">				<view class="empty-icon">📁</view>				<view class="empty-text">暂无效果图方案</view>				<view class="empty-desc">设计师尚未上传效果图文件，请耐心等待</view>			</view>			<!-- 方案内容 -->			<template v-else>				<!-- 方案基本信息卡片 -->				<view class="card">					<view class="card-header">						<view class="card-icon">📋</view>						<text class="card-title">方案信息</text>					</view>					<view class="card-body">						<view class="info-row">							<view class="info-item">								<view class="info-label">方案名称</view>								<view class="info-value">{{ schemeData.schemeName || '效果图方案' }}</view>							</view>							<view class="info-item">								<view class="info-label">方案类型</view>								<view class="info-value tag">{{ schemeTypeText }}</view>							</view>						</view>												<view class="info-row">							<view class="info-item">								<view class="info-label">订单号</view>								<view class="info-value">DD{{ orderId }}</view>							</view>							<view class="info-item">								<view class="info-label">设计师</view>								<view class="info-value">{{ designerInfo.name || '--' }}</view>							</view>						</view>												<view class="info-row">							<view class="info-item">								<view class="info-label">创建时间</view>								<view class="info-value">{{ formatTime(schemeData.createTime) }}</view>							</view>							<view class="info-item">								<view class="info-label">状态</view>								<view class="info-value tag" :class="getStatusClass(schemeData.status)">									{{ getStatusText(schemeData.status) }}								</view>							</view>						</view>					</view>				</view>				<!-- 方案文件卡片 -->				<view class="card">					<view class="card-header">						<view class="card-icon">📁</view>						<text class="card-title">效果图文件</text>						<view class="card-subtitle">共 {{ fileList.length }} 个文件</view>					</view>					<view class="card-body">						<!-- 文件列表区域 -->						<view class="file-list" v-if="fileList.length > 0">							<view class="file-item" v-for="(file, index) in fileList" :key="index">								<view class="file-icon">									<text class="file-type-icon">{{ getFileTypeIcon(file.type) }}</text>								</view>								<view class="file-info">									<view class="file-name">{{ file.name }}</view>									<view class="file-meta">										<text class="file-size">{{ file.size }}</text>										<text class="file-format">{{ file.format }}</text>									</view>								</view>								<view class="file-actions">									<button class="btn-action preview" @click="previewFile(file)" v-if="isPreviewable(file)">										<text class="btn-icon">👁️</text>										<text class="btn-text">预览</text>									</button>									<button class="btn-action download" @click="downloadFile(file)">										<text class="btn-icon">⬇️</text>										<text class="btn-text">下载</text>									</button>								</view>							</view>						</view>												<!-- 空状态 -->						<view class="empty-files" v-else>							<view class="empty-icon">📁</view>							<view class="empty-text">暂无效果图文件</view>						</view>					</view>				</view>				<!-- 方案说明卡片 -->				<view class="card">					<view class="card-header">						<view class="card-icon">📝</view>						<text class="card-title">方案说明</text>					</view>					<view class="card-body">						<view class="description-content">							<text class="description-text">{{ schemeData.description || '设计师暂未添加方案说明' }}</text>						</view>					</view>				</view>				<!-- 设计师信息卡片 -->				<view class="card" v-if="designerInfo.name">					<view class="card-header">						<view class="card-icon">👨‍🎨</view>						<text class="card-title">设计师信息</text>					</view>					<view class="card-body">						<view class="designer-detail">							<view class="designer-avatar">								<image :src="designerInfo.avatar" mode="aspectFill" class="avatar-image" />							</view>							<view class="designer-info-content">								<view class="designer-name">{{ designerInfo.name }}</view>								<view class="designer-role">{{ designerInfo.role || '设计师' }}</view>							</view>							<view class="contact-btn" @click="contactDesigner">								联系设计师							</view>						</view>					</view>				</view>				<!-- 底部操作区域 - 始终显示，无限制条件 -->				<view class="bottom-actions" v-if="schemeData">					<view class="action-buttons">						<button class="btn btn-reject" @click="rejectScheme" :disabled="submitting">							<text class="btn-text">{{ submitting ? '处理中...' : '拒绝方案' }}</text>						</button>						<button class="btn btn-confirm" @click="confirmScheme" :disabled="submitting">							<text class="btn-text">{{ submitting ? '处理中...' : '确认方案' }}</text>						</button>					</view>				</view>								<!-- 状态提示 -->				<view class="status-tips" v-if="schemeData && schemeData.status !== SCHEME_STATUS.PENDING">					<view class="tips-card" :class="getStatusCardClass(schemeData.status)">						<view class="tips-icon">{{ getStatusIcon(schemeData.status) }}</view>						<view class="tips-content">							<view class="tips-title">{{ getStatusTitle(schemeData.status) }}</view>							<view class="tips-desc">{{ getStatusDesc(schemeData.status) }}</view>						</view>					</view>				</view>			</template>		</scroll-view>		<!-- 文件预览弹窗 - 仅用于不支持预览的文件类型 -->		<view class="preview-modal" v-if="showPreview">			<view class="preview-overlay" @click="closePreview"></view>			<view class="preview-content">				<view class="preview-header">					<text class="preview-title">{{ currentPreviewFile ? currentPreviewFile.name : '文件预览' }}</text>					<view class="preview-actions">						<button class="btn-close" @click="closePreview">							<text class="btn-icon">✕</text>						</button>					</view>				</view>				<view class="preview-body">					<view class="preview-unsupported">						<text class="unsupported-icon">📄</text>						<text class="unsupported-text">当前文件类型不支持在线预览</text>						<text class="unsupported-desc">请下载后使用本地应用打开</text>						<button class="btn-download-large" @click="downloadCurrentFile">							<text class="btn-icon">⬇️</text>							<text class="btn-text">下载文件</text>						</button>					</view>				</view>			</view>		</view>		<!-- 下载进度弹窗 -->		<view class="download-progress" v-if="showDownloadProgress">			<view class="progress-overlay"></view>			<view class="progress-content">				<view class="progress-spinner"></view>				<text class="progress-text">下载中...</text>				<text class="progress-subtext">{{ downloadFileName }}</text>			</view>		</view>	</view></template><script>	import { getDesignSchemeList, updateDesignSchemeStatus } from '@/api/designScheme.js'	// 方案状态常量 - 根据接口文档定义	// 注意：确认按钮对应status=2，拒绝对应status=0	const SCHEME_STATUS = {		PENDING: 1,      // 待确认/待审核		CONFIRMED: 2,    // 已确认/已通过 (确认按钮对应)		REJECTED: 0,     // 已拒绝/未通过 (拒绝按钮对应)		DELETED: 3       // 已删除	}	// 方案类型常量	const SCHEME_TYPE = {		EFFECT_DRAWING: 1,    // 效果图		CONSTRUCTION_DRAWING: 2 // 施工设计图	}	export default {		data() {			return {				// 页面参数				orderId: null,				schemeType: null,				designerName: '',				pageTitle: '确认效果图',								// 方案数据				schemeData: null,								// 文件列表				fileList: [],								// 设计师信息				designerInfo: {					name: '',					avatar: '',					role: ''				},								// 状态控制				loading: false,				submitting: false,								// 预览相关				showPreview: false,				currentPreviewFile: null,								// 下载相关				showDownloadProgress: false,				downloadFileName: '',								// 导出常量到模板				SCHEME_STATUS: SCHEME_STATUS			}		},				computed: {			// 方案类型文本			schemeTypeText() {				return this.schemeType === SCHEME_TYPE.EFFECT_DRAWING ? '效果图' : '施工设计图'			}		},				onLoad(options) {			console.log('📝 确认效果图页面参数:', options)			this.initPageParams(options)		},				methods: {			// 初始化页面参数			initPageParams(options) {				try {					// 解析参数					this.orderId = options.orderId ? parseInt(options.orderId) : null					this.schemeType = options.schemeType ? parseInt(options.schemeType) : SCHEME_TYPE.EFFECT_DRAWING					this.designerName = options.designerName ? decodeURIComponent(options.designerName) : ''										console.log('🔍 解析后的参数:', {						orderId: this.orderId,						schemeType: this.schemeType,						designerName: this.designerName					})										// 验证必要参数					if (!this.orderId) {						this.showParamsError()						return					}										// 初始化设计师信息					this.initDesignerInfo()										// 加载数据					this.loadSchemeData()									} catch (error) {					console.error('❌ 参数解析失败:', error)					this.showParamsError()				}			},						// 初始化设计师信息			initDesignerInfo() {				// 使用传递过来的设计师姓名				if (this.designerName) {					this.designerInfo.name = this.designerName					this.designerInfo.avatar = '/static/images/default-avatar.png'					this.designerInfo.role = '设计师'				}			},						// 加载方案数据			async loadSchemeData() {				if (this.loading) return								this.loading = true				try {					console.log('📋 开始加载效果图方案数据，订单ID:', this.orderId, '方案类型:', this.schemeType)										// 1. 根据订单ID和方案类型查询方案					const queryParams = {						pageNum: 1,						pageSize: 10,						orderId: this.orderId,						schemeType: this.schemeType					}										const schemeResult = await getDesignSchemeList(queryParams)					console.log('✅ 方案查询结果:', schemeResult)										if (schemeResult.code === 200 && schemeResult.data) {						let schemeList = []												// 处理返回数据格式						if (schemeResult.data.records) {							schemeList = schemeResult.data.records						} else if (schemeResult.data.list) {							schemeList = schemeResult.data.list						} else if (Array.isArray(schemeResult.data)) {							schemeList = schemeResult.data						} else if (Array.isArray(schemeResult)) {							schemeList = schemeResult						}												// 获取第一个效果图方案						if (schemeList.length > 0) {							this.schemeData = schemeList[0]							console.log('✅ 找到效果图方案:', this.schemeData)							console.log('🔍 方案状态:', this.schemeData.status)														// 2. 构建文件列表							this.buildFileList()													} else {							console.log('❌ 未找到效果图方案')							this.schemeData = null						}											} else {						throw new Error(schemeResult.msg || '查询方案失败')					}									} catch (error) {					console.error('❌ 加载方案数据失败:', error)					uni.showToast({						title: '加载方案数据失败',						icon: 'none'					})				} finally {					this.loading = false				}			},						// 构建文件列表			buildFileList() {				this.fileList = []								// 如果有主图文件URL，添加到文件列表				if (this.schemeData.fileUrl) {					this.fileList.push({						url: this.schemeData.fileUrl,						name: '效果图设计方案',						type: this.getFileType(this.schemeData.fileUrl),						format: this.getFileFormat(this.schemeData.fileUrl),						size: this.getFileSize(this.schemeData.fileSize)					})				}								// 如果有其他文件URL，也添加到列表				if (this.schemeData.fileUrls && Array.isArray(this.schemeData.fileUrls)) {					this.schemeData.fileUrls.forEach((url, index) => {						this.fileList.push({							url: url,							name: `效果图文件 ${index + 1}`,							type: this.getFileType(url),							format: this.getFileFormat(url),							size: '--'						})					})				}								console.log('📁 构建的文件列表:', this.fileList)			},						// 获取文件类型			getFileType(url) {				if (!url) return 'unknown'								// 清除URL参数				const cleanUrl = url.split('?')[0]				const ext = cleanUrl.split('.').pop().toLowerCase()								const typeMap = {					// 图片类型					'jpg': 'image', 'jpeg': 'image', 'png': 'image', 					'gif': 'image', 'bmp': 'image', 'webp': 'image', 'svg': 'image',					// 文档类型					'pdf': 'pdf',					'doc': 'doc', 'docx': 'doc',					'xls': 'excel', 'xlsx': 'excel',					'ppt': 'ppt', 'pptx': 'ppt',					'txt': 'text',					// 压缩文件					'zip': 'zip', 'rar': 'zip', '7z': 'zip', 'tar': 'zip'				}				return typeMap[ext] || 'unknown'			},						// 获取文件类型图标			getFileTypeIcon(fileType) {				const iconMap = {					'image': '🖼️',					'pdf': '📄',					'doc': '📝',					'excel': '📊',					'ppt': '📑',					'text': '📃',					'zip': '📦',					'default': '📁'				}				return iconMap[fileType] || iconMap.default			},						// 获取文件格式			getFileFormat(url) {				if (!url) return '未知格式'				const ext = url.split('.').pop().toLowerCase()				const formatMap = {					'jpg': 'JPG',					'jpeg': 'JPEG',					'png': 'PNG',					'gif': 'GIF',					'pdf': 'PDF',					'doc': 'DOC',					'docx': 'DOCX',					'xls': 'XLS',					'xlsx': 'XLSX',					'ppt': 'PPT',					'pptx': 'PPTX',					'txt': 'TXT',					'zip': 'ZIP',					'rar': 'RAR'				}				return formatMap[ext] || ext.toUpperCase()			},						// 获取文件大小			getFileSize(size) {				if (!size) return '--'				if (size < 1024) {					return size + 'B'				} else if (size < 1024 * 1024) {					return (size / 1024).toFixed(1) + 'KB'				} else {					return (size / (1024 * 1024)).toFixed(1) + 'MB'				}			},						// 判断文件是否可预览			isPreviewable(file) {				if (!file) return false								const fileType = file.type || this.getFileType(file.url)				// 支持预览的类型：图片、PDF				return fileType === 'image' || fileType === 'pdf'			},						// 判断是否为图片文件			isImageFile(file) {				return file && file.type === 'image'			},						// 判断是否为PDF文件			isPdfFile(file) {				return file && file.type === 'pdf'			},						// 预览文件			previewFile(file) {				console.log('👁️ 预览文件:', file)				console.log('📄 文件URL:', file.url)				console.log('🔍 文件类型:', file.type)								if (!file || !file.url) {					uni.showToast({						title: '文件链接无效',						icon: 'none'					})					return				}								// 验证URL是否有效				if (!this.isValidUrl(file.url)) {					uni.showToast({						title: '文件链接格式错误',						icon: 'none'					})					return				}								// 根据文件类型选择不同的预览方式				const fileType = file.type || this.getFileType(file.url)				console.log('🎯 确定的文件类型:', fileType)								if (fileType === 'image') {					// 图片使用uni-app原生预览					this.previewImage(file)				} else if (fileType === 'pdf') {					// PDF使用下载后打开的方式					this.previewPdf(file)				} else {					// 其他文件类型在弹窗中显示不支持预览					this.previewInModal(file)				}			},						// 验证URL格式			isValidUrl(string) {				try {					new URL(string)					return true				} catch (_) {					return false				}			},						// 预览PDF文件			previewPdf(file) {				console.log('📄 开始预览PDF文件:', file.name)								// 显示加载提示				uni.showLoading({					title: '加载中...',					mask: true				})								uni.downloadFile({					url: file.url,					success: (res) => {						uni.hideLoading()												if (res.statusCode === 200) {							const filePath = res.tempFilePath							console.log('✅ PDF下载成功，文件路径:', filePath)														// 使用uni.openDocument打开PDF							uni.openDocument({								filePath: filePath,								fileType: 'pdf',								success: (res) => {									console.log('✅ 打开PDF文档成功')								},								fail: (err) => {									console.error('❌ 打开PDF失败:', err)									uni.showToast({										title: '打开文件失败',										icon: 'none'									})								}							})						} else {							throw new Error(`下载失败，状态码: ${res.statusCode}`)						}					},					fail: (err) => {						uni.hideLoading()						console.error('❌ PDF下载失败:', err)						uni.showToast({							title: '文件加载失败',							icon: 'none'						})					}				})			},						// 预览图片 - 使用uni-app原生预览			previewImage(file) {				uni.previewImage({					urls: [file.url],					current: 0,					indicator: 'default',					loop: false,					success: () => {						console.log('图片预览成功')					},					fail: (error) => {						console.error('图片预览失败:', error)						uni.showToast({							title: '图片加载失败',							icon: 'none'						})					}				})			},						// 在弹窗中预览（用于不支持的文件类型）			previewInModal(file) {				this.currentPreviewFile = file				this.showPreview = true			},						// 关闭预览			closePreview() {				this.showPreview = false				this.currentPreviewFile = null			},						// 下载文件			async downloadFile(file) {				console.log('⬇️ 下载文件:', file)								if (!file || !file.url) {					uni.showToast({						title: '文件链接无效',						icon: 'none'					})					return				}								// 显示下载进度				this.downloadFileName = file.name				this.showDownloadProgress = true								try {					const downloadResult = await new Promise((resolve, reject) => {						uni.downloadFile({							url: file.url,							success: resolve,							fail: reject						})					})										if (downloadResult.statusCode === 200) {						// 保存文件到本地						const saveResult = await new Promise((resolve, reject) => {							uni.saveFile({								tempFilePath: downloadResult.tempFilePath,								success: resolve,								fail: reject							})						})												uni.showToast({							title: '下载成功',							icon: 'success'						})												console.log('✅ 文件保存成功:', saveResult.savedFilePath)											} else {						throw new Error(`下载失败，状态码: ${downloadResult.statusCode}`)					}									} catch (error) {					console.error('❌ 下载失败:', error)					uni.showToast({						title: '下载失败，请重试',						icon: 'none'					})				} finally {					this.showDownloadProgress = false					this.downloadFileName = ''				}			},						// 下载当前预览的文件			downloadCurrentFile() {				if (this.currentPreviewFile) {					this.downloadFile(this.currentPreviewFile)					this.closePreview()				}			},						// 返回上一页			goBack() {				uni.navigateBack()			},						// 联系设计师			contactDesigner() {				if (!this.designerInfo.name || this.designerInfo.name === '未知设计师') {					uni.showToast({						title: '暂无设计师信息',						icon: 'none'					})					return				}								// 跳转到聊天页面				const designerId = this.schemeData.contractorId				if (designerId) {					uni.navigateTo({						url: `/pages/chat/designer?designerId=${designerId}`					})				} else {					uni.showToast({						title: '无法联系设计师',						icon: 'none'					})				}			},						// 确认方案 - 对应 status=2			async confirmScheme() {				console.log('🟢 确认按钮被点击')				if (this.submitting || !this.schemeData) {					console.log('❌ 按钮被阻止：submitting=', this.submitting, 'schemeData=', !!this.schemeData)					return				}								console.log('✅ 确认按钮可以正常点击')				uni.showModal({					title: '确认方案',					content: '确定要确认这个效果图方案吗？确认后方案将生效，设计师将开始后续工作。',					confirmColor: '#07C160',					success: async (res) => {						if (res.confirm) {							await this.updateSchemeStatus(SCHEME_STATUS.CONFIRMED, '客户确认效果图方案')						}					}				})			},						// 拒绝方案 - 对应 status=0			async rejectScheme() {				console.log('🔴 拒绝按钮被点击')				if (this.submitting || !this.schemeData) {					console.log('❌ 按钮被阻止：submitting=', this.submitting, 'schemeData=', !!this.schemeData)					return				}								console.log('✅ 拒绝按钮可以正常点击')				uni.showModal({					title: '拒绝方案',					content: '确定要拒绝这个效果图方案吗？请确保已与设计师充分沟通修改需求。',					confirmColor: '#FF4757',					success: async (res) => {						if (res.confirm) {							await this.updateSchemeStatus(SCHEME_STATUS.REJECTED, '客户拒绝效果图方案')						}					}				})			},						// 更新方案状态			async updateSchemeStatus(status, description = '') {				this.submitting = true								try {					console.log('🔄 更新方案状态:', {						designSchemeId: this.schemeData.designSchemeId,						status: status,						description: description					})										// 验证必要参数					if (!this.schemeData.designSchemeId) {						throw new Error('方案ID不存在，无法更新状态')					}										// 调用API更新方案状态					const result = await updateDesignSchemeStatus(						this.schemeData.designSchemeId, 						status, 						description					)										console.log('✅ 更新状态API响应:', result)										if (result.code === 200) {						const successMessage = status === SCHEME_STATUS.CONFIRMED ? 							'方案确认成功' : '方案已拒绝'												uni.showToast({							title: successMessage,							icon: 'success',							duration: 2000						})												// 更新本地状态						this.schemeData.status = status												// 显示状态更新提示						this.showStatusUpdateTips(status)												// 刷新订单页面						setTimeout(() => {							this.refreshOrderPage()						}, 1500)											} else {						throw new Error(result.msg || '操作失败')					}									} catch (error) {					console.error('❌ 更新方案状态失败:', error)					uni.showToast({						title: error.message || '操作失败，请重试',						icon: 'none',						duration: 3000					})				} finally {					this.submitting = false				}			},						// 显示状态更新后的提示			showStatusUpdateTips(status) {				const tipsMap = {					[SCHEME_STATUS.CONFIRMED]: {						title: '方案已确认',						content: '您已成功确认效果图方案，设计师将开始后续工作'					},					[SCHEME_STATUS.REJECTED]: {						title: '方案已拒绝',						content: '您已拒绝效果图方案，请及时与设计师沟通修改需求'					}				}								const tip = tipsMap[status]				if (tip) {					console.log(`📢 ${tip.title}: ${tip.content}`)				}			},						// 刷新订单页面			refreshOrderPage() {				try {					const pages = getCurrentPages()					if (pages.length >= 2) {						const prevPage = pages[pages.length - 2]						// 检查是否是订单页面						if (prevPage.route && prevPage.route.includes('order/my-order')) {							// 调用订单页面的刷新方法							if (prevPage.$vm && prevPage.$vm.loadOrderList) {								prevPage.$vm.pagination.pageNum = 1								prevPage.$vm.loadOrderList()							}						}					}				} catch (error) {					console.error('刷新订单页面失败:', error)				} finally {					uni.navigateBack()				}			},						// 显示参数错误提示			showParamsError() {				uni.showModal({					title: '参数错误',					content: '缺少必要的参数，无法查看方案详情',					showCancel: false,					confirmText: '返回',					success: () => {						uni.navigateBack()					}				})			},						// 格式化时间			formatTime(timeStr) {				if (!timeStr) return '--'				if (typeof timeStr === 'number') {					const date = new Date(timeStr)					return date.toLocaleDateString() + ' ' + date.toLocaleTimeString().slice(0, 5)				}				return timeStr			},						// 获取状态文本			getStatusText(status) {				const statusMap = {					[SCHEME_STATUS.PENDING]: '待确认',					[SCHEME_STATUS.CONFIRMED]: '已确认',					[SCHEME_STATUS.REJECTED]: '已拒绝',					[SCHEME_STATUS.DELETED]: '已删除'				}				return statusMap[status] || '未知状态'			},						// 获取状态样式类			getStatusClass(status) {				const classMap = {					[SCHEME_STATUS.PENDING]: 'status-pending',					[SCHEME_STATUS.CONFIRMED]: 'status-confirmed',					[SCHEME_STATUS.REJECTED]: 'status-rejected',					[SCHEME_STATUS.DELETED]: 'status-deleted'				}				return classMap[status] || ''			},						// 获取状态卡片样式类			getStatusCardClass(status) {				const classMap = {					[SCHEME_STATUS.CONFIRMED]: 'tips-confirmed',					[SCHEME_STATUS.REJECTED]: 'tips-rejected'				}				return classMap[status] || ''			},						// 获取状态图标			getStatusIcon(status) {				const iconMap = {					[SCHEME_STATUS.CONFIRMED]: '✅',					[SCHEME_STATUS.REJECTED]: '❌',					[SCHEME_STATUS.DELETED]: '🗑️'				}				return iconMap[status] || 'ℹ️'			},						// 获取状态标题			getStatusTitle(status) {				const titleMap = {					[SCHEME_STATUS.CONFIRMED]: '方案已确认',					[SCHEME_STATUS.REJECTED]: '方案已拒绝',					[SCHEME_STATUS.DELETED]: '方案已删除'				}				return titleMap[status] || '方案状态'			},						// 获取状态描述			getStatusDesc(status) {				const descMap = {					[SCHEME_STATUS.CONFIRMED]: '您已确认此效果图方案，设计师将开始后续工作',					[SCHEME_STATUS.REJECTED]: '您已拒绝此效果图方案，请与设计师沟通修改需求',					[SCHEME_STATUS.DELETED]: '此方案已被删除'				}				return descMap[status] || '请及时处理方案确认'			}		}	}</script><style scoped>	.container {		min-height: 100vh;		background-color: #f8f9fa;	}		/* 顶部导航栏样式 */	.header-section {		position: sticky;		top: 0;		z-index: 999;		background: #fff;		padding: 32rpx 32rpx 24rpx;		border-bottom: 1rpx solid #e1e4e8;		display: flex;		align-items: center;	}		.header-back {		flex-shrink: 0;	}		.back-btn {		display: flex;		align-items: center;		padding: 16rpx 0;	}		.back-icon {		font-size: 48rpx;		color: #1890ff;		line-height: 1;	}		.back-text {		font-size: 32rpx;		color: #1890ff;		margin-left: 8rpx;	}		.header-title {		flex: 1;		text-align: center;		font-size: 36rpx;		font-weight: 600;		color: #1f2329;		margin-right: 120rpx;	}		/* 内容区域样式 */	.content {		height: calc(100vh - 120rpx);		padding: 24rpx;	}		/* 加载状态 */	.loading-state {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 120rpx 0;	}		.loading-spinner {		width: 64rpx;		height: 64rpx;		border: 4rpx solid transparent;		border-top: 4rpx solid #1890ff;		border-radius: 50%;		animation: spin 1s linear infinite;		margin-bottom: 24rpx;	}		.loading-text {		font-size: 28rpx;		color: #666;	}		/* 空状态 */	.empty-state {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 120rpx 0;		text-align: center;	}		.empty-icon {		font-size: 120rpx;		color: #ccc;		margin-bottom: 24rpx;	}		.empty-text {		font-size: 32rpx;		color: #999;		margin-bottom: 16rpx;	}		.empty-desc {		font-size: 28rpx;		color: #ccc;	}		/* 卡片样式 */	.card {		background: #fff;		border-radius: 20rpx;		margin-bottom: 24rpx;		overflow: hidden;		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);	}		.card-header {		display: flex;		align-items: center;		padding: 32rpx 32rpx 24rpx;		border-bottom: 1rpx solid #f0f0f0;	}		.card-icon {		font-size: 36rpx;		margin-right: 16rpx;	}		.card-title {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;	}		.card-subtitle {		font-size: 24rpx;		color: #999;		margin-left: auto;	}		.card-body {		padding: 32rpx;	}		/* 信息行样式 */	.info-row {		display: flex;		justify-content: space-between;		gap: 32rpx;		margin-bottom: 24rpx;	}		.info-row:last-child {		margin-bottom: 0;	}		.info-item {		flex: 1;	}		.info-label {		font-size: 28rpx;		color: #8f959e;		margin-bottom: 16rpx;	}		.info-value {		font-size: 28rpx;		color: #1f2329;		font-weight: 500;	}		.info-value.tag {		display: inline-block;		padding: 8rpx 16rpx;		border-radius: 8rpx;		font-size: 24rpx;	}		.status-pending {		background: #fff9e6;		color: #f39c12;	}		.status-confirmed {		background: #e6f7ff;		color: #1890ff;	}		.status-rejected {		background: #fff2f0;		color: #ff4757;	}		.status-deleted {		background: #f8f9fa;		color: #999;	}		/* 文件列表样式 */	.file-list {		margin-top: 8rpx;	}		.file-item {		display: flex;		align-items: center;		padding: 24rpx;		background: #f8f9fa;		border-radius: 12rpx;		margin-bottom: 16rpx;	}		.file-item:last-child {		margin-bottom: 0;	}		.file-icon {		margin-right: 20rpx;		flex-shrink: 0;	}		.file-type-icon {		font-size: 48rpx;	}		.file-info {		flex: 1;	}		.file-name {		font-size: 28rpx;		color: #1f2329;		font-weight: 500;		margin-bottom: 8rpx;	}		.file-meta {		display: flex;		gap: 16rpx;	}		.file-size, .file-format {		font-size: 24rpx;		color: #8f959e;	}		.file-actions {		flex-shrink: 0;		display: flex;		gap: 12rpx;	}		.btn-action {		padding: 12rpx 20rpx;		border: none;		border-radius: 8rpx;		font-size: 24rpx;		display: flex;		align-items: center;		gap: 8rpx;		transition: all 0.3s ease;	}		.btn-action.preview {		background: #1890ff;		color: #fff;	}		.btn-action.preview:active {		background: #0d7ae5;	}		.btn-action.download {		background: #07C160;		color: #fff;	}		.btn-action.download:active {		background: #06a652;	}		.btn-text {		font-size: 24rpx;	}		/* 空文件状态 */	.empty-files {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 80rpx 40rpx;		text-align: center;	}		.empty-icon {		font-size: 64rpx;		color: #ccc;		margin-bottom: 24rpx;	}		.empty-text {		font-size: 28rpx;		color: #999;	}		/* 方案说明内容 */	.description-content {		background: #f8f9fa;		border-radius: 12rpx;		padding: 24rpx;	}		.description-text {		font-size: 28rpx;		color: #1f2329;		line-height: 1.6;	}		/* 设计师信息样式 */	.designer-detail {		display: flex;		align-items: center;		gap: 24rpx;	}		.designer-avatar {		width: 120rpx;		height: 120rpx;		border-radius: 50%;		overflow: hidden;		background: #f0f0f0;		flex-shrink: 0;	}		.avatar-image {		width: 100%;		height: 100%;	}		.designer-info-content {		flex: 1;	}		.designer-name {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 8rpx;	}		.designer-role {		font-size: 26rpx;		color: #8f959e;	}		.contact-btn {		background: #1890ff;		color: #fff;		padding: 16rpx 24rpx;		border-radius: 8rpx;		font-size: 24rpx;		font-weight: 500;		cursor: pointer;		transition: background-color 0.3s ease;		flex-shrink: 0;	}		.contact-btn:active {		background: #0d7ae5;	}		/* 底部操作区域 */	.bottom-actions {		position: sticky;		bottom: 0;		background: #fff;		padding: 24rpx 32rpx 48rpx;		border-top: 1rpx solid #e1e4e8;		margin-top: 24rpx;	}		.action-buttons {		display: flex;		gap: 24rpx;	}		.btn {		flex: 1;		height: 96rpx;		border: none;		border-radius: 16rpx;		font-size: 32rpx;		font-weight: 500;		display: flex;		align-items: center;		justify-content: center;		transition: all 0.3s ease;		cursor: pointer;	}		.btn:active:not(:disabled) {		transform: scale(0.98);	}		.btn:disabled {		opacity: 0.6;		cursor: not-allowed;	}		.btn-reject {		background: #fff;		color: #ff4757;		border: 2rpx solid #ff4757;	}		.btn-reject:active:not(:disabled) {		background: #fff2f0;	}		.btn-confirm {		background: #07C160;		color: #fff;	}		.btn-confirm:active:not(:disabled) {		background: #06a652;	}		.btn-text {		font-size: 32rpx;		font-weight: 500;	}		/* 状态提示 */	.status-tips {		margin-top: 24rpx;	}		.tips-card {		background: #f8f9fa;		border-radius: 16rpx;		padding: 32rpx;		display: flex;		align-items: center;		gap: 24rpx;	}		.tips-confirmed {		background: #e6f7ff;		border-left: 8rpx solid #1890ff;	}		.tips-rejected {		background: #fff2f0;		border-left: 8rpx solid #ff4757;	}		.tips-icon {		font-size: 48rpx;		flex-shrink: 0;	}		.tips-content {		flex: 1;	}		.tips-title {		font-size: 28rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 8rpx;	}		.tips-desc {		font-size: 24rpx;		color: #666;		line-height: 1.4;	}		/* 预览弹窗样式 */	.preview-modal {		position: fixed;		top: 0;		left: 0;		right: 0;		bottom: 0;		z-index: 9999;		display: flex;		align-items: center;		justify-content: center;	}		.preview-overlay {		position: absolute;		top: 0;		left: 0;		right: 0;		bottom: 0;		background: rgba(0, 0, 0, 0.8);		backdrop-filter: blur(10px);	}		.preview-content {		position: relative;		background: #fff;		border-radius: 20rpx;		width: 90vw;		height: 80vh;		display: flex;		flex-direction: column;		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);		overflow: hidden;	}		.preview-header {		display: flex;		align-items: center;		justify-content: space-between;		padding: 32rpx;		border-bottom: 1rpx solid #e1e4e8;		background: #fafbfc;	}		.preview-title {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		flex: 1;		overflow: hidden;		text-overflow: ellipsis;		white-space: nowrap;	}		.preview-actions {		display: flex;		align-items: center;		gap: 16rpx;	}		.btn-close {		padding: 16rpx 24rpx;		border: none;		border-radius: 12rpx;		background: #8f959e;		color: #fff;		font-size: 26rpx;		display: flex;		align-items: center;		gap: 8rpx;		transition: all 0.3s ease;	}		.btn-close:active {		transform: scale(0.95);		background: #6a737d;	}		.preview-body {		flex: 1;		display: flex;		align-items: center;		justify-content: center;		overflow: hidden;	}		.preview-unsupported {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 80rpx;		text-align: center;	}		.unsupported-icon {		font-size: 120rpx;		margin-bottom: 32rpx;	}		.unsupported-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 16rpx;	}		.unsupported-desc {		font-size: 28rpx;		color: #8f959e;		margin-bottom: 48rpx;	}		.btn-download-large {		padding: 24rpx 48rpx;		border: none;		border-radius: 16rpx;		background: linear-gradient(135deg, #1890ff, #36cfc9);		color: #fff;		font-size: 32rpx;		font-weight: 600;		display: flex;		align-items: center;		gap: 16rpx;		transition: all 0.3s ease;	}		.btn-download-large:active {		transform: scale(0.95);		background: linear-gradient(135deg, #0d7ae5, #2db8b3);	}		/* 下载进度样式 */	.download-progress {		position: fixed;		top: 0;		left: 0;		right: 0;		bottom: 0;		z-index: 10000;		display: flex;		align-items: center;		justify-content: center;	}		.progress-overlay {		position: absolute;		top: 0;		left: 0;		right: 0;		bottom: 0;		background: rgba(0, 0, 0, 0.6);	}		.progress-content {		position: relative;		background: #fff;		border-radius: 20rpx;		padding: 64rpx 48rpx;		text-align: center;		min-width: 300rpx;		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);	}		.progress-spinner {		width: 64rpx;		height: 64rpx;		border: 4rpx solid transparent;		border-top: 4rpx solid #1890ff;		border-radius: 50%;		animation: spin 1s linear infinite;		margin: 0 auto 24rpx;	}		.progress-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		display: block;		margin-bottom: 8rpx;	}		.progress-subtext {		font-size: 26rpx;		color: #8f959e;		display: block;	}		@keyframes spin {		0% { transform: rotate(0deg); }		100% { transform: rotate(360deg); }	}</style>

@@ -267,6 +267,107 @@ export function uploadDocument(file, relatedType, relatedId, description, stage,
   })
 }
 
+// 视频上传接口
+export function uploadVideo(file, relatedType, relatedId, description, stage, sequence) {
+  return new Promise((resolve, reject) => {
+    console.log('🔍 DEBUG VIDEO UPLOAD - Starting video upload process')
+    console.log('🔍 DEBUG VIDEO UPLOAD - File:', file)
+    
+    // 构建 formData
+    const formData = {
+      relatedType: Number(relatedType),
+      relatedId: Number(relatedId),
+      sequence: Number(sequence || 0),
+      description: description || '',
+      stage: stage || ''
+    }
+
+    console.log('🔍 DEBUG VIDEO UPLOAD - FormData:', formData)
+
+    // 检查文件是否存在
+    uni.getFileInfo({
+      filePath: file,
+      success: (fileInfo) => {
+        console.log('✅ DEBUG VIDEO UPLOAD - File info:', {
+          size: fileInfo.size,
+          exists: true
+        })
+
+        // 开始上传视频
+        const uploadTask = uni.uploadFile({
+          url: getBaseUrl() + '/api/media/upload/video',
+          filePath: file,
+          name: 'file',
+          formData: formData,
+          header: {
+            'Authorization': 'Bearer ' + getToken(),
+          },
+          success: (res) => {
+            console.log('📡 DEBUG VIDEO UPLOAD - Upload response received')
+            console.log('📡 DEBUG VIDEO UPLOAD - Status code:', res.statusCode)
+
+            if (res.statusCode === 200) {
+              try {
+                const data = JSON.parse(res.data)
+                console.log('📡 DEBUG VIDEO UPLOAD - Parsed response:', data)
+                
+                if (data.code === 200) {
+                  console.log('✅ DEBUG VIDEO UPLOAD - Video upload successful')
+                  // 提取视频URL信息
+                  const result = {
+                    ...data,
+                    fileUrl: data.data?.fileUrl,
+                    videoInfo: {
+                      filename: data.data?.filename,
+                      size: data.data?.size,
+                      mediaType: data.data?.mediaType,
+                      sequence: data.data?.sequence,
+                      relatedType: data.data?.relatedType,
+                      relatedId: data.data?.relatedId,
+                      stage: data.data?.stage,
+                      description: data.data?.description,
+                      mediaId: data.data?.mediaId,
+                      uploadTime: data.data?.uploadTime
+                    }
+                  }
+                  resolve(result)
+                } else {
+                  console.error('❌ DEBUG VIDEO UPLOAD - Business logic error:', data.msg)
+                  reject(new Error(data.msg || '视频上传失败'))
+                }
+              } catch (e) {
+                console.error('❌ DEBUG VIDEO UPLOAD - JSON parse error:', e)
+                reject(new Error('服务器响应格式错误'))
+              }
+            } else {
+              console.error('❌ DEBUG VIDEO UPLOAD - HTTP error, status:', res.statusCode)
+              let errorMessage = `视频上传失败，状态码: ${res.statusCode}`
+              try {
+                const errorData = JSON.parse(res.data)
+                errorMessage = errorData.message || errorData.error || errorMessage
+              } catch (parseError) {}
+              reject(new Error(errorMessage))
+            }
+          },
+          fail: (error) => {
+            console.error('❌ DEBUG VIDEO UPLOAD - Upload request failed:', error)
+            reject(new Error('网络请求失败: ' + (error.errMsg || '未知错误')))
+          }
+        })
+
+        // 监听上传进度
+        uploadTask.onProgressUpdate((res) => {
+          console.log('📊 DEBUG VIDEO UPLOAD - Upload progress:', res.progress + '%')
+        })
+      },
+      fail: (fileError) => {
+        console.error('❌ DEBUG VIDEO UPLOAD - File check failed:', fileError)
+        reject(new Error('文件不存在或无法访问: ' + fileError.errMsg))
+      }
+    })
+  })
+}
+
 // 批量图片上传接口
 export function batchUploadImages(files, relatedType, relatedId, stage) {
   console.log('🔍 DEBUG BATCH - Starting batch upload, file count:', files.length)

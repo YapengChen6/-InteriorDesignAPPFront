@@ -186,6 +186,12 @@
     }
   },
   {
+    "path": "pages/post/detail",
+    "style": {
+      "navigationBarTitleText": "帖子详情页面"
+    }
+  },
+  {
     "path": "pages/publish/index",
     "style": {
       "navigationBarTitleText": "发布页面"
@@ -298,6 +304,13 @@
     "style": {
       "navigationBarTitleText": "已完成订单的详情页面"
     }
+  },
+  {
+  	"path" : "pages/review/review",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : ""
+  	}
   }
   ],
   "tabBar": {

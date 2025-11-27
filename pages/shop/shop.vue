@@ -88,13 +88,13 @@
           <!-- 商品信息 -->
           <view class="product-info">
             <text class="product-name">{{ product.productName }}</text>
-            <text class="product-category">{{ product.category }}</text>
+            <text class="product-category">{{ product.categoryPath || '未分类' }}</text>
             <text class="product-detail">{{ product.productDetail }}</text>
             <view class="price-section">
               <text class="market-price">￥{{ formatPrice(product.marketPrice) }}</text>
               <text class="cost-price" v-if="product.costPrice">成本: ￥{{ formatPrice(product.costPrice) }}</text>
             </view>
-            <text class="product-stock">库存: {{ product.stock }}</text>
+            <text class="product-stock">总库存: {{ calculateTotalStock(product) }}</text>
             <text class="spec-type">规格类型: {{ getSpecTypeText(product.specType) }}</text>
           </view>
           
@@ -136,13 +136,22 @@
       <view class="empty-state" v-if="!loading && filteredProducts.length === 0">
         <image src="/static/images/empty-product.png" class="empty-image"></image>
         <text class="empty-text">暂无产品数据</text>
+        <button class="add-product-btn" @click="handleAddProduct">添加商品</button>
+      </view>
+
+      <!-- 添加商品浮动按钮 -->
+      <view class="floating-action" v-if="filteredProducts.length > 0">
+        <button class="add-product-float-btn" @click="handleAddProduct">
+          <uni-icons type="plus" size="24" color="#fff"></uni-icons>
+          添加商品
+        </button>
       </view>
     </scroll-view>
   </view>
 </template>
 
 <script>
-import productApi from '@/api/productSpu.js';
+import getAllProductSpus from '@/api/product.js';
 
 export default {
   data() {
@@ -150,19 +159,22 @@ export default {
       searchQuery: '',
       categoryIndex: 0,
       statusIndex: 0,
-      categoryOptions: ['全部', '建材', '家具', '灯具', '厨卫', '软装', '饰品', '家电', '全屋定制', '其他'],
-      statusOptions: ['全部', '上架', '下架'],
+      categoryOptions: ['全部类别'],
+      statusOptions: ['全部状态', '上架', '下架'],
       products: [],
+      allProducts: [], // 存储所有产品用于前端筛选
+      categories: [], // 存储分类数据
       loading: false,
       refreshing: false,
       loadMoreStatus: 'more',
       pageParams: {
         pageNum: 1,
-        pageSize: 10,
+        pageSize: 12,
         total: 0
       },
       searchTimer: null,
-      actionLoading: false
+      actionLoading: false,
+      productSkusMap: new Map() // 存储SPU对应的SKU列表
     }
   },
   
@@ -175,20 +187,22 @@ export default {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(product => 
           product.productName.toLowerCase().includes(query) || 
-          (product.category && product.category.toLowerCase().includes(query)) ||
+          (product.categoryPath && product.categoryPath.toLowerCase().includes(query)) ||
           (product.productDetail && product.productDetail.toLowerCase().includes(query))
         );
       }
       
       // 类别过滤
       if (this.categoryIndex > 0) {
-        const category = this.categoryOptions[this.categoryIndex];
-        filtered = filtered.filter(product => 
-          product.category === category
-        );
+        const categoryId = this.categories[this.categoryIndex - 1]?.id;
+        if (categoryId) {
+          filtered = filtered.filter(product => 
+            product.categoryId === categoryId
+          );
+        }
       }
       
-      // 状态过滤 ('0':上架, '2':下架)
+      // 状态过滤
       if (this.statusIndex > 0) {
         const statusValue = this.statusIndex === 1 ? '0' : '2';
         filtered = filtered.filter(product => 
@@ -203,20 +217,26 @@ export default {
   methods: {
     // 获取商品图片
     getProductImage(product) {
-      if (product.coverImages && product.coverImages.length > 0) {
-        // 按sequence排序，取第一张图片
-        const sortedImages = [...product.coverImages].sort((a, b) => a.sequence - b.sequence);
-        const mainImage = sortedImages[0];
-        if (mainImage && mainImage.fileUrl) {
-          // 处理blob URL和正常URL
-          if (mainImage.fileUrl.startsWith('blob:')) {
-            return mainImage.fileUrl;
-          } else {
-            return mainImage.fileUrl;
-          }
-        }
+      // 根据实际数据结构调整图片获取逻辑
+      if (product.imageUrl) {
+        return product.imageUrl;
+      }
+      if (product.coverImage) {
+        return product.coverImage;
+      }
+      if (product.imageList && product.imageList.length > 0) {
+        return product.imageList[0];
       }
       return '/static/images/default-product.jpg';
+    },
+
+    // 计算总库存（从SKU汇总）
+    calculateTotalStock(product) {
+      if (this.productSkusMap.has(product.id)) {
+        const skus = this.productSkusMap.get(product.id);
+        return skus.reduce((total, sku) => total + (sku.stock || 0), 0);
+      }
+      return product.stock || 0;
     },
 
     // 获取规格类型文本
@@ -234,7 +254,6 @@ export default {
       return new Promise((resolve, reject) => {
         uni.getNetworkType({
           success: (res) => {
-            console.log('📶 当前网络状态:', res.networkType);
             if (res.networkType === 'none') {
               reject(new Error('网络连接不可用，请检查网络设置'));
             } else {
@@ -242,79 +261,84 @@ export default {
             }
           },
           fail: (err) => {
-            console.error('❌ 网络状态检查失败:', err);
             reject(new Error('网络状态检查失败'));
           }
         });
       });
     },
 
-    // 加载商品列表 - 使用新的接口
-    async loadProducts() {
-      if (this.loading && this.pageParams.pageNum > 1) {
-        return;
+    // 加载分类数据
+    async loadCategories() {
+      try {
+        const res = await productApi.getAllCategories();
+        if (res.code === 200) {
+          this.categories = res.data || [];
+          // 更新分类选项
+          this.categoryOptions = ['全部类别', ...this.categories.map(cat => cat.categoryName)];
+        }
+      } catch (error) {
+        console.error('加载分类数据失败:', error);
       }
+    },
+
+    // 加载商品列表
+    async loadProducts() {
+      if (this.loading) return;
       
       this.loading = true;
       try {
-        // 检查网络状态
         await this.checkNetworkStatus();
         
-        // 构建请求参数
-        const requestParams = {
-          pageNum: this.pageParams.pageNum,
-          pageSize: this.pageParams.pageSize
-        };
+        console.log('开始加载商品列表');
         
-        // 添加搜索条件
-        if (this.searchQuery) {
-          requestParams.productName = this.searchQuery;
+        // 根据状态选择不同的接口
+        let res;
+        if (this.statusIndex === 1) {
+          // 上架商品
+          res = await productApi.getOnShelfProductSpus();
+        } else if (this.statusIndex === 2) {
+          // 下架商品
+          res = await productApi.getOffShelfProductSpus();
+        } else {
+          // 全部商品
+          res = await productApi.getAllProductSpus();
         }
         
-        // 添加分类条件
-        if (this.categoryIndex > 0) {
-          requestParams.category = this.categoryOptions[this.categoryIndex];
-        }
-        
-        // 添加状态条件
-        if (this.statusIndex > 0) {
-          requestParams.productStatus = this.getStatusValue();
-        }
-        
-        console.log('📤 发送GET请求参数:', requestParams);
-        
-        // 使用新的接口获取带媒体信息的商品列表
-        const res = await productApi.getProductListWithMedia(requestParams);
-        console.log('✅ 接口响应成功:', res);
+        console.log('商品列表接口响应:', res);
         
         if (res.code === 200) {
           const productList = res.data || [];
+          this.allProducts = productList;
+          
+          // 前端分页
+          const startIndex = (this.pageParams.pageNum - 1) * this.pageParams.pageSize;
+          const endIndex = startIndex + this.pageParams.pageSize;
+          const pagedProducts = productList.slice(startIndex, endIndex);
+          
+          // 加载每个商品的SKU信息
+          await this.loadProductsWithSkus(pagedProducts);
+          
           if (this.pageParams.pageNum === 1) {
-            this.products = this.formatProductData(productList);
+            this.products = this.formatProductData(pagedProducts);
           } else {
-            this.products = [...this.products, ...this.formatProductData(productList)];
+            this.products = [...this.products, ...this.formatProductData(pagedProducts)];
           }
           
-          // 注意：新接口可能没有返回total字段，需要根据实际情况调整
-          this.pageParams.total = res.total || productList.length;
+          this.pageParams.total = productList.length;
           
+          // 更新加载状态
           if (this.products.length >= this.pageParams.total) {
             this.loadMoreStatus = 'noMore';
           } else {
             this.loadMoreStatus = 'more';
           }
           
-          console.log(`✅ 成功加载 ${this.products.length} 个商品`);
+          console.log(`成功加载 ${this.products.length} 个商品`);
         } else {
-          console.error('❌ 接口返回错误:', res);
-          uni.showToast({
-            title: res.message || '获取商品列表失败',
-            icon: 'none',
-            duration: 3000
-          });
+          throw new Error(res.message || '获取商品列表失败');
         }
       } catch (error) {
-        console.error('💥 加载商品列表失败:', error);
+        console.error('加载商品列表失败:', error);
         uni.showToast({
           title: error.message || '加载失败，请重试',
           icon: 'none',
@@ -327,27 +351,67 @@ export default {
       }
     },
 
-    // 获取状态值 ('0':上架, '2':下架)
-    getStatusValue() {
-      if (this.statusIndex === 0) return ''; // 全部
-      if (this.statusIndex === 1) return '0'; // 上架
-      if (this.statusIndex === 2) return '2'; // 下架
-      return '';
+    // 加载商品及其SKU信息
+    async loadProductsWithSkus(products) {
+      const skuPromises = products.map(async (product) => {
+        try {
+          const skuRes = await productApi.getProductSkusBySpuId(product.spuId || product.id);
+          if (skuRes.code === 200) {
+            this.productSkusMap.set(product.spuId || product.id, skuRes.data || []);
+          }
+        } catch (error) {
+          console.error(`加载商品 ${product.productName} 的SKU失败:`, error);
+          this.productSkusMap.set(product.spuId || product.id, []);
+        }
+      });
+      
+      await Promise.all(skuPromises);
+    },
+
+    // 根据分类加载商品
+    async loadProductsByCategory() {
+      if (this.categoryIndex === 0) {
+        // 全部类别
+        await this.loadProducts();
+        return;
+      }
+      
+      const category = this.categories[this.categoryIndex - 1];
+      if (!category) return;
+      
+      this.loading = true;
+      try {
+        const res = await productApi.getProductSpusByCategory(category.id);
+        if (res.code === 200) {
+          const productList = res.data || [];
+          this.products = this.formatProductData(productList);
+        }
+      } catch (error) {
+        console.error('根据分类加载商品失败:', error);
+        uni.showToast({
+          title: '加载失败，请重试',
+          icon: 'none'
+        });
+      } finally {
+        this.loading = false;
+      }
     },
     
-    // 格式化商品数据 - 根据新接口结构调整
+    // 格式化商品数据
     formatProductData(products) {
       return products.map(product => ({
-        id: product.productSpuId,
+        id: product.spuId,
         productName: product.productName,
-        category: product.category,
+        categoryId: product.categoryId,
+        categoryPath: product.categoryPath,
         productDetail: product.productDetail,
         marketPrice: product.marketPrice,
         costPrice: product.costPrice,
-        status: product.productStatus,
-        stock: product.stock,
+        status: product.status,
         specType: product.specType,
-        coverImages: product.coverImages || [],
+        imageUrl: product.imageUrl,
+        coverImage: product.coverImage,
+        imageList: product.imageList || [],
         originalData: product
       }));
     },
@@ -359,28 +423,45 @@ export default {
     },
     
     onImageError(product) {
-      console.log('🖼️ 图片加载失败，使用默认图片');
-      // 这里可以设置一个默认图片标记，但实际图片URL已经在getProductImage中处理
+      console.log('图片加载失败，使用默认图片');
     },
     
     handleSearch() {
       clearTimeout(this.searchTimer);
       this.searchTimer = setTimeout(() => {
         this.pageParams.pageNum = 1;
-        this.loadProducts();
+        // 前端搜索，不需要重新调用接口
+        this.applyFilters();
       }, 500);
     },
     
     onCategoryChange(e) {
       this.categoryIndex = parseInt(e.detail.value);
       this.pageParams.pageNum = 1;
-      this.loadProducts();
+      if (this.categoryIndex === 0) {
+        this.loadProducts();
+      } else {
+        this.loadProductsByCategory();
+      }
     },
     
     onStatusChange(e) {
       this.statusIndex = parseInt(e.detail.value);
       this.pageParams.pageNum = 1;
       this.loadProducts();
+    },
+
+    // 应用前端筛选
+    applyFilters() {
+      // filteredProducts computed property 会自动处理
+      this.$forceUpdate();
+    },
+    
+    // 添加商品
+    handleAddProduct() {
+      uni.navigateTo({
+        url: '/pages/test'
+      });
     },
     
     // 编辑产品
@@ -409,7 +490,6 @@ export default {
     async deleteProduct(id) {
       this.actionLoading = true;
       try {
-        // 检查网络状态
         await this.checkNetworkStatus();
         
         uni.showLoading({
@@ -417,13 +497,9 @@ export default {
           mask: true
         });
         
-        console.log(`🗑️ 开始删除商品 ID: ${id}`);
-        
-        const res = await productApi.deleteProduct(id);
+        const res = await productApi.deleteProductSpu(id);
         
         uni.hideLoading();
-        
-        console.log('✅ 删除接口响应:', res);
         
         if (res.code === 200) {
           uni.showToast({
@@ -431,19 +507,20 @@ export default {
             icon: 'success',
             duration: 2000
           });
+          // 重新加载数据
           setTimeout(() => {
             this.pageParams.pageNum = 1;
             this.loadProducts();
           }, 500);
         } else {
           uni.showToast({
-            title: res.msg || '删除失败',
+            title: res.message || '删除失败',
             icon: 'none',
             duration: 3000
           });
         }
       } catch (error) {
-        console.error('💥 删除商品失败:', error);
+        console.error('删除商品失败:', error);
         uni.hideLoading();
         uni.showToast({
           title: error.message || '删除失败，请重试',
@@ -455,43 +532,22 @@ export default {
       }
     },
     
-    // 上架/下架商品 ('0':上架, '2':下架)
+    // 上架/下架商品
     async toggleProductStatus(product) {
       if (this.actionLoading) return;
       
-      try {
-        const newStatus = product.status === '0' ? '2' : '0';
-        const action = newStatus === '0' ? '上架' : '下架';
-        
-        uni.showModal({
-          title: '确认操作',
-          content: `确定要${action}商品"${product.productName}"吗？`,
-          success: async (res) => {
-            if (res.confirm) {
-              await this.doUpdateStatusWithRetry(product, newStatus, action);
-            }
+      const newStatus = product.status === '0' ? '2' : '0';
+      const action = newStatus === '0' ? '上架' : '下架';
+      
+      uni.showModal({
+        title: '确认操作',
+        content: `确定要${action}商品"${product.productName}"吗？`,
+        success: async (res) => {
+          if (res.confirm) {
+            await this.doUpdateStatus(product, newStatus, action);
           }
-        });
-      } catch (error) {
-        console.error('更新商品状态失败:', error);
-      }
-    },
-    
-    // 带重试机制的状态更新
-    async doUpdateStatusWithRetry(product, newStatus, action, retries = 2) {
-      for (let i = 0; i < retries; i++) {
-        try {
-          console.log(`🔄 第 ${i + 1} 次尝试更新状态`);
-          await this.doUpdateStatus(product, newStatus, action);
-          return;
-        } catch (error) {
-          console.warn(`⚠️ 第 ${i + 1} 次尝试失败:`, error);
-          if (i === retries - 1) {
-            throw error;
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000));
         }
-      }
+      });
     },
     
     async doUpdateStatus(product, newStatus, action) {
@@ -504,34 +560,15 @@ export default {
           mask: true
         });
 
-        console.log(`🔄 开始更新商品状态 - ID: ${product.id}, 新状态: ${newStatus}`);
-        
         let res;
-        
-        try {
-          res = await productApi.updateProductStatus(product.id, newStatus);
-          console.log('✅ 状态更新接口响应:', res);
-        } catch (apiError) {
-          console.warn('⚠️ 状态更新接口失败，错误信息:', apiError);
-          
-          // 使用通用更新接口
-          const updateData = {
-            productSpuId: product.id,
-            productName: product.productName,
-            productDetail: product.productDetail,
-            category: product.category,
-            productStatus: newStatus,
-            marketPrice: product.marketPrice,
-            costPrice: product.costPrice,
-            stock: product.stock,
-            specType: product.specType
-          };
-          
-          console.log('📤 通用更新接口参数:', updateData);
-          res = await productApi.updateProduct(updateData);
-          console.log('✅ 通用更新接口响应:', res);
+        if (newStatus === '0') {
+          // 上架
+          res = await productApi.publishProductSpu(product.id);
+        } else {
+          // 下架
+          res = await productApi.unpublishProductSpu(product.id);
         }
-
+        
         uni.hideLoading();
 
         if (res.code === 200) {
@@ -547,26 +584,21 @@ export default {
             this.products[productIndex].status = newStatus;
             this.$forceUpdate();
           }
-          
-          console.log(`✅ 商品状态更新成功，本地状态已同步`);
         } else {
-          console.error('❌ 接口返回错误:', res);
           uni.showToast({
-            title: res.msg || `${action}失败`,
+            title: res.message || `${action}失败`,
             icon: 'none',
             duration: 3000
           });
-          throw new Error(res.msg || `${action}失败`);
         }
       } catch (error) {
-        console.error('💥 更新商品状态失败:', error);
+        console.error('更新商品状态失败:', error);
         uni.hideLoading();
         uni.showToast({
           title: error.message || '操作失败，请重试',
           icon: 'none',
           duration: 3000
         });
-        throw error;
       } finally {
         this.actionLoading = false;
       }
@@ -576,12 +608,14 @@ export default {
     handlePullDownRefresh() {
       this.refreshing = true;
       this.pageParams.pageNum = 1;
+      this.productSkusMap.clear();
       this.loadProducts();
+      this.loadCategories();
     },
     
     // 上拉加载更多
     handleReachBottom() {
-      if (this.loading || this.loadMoreStatus === 'noMore') {
+      if (this.loading || this.loadMoreStatus === 'noMore' || this.categoryIndex > 0) {
         return;
       }
       
@@ -592,23 +626,25 @@ export default {
   },
   
   onLoad() {
-    console.log('🚀 商品管理页面加载');
+    console.log('商品管理页面加载');
     this.loadProducts();
+    this.loadCategories();
   },
   
   onShow() {
-    console.log('🔄 商品管理页面显示，刷新数据');
+    console.log('商品管理页面显示，刷新数据');
     this.pageParams.pageNum = 1;
+    this.productSkusMap.clear();
     this.loadProducts();
   },
   
   onPullDownRefresh() {
-    console.log('⬇️ 触发下拉刷新');
+    console.log('触发下拉刷新');
     this.handlePullDownRefresh();
   },
   
   onReachBottom() {
-    console.log('⬆️ 触发上拉加载更多');
+    console.log('触发上拉加载更多');
     this.handleReachBottom();
   }
 }
@@ -685,6 +721,7 @@ export default {
 
 .product-grid {
   height: calc(100vh - 300rpx);
+  position: relative;
   
   .grid-container {
     display: flex;
@@ -867,6 +904,43 @@ export default {
       margin-bottom: 40rpx;
       font-size: 28rpx;
       color: #909399;
+    }
+    
+    .add-product-btn {
+      background: #409EFF;
+      color: #fff;
+      border: none;
+      padding: 20rpx 40rpx;
+      border-radius: 12rpx;
+      font-size: 28rpx;
+      
+      &::after {
+        border: none;
+      }
+    }
+  }
+
+  .floating-action {
+    position: fixed;
+    bottom: 40rpx;
+    right: 40rpx;
+    z-index: 999;
+    
+    .add-product-float-btn {
+      background: #409EFF;
+      color: #fff;
+      border: none;
+      padding: 20rpx 30rpx;
+      border-radius: 50rpx;
+      font-size: 26rpx;
+      box-shadow: 0 8rpx 24rpx rgba(64, 158, 255, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 10rpx;
+      
+      &::after {
+        border: none;
+      }
     }
   }
 }

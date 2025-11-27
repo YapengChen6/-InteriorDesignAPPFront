@@ -100,6 +100,215 @@
         </view>
       </view>
       
+      <!-- 根据帖子类型显示不同的扩展字段 -->
+      
+      <!-- 普通帖扩展字段 -->
+      <view v-if="threadType === 3" class="form-group">
+        <view class="form-label">装修类型</view>
+        <uni-data-select
+          v-model="normalPost.decorationType"
+          :localdata="decorationTypes"
+          placeholder="请选择装修类型"
+        ></uni-data-select>
+        
+        <view class="form-label" style="margin-top: 15px;">预算估算(元)</view>
+        <uni-easyinput 
+          type="digit" 
+          class="form-input" 
+          v-model="normalPost.costEstimate" 
+          placeholder="请输入预算金额"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">是否分享到社区</view>
+        <view class="switch-group">
+          <text class="switch-label">分享到社区</text>
+          <switch :checked="normalPost.isShared === 1" @change="onSharedChange" color="#3498db" />
+        </view>
+      </view>
+      
+      <!-- 作品集扩展字段 -->
+      <view v-if="threadType === 1" class="form-group">
+        <view class="form-label">项目名称</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="portfolio.projectName" 
+          placeholder="请输入项目名称"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">设计风格</view>
+        <uni-data-select
+          v-model="portfolio.style"
+          :localdata="designStyles"
+          placeholder="请选择设计风格"
+        ></uni-data-select>
+        
+        <view class="form-label" style="margin-top: 15px;">房屋面积(㎡)</view>
+        <uni-easyinput 
+          type="digit" 
+          class="form-input" 
+          v-model="portfolio.area" 
+          placeholder="请输入房屋面积"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">项目预算(元)</view>
+        <uni-easyinput 
+          type="digit" 
+          class="form-input" 
+          v-model="portfolio.budget" 
+          placeholder="请输入项目预算"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">设计方案</view>
+        <textarea 
+          class="form-input textarea" 
+          v-model="portfolio.designScheme" 
+          placeholder="请描述您的设计方案..."
+          maxlength="500"
+          style="min-height: 100px;"
+        />
+        <view class="word-count">{{ portfolio.designScheme.length }}/500</view>
+        
+        <view class="form-label" style="margin-top: 15px;">是否公开</view>
+        <view class="switch-group">
+          <text class="switch-label">公开作品</text>
+          <switch :checked="portfolio.isPublic === 1" @change="onPublicChange" color="#3498db" />
+        </view>
+      </view>
+      
+      <!-- 案例集扩展字段 -->
+      <view v-if="threadType === 2" class="form-group">
+        <view class="form-label">项目名称</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="caseStudy.projectName" 
+          placeholder="请输入项目名称"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">项目位置</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="caseStudy.location" 
+          placeholder="请输入项目详细位置"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">施工单位</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="caseStudy.constructionCompany" 
+          placeholder="请输入施工单位名称"
+        />
+        
+        <view class="form-row">
+          <view class="form-col">
+            <view class="form-label">开始日期</view>
+            <uni-datetime-picker 
+              type="date" 
+              v-model="caseStudy.startDate" 
+              placeholder="选择开始日期"
+            />
+          </view>
+          <view class="form-col">
+            <view class="form-label">完成日期</view>
+            <uni-datetime-picker 
+              type="date" 
+              v-model="caseStudy.completionDate" 
+              placeholder="选择完成日期"
+            />
+          </view>
+        </view>
+        
+        <view class="form-label" style="margin-top: 15px;">案例描述</view>
+        <textarea 
+          class="form-input textarea" 
+          v-model="caseStudy.description" 
+          placeholder="请详细描述项目案例..."
+          maxlength="1000"
+          style="min-height: 120px;"
+        />
+        <view class="word-count">{{ caseStudy.description.length }}/1000</view>
+      </view>
+      
+      <!-- 材料展示扩展字段 -->
+      <view v-if="threadType === 4" class="form-group">
+        <view class="form-label">材料名称</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="materialShow.materialName" 
+          placeholder="请输入材料名称"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">材料类型</view>
+        <uni-data-select
+          v-model="materialShow.materialType"
+          :localdata="materialTypes"
+          placeholder="请选择材料类型"
+        ></uni-data-select>
+        
+        <view class="form-label" style="margin-top: 15px;">品牌</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="materialShow.brand" 
+          placeholder="请输入品牌名称"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">规格</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="materialShow.specification" 
+          placeholder="请输入材料规格"
+        />
+        
+        <view class="form-row">
+          <view class="form-col">
+            <view class="form-label">价格</view>
+            <uni-easyinput 
+              type="digit" 
+              class="form-input" 
+              v-model="materialShow.price" 
+              placeholder="请输入价格"
+            />
+          </view>
+          <view class="form-col">
+            <view class="form-label">单位</view>
+            <uni-easyinput 
+              type="text" 
+              class="form-input" 
+              v-model="materialShow.unit" 
+              placeholder="如：元/桶"
+            />
+          </view>
+        </view>
+        
+        <view class="form-label" style="margin-top: 15px;">供应商名称</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="materialShow.supplierName" 
+          placeholder="请输入供应商名称"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">联系方式</view>
+        <uni-easyinput 
+          type="text" 
+          class="form-input" 
+          v-model="materialShow.contactInfo" 
+          placeholder="请输入联系电话"
+        />
+        
+        <view class="form-label" style="margin-top: 15px;">是否现货</view>
+        <view class="switch-group">
+          <text class="switch-label">有现货</text>
+          <switch :checked="materialShow.isAvailable === 1" @change="onAvailableChange" color="#3498db" />
+        </view>
+      </view>
+      
       <view class="form-group">
         <view class="form-label">插入图片或视频</view>
         <view class="media-upload" @click="handleMediaUpload">
@@ -177,7 +386,8 @@
 
 <script>
 import { createPost, updatePost, getPostDetail } from '@/api/community'
-import { uploadImage, uploadVideo } from '@/api/join.js'
+import { uploadImage } from '@/api/join.js' // 图片上传接口
+import { uploadVideo } from '@/api/join.js' // 视频上传接口
 import { getUserProfile } from '@/api/users.js'
 
 export default {
@@ -228,7 +438,80 @@ export default {
       isCoverUploading: false,
       
       // 新增：封面图在媒体资源中的信息
-      coverMediaInfo: null
+      coverMediaInfo: null,
+      
+      // 普通帖扩展字段
+      normalPost: {
+        decorationType: '新房',
+        costEstimate: 0,
+        isShared: 1
+      },
+      
+      // 作品集扩展字段
+      portfolio: {
+        designScheme: '',
+        projectName: '',
+        area: 0,
+        style: '现代简约',
+        budget: 0,
+        version: 1,
+        isPublic: 1
+      },
+      
+      // 案例集扩展字段
+      caseStudy: {
+        projectName: '',
+        location: '',
+        startDate: '',
+        completionDate: '',
+        constructionCompany: '',
+        description: ''
+      },
+      
+      // 材料展示扩展字段
+      materialShow: {
+        materialName: '',
+        materialType: '涂料',
+        brand: '',
+        specification: '',
+        price: 0,
+        unit: '',
+        supplierName: '',
+        contactInfo: '',
+        isAvailable: 1
+      },
+      
+      // 选择器数据
+      decorationTypes: [
+        { value: '新房', text: '新房' },
+        { value: '旧房翻新', text: '旧房翻新' },
+        { value: '局部改造', text: '局部改造' },
+        { value: '商业空间', text: '商业空间' }
+      ],
+      
+      designStyles: [
+        { value: '现代简约', text: '现代简约' },
+        { value: '北欧风格', text: '北欧风格' },
+        { value: '工业风', text: '工业风' },
+        { value: '新中式', text: '新中式' },
+        { value: '欧式古典', text: '欧式古典' },
+        { value: '美式乡村', text: '美式乡村' },
+        { value: '日式', text: '日式' },
+        { value: '混搭', text: '混搭' }
+      ],
+      
+      materialTypes: [
+        { value: '涂料', text: '涂料' },
+        { value: '地板', text: '地板' },
+        { value: '瓷砖', text: '瓷砖' },
+        { value: '卫浴', text: '卫浴' },
+        { value: '厨具', text: '厨具' },
+        { value: '灯具', text: '灯具' },
+        { value: '五金', text: '五金' },
+        { value: '板材', text: '板材' },
+        { value: '管材', text: '管材' },
+        { value: '其他', text: '其他' }
+      ]
     }
   },
   
@@ -315,6 +598,19 @@ export default {
       this.threadType = type
     },
     
+    // Switch 事件处理
+    onSharedChange(e) {
+      this.normalPost.isShared = e.detail.value ? 1 : 0
+    },
+    
+    onPublicChange(e) {
+      this.portfolio.isPublic = e.detail.value ? 1 : 0
+    },
+    
+    onAvailableChange(e) {
+      this.materialShow.isAvailable = e.detail.value ? 1 : 0
+    },
+    
     // 处理封面图上传
     handleCoverUpload() {
       uni.chooseImage({
@@ -376,6 +672,20 @@ export default {
         this.categoryId = postData.categoryId
         this.status = postData.status
         this.coverUrl = postData.coverUrl || this.defaultCoverUrl
+        
+        // 加载扩展字段数据
+        if (postData.normalPost) {
+          this.normalPost = { ...this.normalPost, ...postData.normalPost }
+        }
+        if (postData.portfolio) {
+          this.portfolio = { ...this.portfolio, ...postData.portfolio }
+        }
+        if (postData.caseStudy) {
+          this.caseStudy = { ...this.caseStudy, ...postData.caseStudy }
+        }
+        if (postData.materialShow) {
+          this.materialShow = { ...this.materialShow, ...postData.materialShow }
+        }
         
         // 处理媒体文件（如果有的话，用于前端展示）
         if (postData.mediaUrls && postData.mediaUrls.length > 0) {
@@ -609,10 +919,10 @@ export default {
               // 上传成功，添加到已上传列表
               const uploadedMedia = {
                 type: media.type,
-                fileUrl: result.data.fileUrl || result.data.videoUrl,
+                fileUrl: result.data.fileUrl,
                 mediaId: result.data.mediaId,
-                fileName: result.data.filename || result.data.fileName,
-                fileSize: result.data.size || result.data.fileSize,
+                fileName: result.data.filename,
+                fileSize: result.data.size,
                 uploadStatus: 'completed'
               }
               this.uploadedMediaFiles.push(uploadedMedia)
@@ -637,7 +947,7 @@ export default {
       return this.uploadedMediaFiles
     },
     
-    // 上传单个媒体文件
+    // 上传单个媒体文件 - 图片使用图片接口，视频使用视频接口
     async uploadSingleMediaFile(filePath, fileType, fileInfo, postId, sequence = 1) {
       try {
         if (fileInfo.size > 50 * 1024 * 1024) {
@@ -699,16 +1009,56 @@ export default {
         coverUrl: this.defaultCoverUrl, // 先使用默认封面，后续上传后再更新
         content: this.content.trim(),
         threadType: this.threadType,
-        status: this.status
+        status: this.status,
+        roleType: this.getRoleTypeNumber() // 根据用户角色设置roleType
       }
       
-      // 添加可选字段
-      if (this.categoryId) {
-        baseData.categoryId = this.categoryId
+      // 添加分类ID（根据帖子类型设置不同的categoryId）
+      const categoryId = this.getCategoryIdByThreadType()
+      if (categoryId) {
+        baseData.categoryId = categoryId
+      }
+      
+      // 根据帖子类型添加对应的扩展字段
+      switch (this.threadType) {
+        case 1: // 作品集
+          baseData.portfolio = { ...this.portfolio }
+          break
+        case 2: // 案例集
+          baseData.caseStudy = { ...this.caseStudy }
+          break
+        case 3: // 普通帖
+          baseData.normalPost = { ...this.normalPost }
+          break
+        case 4: // 材料展示
+          baseData.materialShow = { ...this.materialShow }
+          break
       }
       
       console.log('📦 帖子数据:', baseData)
       return baseData
+    },
+    
+    // 根据用户角色字符串返回对应的roleType数字
+    getRoleTypeNumber() {
+      const roleMap = {
+        'user': 1,
+        'designer': 2,
+        'supervisor': 3,
+        'material_supplier': 4
+      }
+      return roleMap[this.roleType] || 1
+    },
+    
+    // 根据帖子类型设置对应的categoryId
+    getCategoryIdByThreadType() {
+      const categoryMap = {
+        1: 10, // 作品集 -> 分类ID 10
+        2: 12, // 案例集 -> 分类ID 12
+        3: 8,  // 普通帖 -> 分类ID 8
+        4: 20  // 材料展示 -> 分类ID 20
+      }
+      return categoryMap[this.threadType]
     },
     
     // 表单验证
@@ -746,6 +1096,60 @@ export default {
           icon: 'none'
         })
         return false
+      }
+      
+      // 根据帖子类型验证扩展字段
+      switch (this.threadType) {
+        case 1: // 作品集验证
+          if (!this.portfolio.projectName.trim()) {
+            uni.showToast({
+              title: '请输入项目名称',
+              icon: 'none'
+            })
+            return false
+          }
+          if (!this.portfolio.designScheme.trim()) {
+            uni.showToast({
+              title: '请输入设计方案',
+              icon: 'none'
+            })
+            return false
+          }
+          break
+          
+        case 2: // 案例集验证
+          if (!this.caseStudy.projectName.trim()) {
+            uni.showToast({
+              title: '请输入项目名称',
+              icon: 'none'
+            })
+            return false
+          }
+          if (!this.caseStudy.description.trim()) {
+            uni.showToast({
+              title: '请输入案例描述',
+              icon: 'none'
+            })
+            return false
+          }
+          break
+          
+        case 4: // 材料展示验证
+          if (!this.materialShow.materialName.trim()) {
+            uni.showToast({
+              title: '请输入材料名称',
+              icon: 'none'
+            })
+            return false
+          }
+          if (!this.materialShow.brand.trim()) {
+            uni.showToast({
+              title: '请输入品牌名称',
+              icon: 'none'
+            })
+            return false
+          }
+          break
       }
       
       return true
@@ -962,6 +1366,29 @@ export default {
   bottom: 10px;
   font-size: 12px;
   color: #95a5a6;
+}
+
+/* 表单行布局 */
+.form-row {
+  display: flex;
+  gap: 15px;
+}
+
+.form-col {
+  flex: 1;
+}
+
+/* Switch 组样式 */
+.switch-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.switch-label {
+  font-size: 15px;
+  color: #2c3e50;
 }
 
 /* 封面图上传样式 */
@@ -1206,6 +1633,11 @@ export default {
   .cover-preview {
     width: 150px;
     height: 90px;
+  }
+  
+  .form-row {
+    flex-direction: column;
+    gap: 0;
   }
 }
 </style>
