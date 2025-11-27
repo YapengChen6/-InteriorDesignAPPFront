@@ -113,3 +113,35 @@ export function getDesignerApplicationDetailForAdmin(designersId) {
   })
 }
 
+// 获取设计师列表
+export function getDesignerList(params) {
+  return request({
+    url: '/api/designer/list',
+    method: 'get',
+    params
+  })
+}
+// 根据ID获取设计师详情
+export function getDesignerDetail(designerId) {
+  return request({
+    url: `/api/designer/${designerId}`,
+    method: 'get'
+  })
+}
+
+// 搜索设计师
+export function searchDesigners(keyword) {
+  return request({
+    url: '/api/designer/search',
+    method: 'get',
+    params: { keyword }
+  })
+}
+// 联系设计师
+export function contactDesigner(designerId, message) {
+  return request({
+    url: `/api/designer/${designerId}/contact`,
+    method: 'post',
+    data: { message }
+  })
+}
