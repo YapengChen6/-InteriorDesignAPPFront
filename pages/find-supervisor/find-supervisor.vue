@@ -1,432 +1,387 @@
 <template>
-  <view class="container">
-    <!-- 顶部导航 -->
-    <view class="header">
-      <view class="back-btn" @click="goBack">←</view>
-      <view class="header-title">找监理</view>
-      <view class="header-placeholder"></view>
-    </view>
+  <div class="supervisor-container">
+    <!-- 顶部标题 -->
+    <div class="page-header">
+      <h1 class="page-title">寻找监工</h1>
+    </div>
     
-    <!-- 搜索筛选区域 -->
-    <view class="search-filter">
-      <view class="location-search">
-        <text class="location-icon">📍</text>
+    <!-- 搜索区域 -->
+    <div class="search-section">
+      <div class="search-box">
         <input 
+          v-model="searchKeyword" 
           type="text" 
-          class="location-input" 
-          placeholder="输入城市或区域" 
-          v-model="locationInput"
-          @input="onLocationInput"
+          class="search-input" 
+          placeholder="输入监工姓名搜索" 
+          @input="handleSearch"
         />
-      </view>
-      
-      <view class="sort-options">
-        <view 
-          class="sort-option" 
-          :class="{ active: activeSort === 'rating' }" 
-          @click="changeSort('rating')"
-        >
-          好评优先
-        </view>
-        <view 
-          class="sort-option" 
-          :class="{ active: activeSort === 'experience' }" 
-          @click="changeSort('experience')"
-        >
-          经验丰富
-        </view>
-      </view>
-    </view>
+        <div class="search-icon">🔍</div>
+      </div>
+    </div>
     
-    <!-- 监理列表 -->
-    <view class="supervisor-list">
-      <view 
-        class="supervisor-item" 
-        v-for="supervisor in filteredSupervisors" 
-        :key="supervisor.id"
-        @click="goToSupervisorDetail(supervisor)"
+    <!-- 监工列表 -->
+    <div class="supervisor-list">
+      <div 
+        v-for="supervisor in supervisors" 
+        :key="supervisor.userId" 
+        class="supervisor-card"
       >
-        <view class="supervisor-avatar">{{ supervisor.name.charAt(0) }}</view>
-        <view class="supervisor-info">
-          <view class="supervisor-details">
-            <view class="supervisor-name">{{ supervisor.name }}</view>
-            <view class="supervisor-stats">
-              <text class="rating">★ {{ supervisor.rating }}</text>
-              <text class="projects">{{ supervisor.projects }}个项目</text>
-            </view>
-            <view class="supervisor-location">
-              <text class="location-pin">📍</text>
-              <text>{{ supervisor.location }}</text>
-            </view>
-            <view class="supervisor-phone">
-              <text class="phone-icon">📞</text>
-              <text>{{ supervisor.phone }}</text>
-            </view>
-          </view>
-          <button class="contact-btn" @click.stop="contactSupervisor(supervisor)">联系</button>
-        </view>
-      </view>
-      
-      <!-- 空状态 -->
-      <view class="empty-state" v-if="filteredSupervisors.length === 0">
-        <view class="empty-icon">👷</view>
-        <view class="empty-text">未找到匹配的监理</view>
-        <view class="empty-desc">请尝试调整搜索条件</view>
-      </view>
-    </view>
-  </view>
+        <div class="supervisor-info">
+          <div class="supervisor-name">{{ supervisor.name || '匿名监工' }}</div>
+          <div class="supervisor-rating">
+            <span class="stars">★★★★★</span>
+            <span class="rating-text">5.0</span>
+          </div>
+          <div class="supervisor-details">
+            <div class="detail-item">
+              <span class="detail-icon">📁</span>
+              <span>{{ supervisor.caseCount || 0 }}个案例</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-icon">📍</span>
+              <span>{{ supervisor.city || '未知地区' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-icon">📞</span>
+              <span>{{ formatPhone(supervisor.phone) }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="contact-btn" @click="contactSupervisor(supervisor.userId)">
+            联系监工
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 空状态 -->
+    <div v-if="!loading && supervisors.length === 0" class="empty-state">
+      <div class="empty-icon">👷</div>
+      <div class="empty-text">{{ emptyText }}</div>
+    </div>
+    
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading">
+      <div class="spinner"></div>
+      <span>正在加载监工列表...</span>
+    </div>
+  </div>
 </template>
 
 <script>
+import { getSupervisorList, contactSupervisor } from '@/api/supervisorpublic'
+
 export default {
+  name: 'SupervisorList',
   data() {
     return {
-      locationInput: '',
-      activeSort: 'rating',
-      supervisors: [
-        {
-          id: 1,
-          name: '张明监理',
-          rating: 4.9,
-          projects: 156,
-          location: '北京朝阳区',
-          phone: '138****1234',
-          experience: '8年',
-          certificates: ['国家注册监理工程师', '一级建造师'],
-          specialty: '住宅工程、装修监理',
-          description: '资深监理工程师，拥有丰富的施工现场管理经验，擅长发现和解决施工过程中的质量问题。'
-        },
-        {
-          id: 2,
-          name: '李华监理工作室',
-          rating: 4.8,
-          projects: 243,
-          location: '上海浦东新区',
-          phone: '139****5678',
-          experience: '10年',
-          certificates: ['高级监理工程师', '安全工程师'],
-          specialty: '商业空间、办公室装修',
-          description: '专业监理团队，提供全方位的工程监理服务，确保工程质量和使用安全。'
-        },
-        {
-          id: 3,
-          name: '王芳监理',
-          rating: 5.0,
-          projects: 98,
-          location: '广州天河区',
-          phone: '136****9012',
-          experience: '6年',
-          certificates: ['注册监理工程师', '质量工程师'],
-          specialty: '精装修、别墅监理',
-          description: '女性监理师，注重细节和工艺品质，擅长处理精装修工程中的各种技术问题。'
-        },
-        {
-          id: 4,
-          name: '陈伟监理事务所',
-          rating: 4.7,
-          projects: 320,
-          location: '深圳南山区',
-          phone: '137****3456',
-          experience: '12年',
-          certificates: ['国家级监理工程师', '造价工程师'],
-          specialty: '大型工程、全过程监理',
-          description: '拥有大型工程项目监理经验，能够提供从设计到竣工的全过程监理服务。'
-        },
-        {
-          id: 5,
-          name: '刘洋独立监理',
-          rating: 4.9,
-          projects: 187,
-          location: '杭州西湖区',
-          phone: '135****7890',
-          experience: '7年',
-          certificates: ['注册监理师', '建筑工程师'],
-          specialty: '二手房改造、局部装修',
-          description: '专注于家庭装修监理，特别擅长二手房改造和局部装修的质量控制。'
-        }
-      ]
+      searchKeyword: '',
+      supervisors: [],
+      loading: false,
+      searchTimer: null
     }
   },
   
   computed: {
-    filteredSupervisors() {
-      let supervisors = [...this.supervisors];
-      
-      // 根据地点筛选
-      if (this.locationInput.trim()) {
-        supervisors = supervisors.filter(supervisor => 
-          supervisor.location.includes(this.locationInput)
-        );
-      }
-      
-      // 根据排序方式排序
-      switch(this.activeSort) {
-        case 'rating':
-          supervisors.sort((a, b) => b.rating - a.rating);
-          break;
-        case 'experience':
-          supervisors.sort((a, b) => b.projects - a.projects);
-          break;
-      }
-      
-      return supervisors;
+    emptyText() {
+      return this.searchKeyword ? '未找到相关监工' : '暂无监工信息'
     }
   },
   
+  mounted() {
+    this.loadSupervisors()
+  },
+  
   methods: {
-    goBack() {
-      uni.navigateBack();
+    // 加载监工列表
+    async loadSupervisors() {
+      this.loading = true
+      
+      try {
+        const response = await getSupervisorList(this.searchKeyword)
+        
+        if (response.code === 200) {
+          this.supervisors = response.data || []
+        } else {
+          console.error('获取监工列表失败:', response.msg)
+          this.supervisors = []
+        }
+      } catch (error) {
+        console.error('获取监工列表失败:', error)
+        this.supervisors = []
+      } finally {
+        this.loading = false
+      }
     },
     
-    changeSort(sortType) {
-      this.activeSort = sortType;
+    // 处理搜索
+    handleSearch() {
+      if (this.searchTimer) {
+        clearTimeout(this.searchTimer)
+      }
+      
+      this.searchTimer = setTimeout(() => {
+        this.loadSupervisors()
+      }, 500)
     },
     
-    onLocationInput(e) {
-      this.locationInput = e.detail.value;
-    },
-    
-    goToSupervisorDetail(supervisor) {
-      uni.navigateTo({
-        url: `/pages/find-supervisor/supervisor-detail?supervisorId=${supervisor.id}`
-      });
-    },
-    
-    contactSupervisor(supervisor) {
-      uni.showModal({
-        title: '联系监理',
-        content: `确定要联系 ${supervisor.name} 吗？\n电话：${supervisor.phone}`,
-        success: (res) => {
-          if (res.confirm) {
-            uni.makePhoneCall({
-              phoneNumber: supervisor.phone.replace('****', '0000')
-            });
+    // 联系监工
+    async contactSupervisor(userId) {
+      try {
+        const confirm = await this.$confirm('确定要联系此监工吗？', '联系监工', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'info'
+        })
+        
+        if (confirm) {
+          const response = await contactSupervisor(userId)
+          
+          if (response.code === 200) {
+            this.$message.success('联系请求已发送，监工会尽快回复您')
+          } else {
+            this.$message.error(response.msg || '联系监工失败')
           }
         }
-      });
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('联系监工失败:', error)
+          this.$message.error('网络错误，请稍后重试')
+        }
+      }
+    },
+    
+    // 格式化手机号
+    formatPhone(phone) {
+      if (!phone) return '电话未提供'
+      
+      if (phone.length === 11) {
+        return phone.substring(0, 3) + '****' + phone.substring(7)
+      }
+      
+      return phone
     }
   }
 }
 </script>
 
 <style scoped>
-.container {
-  background-color: #fff;
+.supervisor-container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f5f7fa;
   min-height: 100vh;
 }
 
-/* 顶部导航 */
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 30rpx;
-  background-color: #fff;
-  border-bottom: 1px solid #eee;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+/* 页面标题 */
+.page-header {
+  text-align: center;
+  margin-bottom: 20px;
 }
 
-.back-btn {
-  font-size: 36rpx;
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
   color: #333;
 }
 
-.header-title {
-  font-size: 36rpx;
-  font-weight: 600;
+/* 搜索区域 */
+.search-section {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.header-placeholder {
-  width: 48rpx;
-}
-
-/* 搜索筛选区域 */
-.search-filter {
-  padding: 30rpx;
-  background-color: #fff;
-  border-bottom: 1px solid #eee;
-}
-
-.location-search {
+.search-box {
+  position: relative;
   display: flex;
   align-items: center;
-  background-color: #f5f5f5;
-  border-radius: 40rpx;
-  padding: 20rpx 30rpx;
-  margin-bottom: 30rpx;
 }
 
-.location-icon {
-  color: #007AFF;
-  margin-right: 16rpx;
-}
-
-.location-input {
-  flex: 1;
-  border: none;
-  background: transparent;
+.search-input {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  padding: 0 40px 0 15px;
+  font-size: 14px;
+  background: #f8f8f8;
   outline: none;
-  font-size: 28rpx;
-}
-
-.sort-options {
-  display: flex;
-  gap: 20rpx;
-  overflow-x: auto;
-  padding-bottom: 10rpx;
-}
-
-.sort-option {
-  padding: 12rpx 30rpx;
-  background-color: #f5f5f5;
-  border-radius: 30rpx;
-  font-size: 26rpx;
-  white-space: nowrap;
   transition: all 0.3s;
 }
 
-.sort-option.active {
-  background-color: #007AFF;
-  color: white;
+.search-input:focus {
+  border-color: #8b5cf6;
+  background: white;
 }
 
-/* 监理列表 */
+.search-icon {
+  position: absolute;
+  right: 15px;
+  color: #8b5cf6;
+  font-size: 16px;
+}
+
+/* 监工列表 */
 .supervisor-list {
-  padding: 0 30rpx;
-}
-
-.supervisor-item {
   display: flex;
-  padding: 30rpx 0;
-  border-bottom: 1px solid #f0f0f0;
-  cursor: pointer;
-  transition: background-color 0.3s;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.supervisor-item:active {
-  background-color: #f8f8f8;
-}
-
-.supervisor-avatar {
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: 50%;
-  margin-right: 30rpx;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%);
+.supervisor-card {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  font-size: 48rpx;
 }
 
 .supervisor-info {
   flex: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.supervisor-details {
-  flex: 1;
 }
 
 .supervisor-name {
-  font-size: 32rpx;
+  font-size: 16px;
   font-weight: 600;
-  margin-bottom: 16rpx;
+  margin-bottom: 8px;
+  color: #333;
 }
 
-.supervisor-stats {
+.supervisor-rating {
   display: flex;
   align-items: center;
-  font-size: 26rpx;
+  margin-bottom: 8px;
+}
+
+.stars {
+  color: #ffc107;
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.rating-text {
   color: #666;
-  margin-bottom: 16rpx;
+  font-size: 14px;
 }
 
-.rating {
-  color: #007AFF;
-  margin-right: 30rpx;
+.supervisor-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.projects {
-  color: #666;
-}
-
-.supervisor-location {
+.detail-item {
   display: flex;
   align-items: center;
-  font-size: 26rpx;
-  color: #999;
-  margin-bottom: 16rpx;
-}
-
-.location-pin {
-  margin-right: 10rpx;
-}
-
-.supervisor-phone {
-  display: flex;
-  align-items: center;
-  font-size: 26rpx;
+  font-size: 13px;
   color: #666;
 }
 
-.phone-icon {
-  margin-right: 10rpx;
+.detail-icon {
+  margin-right: 6px;
+  font-size: 12px;
+}
+
+.card-actions {
+  margin-left: 15px;
 }
 
 .contact-btn {
-  background-color: #007AFF;
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
   color: white;
   border: none;
-  border-radius: 30rpx;
-  padding: 16rpx 40rpx;
-  font-size: 28rpx;
-  margin-left: 20rpx;
-  flex-shrink: 0;
-  margin-top: 40rpx;
-  position: relative;
-  z-index: 10;
+  border-radius: 16px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.contact-btn:hover {
+  background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.contact-btn:active {
+  transform: translateY(0);
 }
 
 /* 空状态 */
 .empty-state {
   text-align: center;
-  padding: 120rpx 40rpx;
+  padding: 40px 20px;
   color: #999;
 }
 
 .empty-icon {
-  font-size: 120rpx;
-  margin-bottom: 30rpx;
+  font-size: 48px;
+  margin-bottom: 10px;
+  opacity: 0.5;
 }
 
 .empty-text {
-  font-size: 32rpx;
-  margin-bottom: 20rpx;
+  font-size: 14px;
 }
 
-.empty-desc {
-  font-size: 28rpx;
-  color: #aaa;
+/* 加载状态 */
+.loading {
+  text-align: center;
+  padding: 30px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* 响应式调整 */
 @media (max-width: 480px) {
-  .supervisor-item {
-    padding: 24rpx 0;
+  .supervisor-container {
+    padding: 15px;
   }
   
-  .supervisor-avatar {
-    width: 120rpx;
-    height: 120rpx;
-    font-size: 40rpx;
+  .page-title {
+    font-size: 20px;
+  }
+  
+  .supervisor-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .card-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  .contact-btn {
+    width: 100%;
   }
 }
 </style>

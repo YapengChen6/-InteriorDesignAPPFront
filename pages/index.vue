@@ -135,8 +135,8 @@
 							lazy-load
 						></image>
 						
-						<!-- 图片角标 -->
-						<view class="image-badge" :class="getPostTypeClass(post.threadType)">
+						<!-- 图片角标 - 修复 :class 绑定 -->
+						<view class="image-badge" :class="postTypeClasses[post.threadType] || 'normal-tag'">
 							{{ getThreadTypeName(post.threadType) }}
 						</view>
 						
@@ -292,6 +292,14 @@ export default {
 			showImageInfo: false, // 是否显示图片信息
 			imageDetailsCache: new Map(), // 图片详情缓存
 			loadingImageDetails: new Set(), // 正在加载的图片详情
+			
+			// 帖子类型样式类映射 - 修复 :class 绑定问题
+			postTypeClasses: {
+				1: 'portfolio-tag',    // 作品集
+				2: 'case-tag',         // 案例集
+				3: 'normal-tag',       // 普通帖
+				4: 'material-tag'      // 材料展示
+			},
 			
 			// 防止重复点击
 			isNavigating: false
@@ -1161,17 +1169,6 @@ export default {
 				4: '材料'
 			};
 			return typeMap[typeId] || '帖子';
-		},
-		
-		// 获取帖子类型标签样式类
-		getPostTypeClass(typeId) {
-			const classMap = {
-				1: 'portfolio-tag',    // 作品集
-				2: 'case-tag',         // 案例集
-				3: 'normal-tag',       // 普通帖
-				4: 'material-tag'      // 材料展示
-			};
-			return classMap[typeId] || 'normal-tag';
 		},
 		
 		// 加载更多

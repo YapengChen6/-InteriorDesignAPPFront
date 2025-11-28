@@ -1,999 +1,619 @@
 <template>
   <view class="container">
-    <!-- 页面标题 -->
-    <view class="page-header">
-      <text class="page-title">已发布需求</text>
-      <text class="page-subtitle">点击项目查看详情</text>
+    <!-- 顶部切换按钮 -->
+    <view class="tab-switcher">
+      <view 
+        class="tab-btn" 
+        :class="{ active: currentTab === 'posts' }"
+        @tap="switchTab('posts')"
+      >
+        <text class="tab-text">帖子</text>
+        <view class="tab-indicator"></view>
+      </view>
+      <view 
+        class="tab-btn" 
+        :class="{ active: currentTab === 'orders' }"
+        @tap="switchTab('orders')"
+      >
+        <text class="tab-text">订单</text>
+        <view class="tab-indicator"></view>
+      </view>
     </view>
-
-    <!-- 需求列表 -->
-    <view class="demand-list">
-      <!-- 空状态 -->
-      <view v-if="demandList.length === 0 && !isLoading" class="empty-state">
-        <view class="empty-icon">📋</view>
-        <text class="empty-title">暂无发布的需求</text>
-        <text class="empty-desc">您还没有发布任何装修需求</text>
-        <button class="create-btn" @click="goToCreate">发布第一个需求</button>
-      </view>
-
-      <!-- 加载状态 -->
-      <view v-if="isLoading" class="loading-state">
-        <view class="loading-icon">⏳</view>
-        <text class="loading-text">加载中...</text>
-      </view>
-
-      <!-- 需求卡片列表 - 下拉式设计 -->
-      <view v-else-if="demandList.length > 0" class="demand-cards">
+    
+    <!-- 状态导航 -->
+    <scroll-view class="status-nav" scroll-x="true" :show-scrollbar="false">
+      <view class="nav-container">
         <view 
-          v-for="(item, index) in demandList" 
-          :key="item.id || index"
-          class="demand-card"
-          :class="{ 'expanded': expandedItems[index] }"
+          v-for="nav in navList" 
+          :key="nav.value"
+          class="nav-btn" 
+          :class="{ active: currentNav === nav.value }"
+          @tap="switchNav(nav.value)"
         >
-          <!-- 卡片头部 - 始终显示 -->
-          <view class="card-header" @click="toggleExpand(index)">
-            <view class="header-main">
-              <text class="demand-title">{{ item.title || '未命名项目' }}</text>
-              <view class="header-details">
-                <text class="address" v-if="item.address">{{ item.address }}</text>
-                <view class="status-badge" :class="getStatusClass(item.status)">
-                  {{ getStatusText(item.status) }}
+          <text class="nav-text">{{ nav.label }}</text>
+        </view>
+      </view>
+    </scroll-view>
+    
+    <!-- 内容区域 -->
+    <view class="content-area">
+      <!-- 帖子列表 -->
+      <scroll-view class="post-list" scroll-y="true" :show-scrollbar="false">
+        <!-- 订单视图 -->
+        <view v-if="currentTab === 'orders'" class="empty-state">
+          <view class="empty-icon">📦</view>
+          <text class="empty-title">订单列表</text>
+          <text class="empty-desc">切换到订单视图，这里将显示订单相关内容</text>
+        </view>
+        
+        <!-- 帖子视图 -->
+        <view v-else>
+          <view 
+            v-for="post in filteredPosts" 
+            :key="post.id"
+            class="post-item"
+          >
+            <view class="post-header">
+              <view class="post-info" @tap="togglePost(post.id)">
+                <text class="post-title">{{ post.title }}</text>
+                <view class="post-meta">
+                  <!-- 修复：使用计算属性 -->
+                  <text class="post-type" :class="postTypeClasses[post.threadType]">
+                    {{ typeLabels[post.threadType] }}
+                  </text>
+                  <text class="post-stats">
+                    · {{ post.viewCount || 0 }}浏览 · {{ post.likeCount || 0 }}点赞 · {{ post.commentCount || 0 }}评论
+                  </text>
                 </view>
               </view>
+              <view class="dropdown-btn" @tap="togglePostWithDetail(post.id)">
+                <text class="icon" :class="{ rotated: post.expanded }">▼</text>
+              </view>
             </view>
-            <view class="expand-icon" :class="{ 'expanded': expandedItems[index] }">
-              ▼
+            
+            <!-- 帖子内容 - 展开时显示 -->
+            <view class="post-content" v-if="post.expanded">
+              <!-- 媒体展示 - 图片和视频一起显示 -->
+              <view class="media-container" v-if="post.mediaUrls && post.mediaUrls.length > 0">
+                <!-- 修复：使用计算属性 -->
+                <view class="media-grid" :class="mediaGridClasses[Math.min(post.mediaUrls.length, 4)]">
+                  <view 
+                    v-for="(media, index) in post.mediaUrls" 
+                    :key="index"
+                    class="media-item"
+                    @tap="handleMediaClick(media, index, post.mediaUrls)"
+                  >
+                    <!-- 图片显示 -->
+                    <image 
+                      v-if="mediaTypes[media.fileUrl || media] === 'image'"
+                      :src="media.fileUrl || media" 
+                      mode="aspectFill"
+                      class="media-content"
+                    />
+                    <!-- 视频显示 - 只显示封面，不嵌入video组件 -->
+                    <view 
+                      v-else-if="mediaTypes[media.fileUrl || media] === 'video'"
+                      class="video-preview-container"
+                    >
+                      <image 
+                        :src="getVideoCover(media.fileUrl || media)" 
+                        mode="aspectFill"
+                        class="video-cover"
+                      />
+                      <view class="video-play-icon">
+                        <text class="play-icon">▶</text>
+                      </view>
+                    </view>
+                    <!-- 文件类型标识 -->
+                    <!-- 修复：使用计算属性 -->
+                    <view class="media-type-tag" :class="mediaTagClasses[mediaTypes[media.fileUrl || media]]">
+                      {{ mediaTypeTexts[mediaTypes[media.fileUrl || media]] }}
+                    </view>
+                  </view>
+                </view>
+              </view>
+              
+              <!-- 富文本内容展示 -->
+              <view class="rich-content-container" v-if="post.richContent">
+                <rich-text 
+                  :nodes="post.parsedRichContent" 
+                  class="rich-text-content"
+                />
+              </view>
+              
+              <!-- 普通文本内容 -->
+              <view class="content-text" v-else-if="post.content">
+                <text class="excerpt">{{ post.excerpt || post.content }}</text>
+              </view>
+              
+              <!-- 帖子信息 - 只保留发布时间 -->
+              <view class="post-footer">
+                <text class="post-time">{{ formatTime(post.createTime) }}</text>
+              </view>
             </view>
           </view>
-
-          <!-- 可展开的内容 -->
-          <view class="expandable-content" v-if="expandedItems[index]">
-            <!-- 需求基本信息 -->
-            <view class="demand-info">
-              <view class="info-row">
-                <text class="info-label">服务类型：</text>
-                <text class="info-value">{{ getServiceTypeText(item.requiredRoles) }}</text>
-              </view>
-              <view class="info-row">
-                <text class="info-label">预算金额：</text>
-                <text class="info-value budget">¥{{ formatMoney(item.budget) }}</text>
-              </view>
-              <view v-if="item.area" class="info-row">
-                <text class="info-label">房屋面积：</text>
-                <text class="info-value">{{ item.area }}㎡</text>
-              </view>
-              <view v-if="item.deadline" class="info-row">
-                <text class="info-label">期望完成：</text>
-                <text class="info-value">{{ formatDate(item.deadline) }}</text>
+          
+          <!-- 空状态 -->
+          <view v-if="filteredPosts.length === 0" class="empty-state">
+            <view class="empty-icon">📝</view>
+            <text class="empty-title">{{ currentNavLabel }}内容</text>
+            <text class="empty-desc">当前没有{{ currentNavLabel }}相关的帖子</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+    
+    <!-- 图片预览模态框 -->
+    <view class="modal" v-if="showModal && currentMediaType === 'image'">
+      <view class="modal-mask" @tap="closeModal"></view>
+      <view class="modal-content">
+        <view class="modal-header">
+          <text class="modal-title">图片预览</text>
+          <view class="modal-close" @tap="closeModal">
+            <text class="close-icon">×</text>
+          </view>
+        </view>
+        
+        <view class="modal-body">
+          <image 
+            :src="currentMedia" 
+            mode="aspectFit"
+            class="modal-image"
+          />
+        </view>
+        
+        <view class="modal-footer">
+          <text class="media-source">来源: {{ currentMedia }}</text>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 视频播放模态框 -->
+    <view class="modal" v-if="showModal && currentMediaType === 'video'">
+      <view class="modal-mask" @tap="closeModal"></view>
+      <view class="modal-content video-modal">
+        <view class="modal-header">
+          <text class="modal-title">视频播放</text>
+          <view class="modal-close" @tap="closeModal">
+            <text class="close-icon">×</text>
+          </view>
+        </view>
+        
+        <view class="modal-body video-body">
+          <!-- 尝试直接播放 -->
+          <video 
+            v-if="!videoError && !showDownloadOption"
+            :src="currentMedia" 
+            class="modal-video"
+            :controls="true"
+            :autoplay="false"
+            :show-fullscreen-btn="true"
+            :show-play-btn="true"
+            :show-center-play-btn="true"
+            :enable-play-gesture="true"
+            objectFit="contain"
+            :poster="getVideoCover(currentMedia)"
+            :show-loading="true"
+            :enable-progress-gesture="true"
+            @error="onVideoError"
+            @play="onVideoPlay"
+            @loadedmetadata="onVideoLoaded"
+            @loadstart="onVideoLoadStart"
+            @waiting="onVideoWaiting"
+            @canplay="onVideoCanPlay"
+            @progress="onVideoProgress"
+            @ended="onVideoEnded"
+          />
+          
+          <!-- 视频加载状态 -->
+          <view v-if="videoLoading" class="video-loading">
+            <view class="loading-spinner"></view>
+            <text class="loading-text">视频加载中...</text>
+            <text class="loading-tip" v-if="isOSSUrl(currentMedia)">检测到OSS视频，可能需要CORS配置</text>
+          </view>
+          
+          <!-- 视频错误提示 -->
+          <view v-if="videoError || showDownloadOption" class="video-error">
+            <text class="error-icon">🎬</text>
+            <text class="error-text">{{ errorTitle }}</text>
+            <text class="error-desc">{{ errorDescription }}</text>
+            
+            <!-- CORS配置提示 -->
+            <view v-if="showCorsHelp" class="cors-help">
+              <text class="cors-title">CORS配置解决方案：</text>
+              <view class="cors-steps">
+                <text class="cors-step">1. 登录阿里云OSS控制台</text>
+                <text class="cors-step">2. 选择对应Bucket → 权限管理 → 跨域设置</text>
+                <text class="cors-step">3. 添加CORS规则（允许来源、GET方法）</text>
+                <text class="cors-step">4. 保存配置并刷新页面</text>
               </view>
             </view>
-
-            <!-- 需求描述 -->
-            <view v-if="item.description" class="demand-desc">
-              <text class="desc-label">需求描述：</text>
-              <text class="desc-content">{{ item.description }}</text>
-            </view>
-
-            <!-- 卡片底部操作 -->
-            <view class="card-actions">
-              <text class="create-time">发布于 {{ formatTime(item.createTime) }}</text>
-              <view class="action-buttons">
-                <!-- 只有状态为进行中（status="1"）时才显示更改需求按钮 -->
-                <button 
-                  v-if="item.status === '1'" 
-                  class="action-btn edit-btn" 
-                  @click.stop="editDemand(item)"
-                >
-                  更改需求
-                </button>
-                <button class="action-btn delete-btn" @click.stop="deleteDemand(item.id, index)">删除</button>
+            
+            <text class="error-solution">临时解决方案：</text>
+            <view class="solution-options">
+              <view class="solution-item" @tap="downloadVideo">
+                <text class="solution-icon">📥</text>
+                <text class="solution-text">下载视频到本地播放</text>
+              </view>
+              <view class="solution-item" @tap="copyVideoLink">
+                <text class="solution-icon">🔗</text>
+                <text class="solution-text">复制视频链接</text>
+              </view>
+              <view class="solution-item" @tap="openVideoInBrowser">
+                <text class="solution-icon">🌐</text>
+                <text class="solution-text">在浏览器中打开</text>
+              </view>
+              <view class="solution-item" @tap="retryVideoPlay">
+                <text class="solution-icon">🔄</text>
+                <text class="solution-text">重新尝试播放</text>
               </view>
             </view>
           </view>
         </view>
+        
+        <view class="modal-footer">
+          <text class="media-source">视频地址: {{ currentMedia }}</text>
+          <text class="cors-status" v-if="isOSSUrl(currentMedia)">
+            {{ hasCorsSupport ? 'CORS: 已配置' : 'CORS: 未配置' }}
+          </text>
+        </view>
       </view>
-    </view>
-
-    <!-- 底部操作栏 -->
-    <view v-if="demandList.length > 0" class="bottom-actions">
-      <button class="bottom-btn create-new-btn" @click="goToCreate">发布新需求</button>
     </view>
   </view>
 </template>
 
 <script>
-import { projectApi } from '@/api/project.js'
-import { getUserProfile } from '@/api/users.js'
-
 export default {
   data() {
     return {
-      demandList: [],
-      isLoading: false,
-      userId: '',
-      expandedItems: [] // 用于跟踪哪些项目是展开状态
-    }
-  },
-  async onLoad() {
-    // 页面加载时获取用户数据并加载需求列表
-    await this.loadUserAndDemands()
-  },
-  onShow() {
-    // 页面显示时刷新数据
-    if (this.userId) {
-      this.loadDemandList()
-    }
-  },
-  onPullDownRefresh() {
-    // 下拉刷新
-    this.loadUserAndDemands().finally(() => {
-      uni.stopPullDownRefresh()
-    })
-  },
-  methods: {
-    // 编辑需求
-    editDemand(item) {
-      if (!item.id) {
-        uni.showToast({
-          title: '项目ID不存在',
-          icon: 'none'
-        })
-        return
-      }
-
-      // 跳转到编辑需求页面，传递项目ID
-      uni.navigateTo({
-        url: `/pages/post/order-change?projectId=${item.id}`
-      })
-    },
-
-    // 切换项目展开/收起状态
-    toggleExpand(index) {
-      // 使用Vue.set确保响应式更新
-      this.$set(this.expandedItems, index, !this.expandedItems[index])
-    },
-
-    // 加载用户信息和需求列表
-    async loadUserAndDemands() {
-      await this.getUserInfo()
-      if (this.userId) {
-        await this.loadDemandList()
-      }
-    },
-
-    // 获取当前用户信息
-    async getUserInfo() {
-      try {
-        uni.showLoading({
-          title: '获取用户信息...',
-          mask: true
-        })
-        
-        const res = await getUserProfile()
-        console.log('用户信息接口返回:', res)
-        
-        // 根据参考代码的处理方式
-        if (res.code === 200) {
-          this.userId = res.data.userId
-          // 存储到本地存储，与参考代码保持一致
-          uni.setStorageSync('userId', this.userId)
-          console.log('获取到的用户ID:', this.userId)
-        } else {
-          throw new Error(res.msg || '获取用户信息失败')
-        }
-        
-        uni.hideLoading()
-        return true
-        
-      } catch (error) {
-        console.error('获取用户信息失败:', error)
-        uni.hideLoading()
-        uni.showToast({
-          title: '获取用户信息失败',
-          icon: 'none'
-        })
-        return false
-      }
-    },
-
-    // 加载需求列表
-    async loadDemandList() {
-      if (!this.userId) {
-        console.log('未获取到用户ID，无法加载需求列表')
-        uni.showToast({
-          title: '请先登录',
-          icon: 'none'
-        })
-        return
-      }
-
-      this.isLoading = true
-      try {
-        const queryParams = {
-          userId: this.userId
-        }
-        
-        console.log('查询参数:', queryParams)
-        
-        const result = await projectApi.getList(queryParams)
-        console.log('获取到的需求列表原始数据:', result)
-        
-        // 详细检查数据结构
-        if (result) {
-          console.log('result 类型:', typeof result)
-          console.log('result 键名:', Object.keys(result))
-          
-          if (result.data) {
-            console.log('result.data 类型:', typeof result.data)
-            console.log('result.data 键名:', Object.keys(result.data))
-            
-            if (result.data.rows && Array.isArray(result.data.rows)) {
-              console.log('第一个项目的完整结构:', result.data.rows[0])
-              if (result.data.rows[0]) {
-                console.log('第一个项目的所有键名:', Object.keys(result.data.rows[0]))
-              }
-            }
-          }
-        }
-        
-        // 处理返回数据
-        let rawList = []
-        if (Array.isArray(result)) {
-          rawList = result
-        } else if (result && Array.isArray(result.records)) {
-          rawList = result.records
-        } else if (result && Array.isArray(result.list)) {
-          rawList = result.list
-        } else if (result && result.data && Array.isArray(result.data.rows)) {
-          rawList = result.data.rows
-        } else if (result && Array.isArray(result.data)) {
-          rawList = result.data
-        } else {
-          rawList = []
-          console.warn('未识别的数据结构:', result)
-        }
-        
-        console.log('提取的原始列表:', rawList)
-        
-        // 确保每个项目都有正确的id字段
-        this.demandList = rawList.map((item, index) => {
-          // 尝试不同的ID字段名
-          const id = item.id || item.projectId || item.projectID || item.ID || item.Id
-          console.log(`项目${index} ID解析:`, { 
-            id, 
-            item,
-            availableFields: Object.keys(item) 
-          })
-          
-          // 返回处理后的项目，确保有id字段
-          return {
-            ...item,
-            id: id || `temp-${index}` // 如果没有id，使用临时id
-          }
-        })
-        
-        // 初始化所有项目为收起状态
-        this.expandedItems = new Array(this.demandList.length).fill(false)
-        
-        console.log('最终处理后的需求列表:', this.demandList)
-        
-        if (this.demandList.length === 0) {
-          uni.showToast({
-            title: '暂无发布的需求',
-            icon: 'none'
-          })
-        }
-        
-      } catch (error) {
-        console.error('加载需求列表失败:', error)
-        
-        // 根据错误类型显示不同的提示
-        let errorMessage = '加载失败，请重试'
-        if (error.message && error.message.includes('网络')) {
-          errorMessage = '网络连接失败，请检查网络设置'
-        } else if (error.message && error.message.includes('未登录')) {
-          errorMessage = '请先登录'
-        } else if (error.message) {
-          errorMessage = error.message
-        }
-        
-        uni.showToast({
-          title: errorMessage,
-          icon: 'none'
-        })
-        
-        this.demandList = []
-      } finally {
-        this.isLoading = false
-      }
-    },
-
-    // 删除需求 - 修复后的方法
-    async deleteDemand(projectId, index) {
-      console.log('删除方法被调用:', { projectId, index, type: typeof projectId })
-      console.log('当前需求列表:', this.demandList)
+      currentTab: 'posts',
+      currentNav: 'all',
+      navList: [
+        { label: '全部', value: 'all' },
+        { label: '问答', value: 'question' },
+        { label: '分享', value: 'share' },
+        { label: '讨论', value: 'discuss' },
+        { label: '动态', value: 'moment' }
+      ],
+      posts: [],
+      showModal: false,
+      currentMedia: '',
+      currentMediaType: '',
+      videoLoading: false,
+      videoError: false,
+      showDownloadOption: false,
+      showCorsHelp: false,
+      hasCorsSupport: false,
+      errorTitle: '',
+      errorDescription: '',
       
-      if (!projectId) {
-        console.error('项目ID为空，当前项目数据:', this.demandList[index])
-        uni.showToast({
-          title: '项目ID不存在',
-          icon: 'none'
-        })
-        return
+      // 静态映射表
+      postTypeClasses: {
+        1: 'type-1',
+        2: 'type-2',
+        3: 'type-3',
+        4: 'type-4'
+      },
+      typeLabels: {
+        1: '问答',
+        2: '分享',
+        3: '讨论',
+        4: '动态'
+      },
+      mediaGridClasses: {
+        1: 'grid-1',
+        2: 'grid-2',
+        3: 'grid-3',
+        4: 'grid-4'
+      },
+      mediaTagClasses: {
+        'image': 'media-type-image',
+        'video': 'media-type-video',
+        'other': 'media-type-other'
+      },
+      mediaTypeTexts: {
+        'image': '图片',
+        'video': '视频',
+        'other': '文件'
       }
-
-      // 如果projectId是临时ID，说明没有找到真实ID
-      if (projectId.toString().startsWith('temp-')) {
-        console.error('项目ID是临时ID，无法删除:', projectId)
-        uni.showToast({
-          title: '项目数据不完整，无法删除',
-          icon: 'none'
-        })
-        return
+    }
+  },
+  
+  computed: {
+    filteredPosts() {
+      if (this.currentNav === 'all') {
+        return this.posts
       }
-
-      // 确认项目存在
-      const project = this.demandList[index]
-      if (!project) {
-        console.error('未找到对应的项目，索引:', index)
-        uni.showToast({
-          title: '项目不存在',
-          icon: 'none'
-        })
-        return
+      const typeMap = {
+        'question': 1,
+        'share': 2,
+        'discuss': 3,
+        'moment': 4
       }
-
-      console.log('要删除的项目详情:', project)
-
-      uni.showModal({
-        title: '确认删除',
-        content: '确定要删除这个需求吗？删除后不可恢复。',
-        confirmColor: '#ff4757',
-        success: async (res) => {
-          if (res.confirm) {
-            try {
-              uni.showLoading({
-                title: '删除中...',
-                mask: true
-              })
-              
-              console.log('正在删除项目ID:', projectId)
-              
-              // 使用修复后的 projectApi.delete 方法
-              // 现在会发送: DELETE /project?projectId=xxx
-              const result = await projectApi.delete(projectId)
-              console.log('删除接口返回:', result)
-              
-              if (result.code === 200 || result.success) {
-                uni.hideLoading()
-                uni.showToast({
-                  title: '删除成功',
-                  icon: 'success',
-                  duration: 2000
-                })
-                
-                // 从列表中移除
-                this.demandList.splice(index, 1)
-                this.expandedItems.splice(index, 1)
-                
-                // 如果列表为空，显示空状态
-                if (this.demandList.length === 0) {
-                  setTimeout(() => {
-                    this.loadDemandList()
-                  }, 500)
-                }
-              } else {
-                uni.hideLoading()
-                const errorMsg = result.msg || result.message || '删除失败'
-                uni.showToast({
-                  title: errorMsg,
-                  icon: 'none',
-                  duration: 3000
-                })
-              }
-              
-            } catch (error) {
-              console.error('删除失败:', error)
-              uni.hideLoading()
-              
-              let errorMessage = '删除失败，请重试'
-              if (error.message) {
-                if (error.message.includes('网络')) {
-                  errorMessage = '网络连接失败，请检查网络设置'
-                } else if (error.message.includes('未登录')) {
-                  errorMessage = '请先登录'
-                } else if (error.message.includes('404')) {
-                  errorMessage = '项目不存在'
-                } else if (error.message.includes('403')) {
-                  errorMessage = '无权限删除此项目'
-                } else {
-                  errorMessage = error.message
-                }
-              }
-              
-              uni.showToast({
-                title: errorMessage,
-                icon: 'none',
-                duration: 3000
-              })
+      const targetType = typeMap[this.currentNav]
+      return this.posts.filter(post => post.threadType === targetType)
+    },
+    
+    currentNavLabel() {
+      const labelMap = {
+        'all': '全部',
+        'question': '问答',
+        'share': '分享',
+        'discuss': '讨论',
+        'moment': '动态'
+      }
+      return labelMap[this.currentNav] || ''
+    },
+    
+    // 媒体类型映射
+    mediaTypes() {
+      const types = {}
+      
+      // 处理所有帖子中的媒体URL
+      this.posts.forEach(post => {
+        if (post.mediaUrls) {
+          post.mediaUrls.forEach(media => {
+            const url = media.fileUrl || media
+            if (this.isImageUrl(url)) {
+              types[url] = 'image'
+            } else if (this.isVideoUrl(url)) {
+              types[url] = 'video'
+            } else {
+              types[url] = 'other'
             }
-          }
+          })
+        }
+      })
+      
+      // 处理当前媒体
+      if (this.currentMedia) {
+        if (this.isImageUrl(this.currentMedia)) {
+          types[this.currentMedia] = 'image'
+        } else if (this.isVideoUrl(this.currentMedia)) {
+          types[this.currentMedia] = 'video'
+        } else {
+          types[this.currentMedia] = 'other'
+        }
+      }
+      
+      return types
+    }
+  },
+  
+  onLoad() {
+    this.loadPosts()
+  },
+  
+  methods: {
+    // 切换标签页
+    switchTab(tab) {
+      this.currentTab = tab
+    },
+    
+    // 切换导航
+    switchNav(nav) {
+      this.currentNav = nav
+    },
+    
+    // 检查是否为图片
+    isImageUrl(url) {
+      if (!url) return false
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+      return imageExtensions.some(ext => url.toLowerCase().includes(ext))
+    },
+    
+    // 检查是否为视频
+    isVideoUrl(url) {
+      if (!url) return false
+      const videoExtensions = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm']
+      return videoExtensions.some(ext => url.toLowerCase().includes(ext))
+    },
+    
+    // 获取视频封面
+    getVideoCover(videoUrl) {
+      return '/static/video-cover.jpg'
+    },
+    
+    // 切换帖子展开状态
+    togglePost(postId) {
+      const post = this.posts.find(p => p.id === postId)
+      if (post) {
+        post.expanded = !post.expanded
+      }
+    },
+    
+    // 切换帖子展开状态（带详情）
+    togglePostWithDetail(postId) {
+      this.togglePost(postId)
+    },
+    
+    // 处理媒体点击
+    handleMediaClick(media, index, mediaList) {
+      const mediaUrl = media.fileUrl || media
+      
+      if (this.isImageUrl(mediaUrl)) {
+        this.currentMedia = mediaUrl
+        this.currentMediaType = 'image'
+        this.showModal = true
+      } else if (this.isVideoUrl(mediaUrl)) {
+        this.currentMedia = mediaUrl
+        this.currentMediaType = 'video'
+        this.showModal = true
+        this.videoLoading = true
+        this.videoError = false
+        this.showDownloadOption = false
+      }
+    },
+    
+    // 关闭模态框
+    closeModal() {
+      this.showModal = false
+      this.currentMedia = ''
+      this.currentMediaType = ''
+      this.videoLoading = false
+      this.videoError = false
+      this.showDownloadOption = false
+      this.showCorsHelp = false
+    },
+    
+    // 视频错误处理
+    onVideoError(e) {
+      console.error('视频播放错误:', e)
+      this.videoLoading = false
+      this.videoError = true
+      this.showDownloadOption = true
+      this.errorTitle = '视频播放失败'
+      this.errorDescription = '无法加载视频内容，可能是网络问题或视频格式不支持'
+      
+      if (this.isOSSUrl(this.currentMedia)) {
+        this.showCorsHelp = true
+        this.hasCorsSupport = false
+      }
+    },
+    
+    // 检查是否为OSS URL
+    isOSSUrl(url) {
+      return url && (url.includes('aliyuncs.com') || url.includes('oss-'))
+    },
+    
+    // 视频播放事件
+    onVideoPlay() {
+      this.videoLoading = false
+      this.videoError = false
+    },
+    
+    // 视频加载元数据
+    onVideoLoaded() {
+      this.videoLoading = false
+      if (this.isOSSUrl(this.currentMedia)) {
+        this.hasCorsSupport = true
+      }
+    },
+    
+    // 视频开始加载
+    onVideoLoadStart() {
+      this.videoLoading = true
+    },
+    
+    // 视频等待
+    onVideoWaiting() {
+      this.videoLoading = true
+    },
+    
+    // 视频可以播放
+    onVideoCanPlay() {
+      this.videoLoading = false
+    },
+    
+    // 视频加载进度
+    onVideoProgress() {
+      // 可以在这里处理加载进度
+    },
+    
+    // 视频播放结束
+    onVideoEnded() {
+      // 视频播放结束处理
+    },
+    
+    // 下载视频
+    downloadVideo() {
+      uni.showToast({
+        title: '开始下载视频',
+        icon: 'none'
+      })
+    },
+    
+    // 复制视频链接
+    copyVideoLink() {
+      uni.setClipboardData({
+        data: this.currentMedia,
+        success: () => {
+          uni.showToast({
+            title: '链接已复制',
+            icon: 'success'
+          })
         }
       })
     },
-
-    // 获取状态样式类
-    getStatusClass(status) {
-      // 确保状态值转换为字符串进行比较
-      const statusStr = String(status)
-      const statusMap = {
-        '0': 'status-pending',    // 待接单
-        '1': 'status-processing', // 进行中
-        '2': 'status-completed',  // 已完成
-        '3': 'status-cancelled',  // 已取消
-        '4': 'status-draft'       // 草稿
-      }
-      return statusMap[statusStr] || 'status-pending'
+    
+    // 在浏览器中打开
+    openVideoInBrowser() {
+      uni.showToast({
+        title: '请在浏览器中打开链接',
+        icon: 'none'
+      })
     },
-
-    // 获取状态文本
-    getStatusText(status) {
-      // 确保状态值转换为字符串进行比较
-      const statusStr = String(status)
-      const statusMap = {
-        '0': '待接单',
-        '1': '进行中',
-        '2': '已完成',
-        '3': '已取消',
-        '4': '草稿'
-      }
-      return statusMap[statusStr] || '待接单'
+    
+    // 重新尝试播放
+    retryVideoPlay() {
+      this.videoLoading = true
+      this.videoError = false
+      this.showDownloadOption = false
+      this.showCorsHelp = false
     },
-
-    // 获取服务类型文本
-    getServiceTypeText(requiredRoles) {
-      const typeMap = {
-        1: '设计师',
-        2: '监理',
-        3: '设计师+监理'
-      }
-      return typeMap[requiredRoles] || '设计师'
-    },
-
-    // 格式化金额
-    formatMoney(amount) {
-      if (!amount) return '0'
-      return parseFloat(amount).toLocaleString('zh-CN')
-    },
-
-    // 格式化日期
-    formatDate(dateString) {
-      if (!dateString) return ''
-      return dateString.replace(/-/g, '/')
-    },
-
+    
     // 格式化时间
     formatTime(timestamp) {
       if (!timestamp) return ''
       
-      // 如果是字符串格式的日期，先转换为时间戳
-      let date
-      if (typeof timestamp === 'string') {
-        date = new Date(timestamp.replace(/-/g, '/'))
-      } else {
-        date = new Date(timestamp)
-      }
-      
-      // 检查日期是否有效
-      if (isNaN(date.getTime())) {
-        return '未知时间'
-      }
-      
+      const date = new Date(timestamp)
       const now = new Date()
       const diff = now.getTime() - date.getTime()
       
-      // 如果是今天内
-      if (diff < 24 * 60 * 60 * 1000) {
-        if (diff < 60 * 60 * 1000) {
-          const minutes = Math.floor(diff / (60 * 1000))
-          return minutes <= 0 ? '刚刚' : minutes + '分钟前'
-        }
+      if (diff < 60 * 60 * 1000) {
+        const minutes = Math.floor(diff / (60 * 1000))
+        return minutes <= 0 ? '刚刚' : minutes + '分钟前'
+      } else if (diff < 24 * 60 * 60 * 1000) {
         return Math.floor(diff / (60 * 60 * 1000)) + '小时前'
-      }
-      
-      // 如果是今年内
-      if (date.getFullYear() === now.getFullYear()) {
+      } else if (date.getFullYear() === now.getFullYear()) {
         return (date.getMonth() + 1) + '月' + date.getDate() + '日'
+      } else {
+        return date.getFullYear() + '年' + (date.getMonth() + 1) + '月' + date.getDate() + '日'
       }
-      
-      return date.getFullYear() + '年' + (date.getMonth() + 1) + '月' + date.getDate() + '日'
     },
-
-    // 查看详情
-    viewDetail(item) {
-      uni.showModal({
-        title: item.title || '项目详情',
-        content: this.getDetailContent(item),
-        showCancel: false,
-        confirmText: '知道了',
-        confirmColor: '#1890ff'
-      })
-    },
-
-    // 获取详情内容
-    getDetailContent(item) {
-      let content = `服务类型：${this.getServiceTypeText(item.requiredRoles)}\n`
-      content += `预算金额：¥${this.formatMoney(item.budget)}\n`
-      content += `当前状态：${this.getStatusText(item.status)}\n`
-      
-      if (item.area) content += `房屋面积：${item.area}㎡\n`
-      if (item.address) content += `装修地址：${item.address}\n`
-      if (item.deadline) content += `期望完成：${this.formatDate(item.deadline)}\n`
-      if (item.description && item.description !== '暂无详细描述') {
-        content += `\n需求描述：${item.description}`
+    
+    // 加载帖子数据
+    async loadPosts() {
+      try {
+        this.posts = [
+          {
+            id: 1,
+            title: '这是一个示例帖子标题',
+            threadType: 1,
+            viewCount: 100,
+            likeCount: 20,
+            commentCount: 5,
+            content: '这是帖子的内容，当展开时会显示更多详细信息...',
+            mediaUrls: [
+              { fileUrl: 'https://example.com/image1.jpg' },
+              { fileUrl: 'https://example.com/image2.jpg' }
+            ],
+            createTime: new Date().toISOString(),
+            expanded: false
+          },
+          {
+            id: 2,
+            title: '另一个帖子示例',
+            threadType: 2,
+            viewCount: 50,
+            likeCount: 10,
+            commentCount: 3,
+            content: '这是另一个帖子的内容描述...',
+            mediaUrls: [
+              { fileUrl: 'https://example.com/video.mp4' }
+            ],
+            createTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            expanded: false
+          }
+        ]
+      } catch (error) {
+        console.error('加载帖子失败:', error)
+        uni.showToast({
+          title: '加载失败',
+          icon: 'none'
+        })
       }
-      
-      return content
-    },
-
-    // 跳转到创建需求页面
-    goToCreate() {
-      uni.navigateTo({
-        url: '/pages/post/order'
-      })
     }
   }
 }
 </script>
-
-<style scoped>
-.container {
-  background-color: #f8f9fa;
-  min-height: 100vh;
-  padding: 20rpx;
-}
-
-.page-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 60rpx 40rpx;
-  text-align: center;
-  border-radius: 20rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0 4rpx 20rpx rgba(102, 126, 234, 0.3);
-}
-
-.page-title {
-  font-size: 44rpx;
-  font-weight: bold;
-  display: block;
-  margin-bottom: 16rpx;
-}
-
-.page-subtitle {
-  font-size: 28rpx;
-  opacity: 0.9;
-  display: block;
-}
-
-.demand-list {
-  flex: 1;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 120rpx 40rpx;
-  background: white;
-  border-radius: 20rpx;
-  margin-top: 20rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
-}
-
-.empty-icon {
-  font-size: 120rpx;
-  display: block;
-  margin-bottom: 40rpx;
-  opacity: 0.7;
-}
-
-.empty-title {
-  font-size: 36rpx;
-  color: #333;
-  display: block;
-  margin-bottom: 20rpx;
-  font-weight: 600;
-}
-
-.empty-desc {
-  font-size: 28rpx;
-  color: #666;
-  display: block;
-  margin-bottom: 60rpx;
-  line-height: 1.6;
-}
-
-.create-btn {
-  background: linear-gradient(135deg, #ff7e5f, #feb47b);
-  color: white;
-  border: none;
-  border-radius: 50rpx;
-  padding: 24rpx 60rpx;
-  font-size: 32rpx;
-  font-weight: 600;
-  box-shadow: 0 4rpx 16rpx rgba(255, 126, 95, 0.3);
-}
-
-.create-btn:after {
-  border: none;
-}
-
-.loading-state {
-  text-align: center;
-  padding: 120rpx 40rpx;
-  background: white;
-  border-radius: 20rpx;
-  margin-top: 20rpx;
-}
-
-.loading-icon {
-  font-size: 80rpx;
-  display: block;
-  margin-bottom: 30rpx;
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-text {
-  font-size: 32rpx;
-  color: #666;
-  display: block;
-}
-
-.demand-cards {
-  padding-bottom: 140rpx;
-}
-
-.demand-card {
-  background: white;
-  border-radius: 20rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
-  border: 1rpx solid #f0f0f0;
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.demand-card:active {
-  transform: translateY(2rpx);
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.12);
-}
-
-/* 卡片头部 - 始终显示 */
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 30rpx;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.card-header:active {
-  background-color: #f8f9fa;
-}
-
-.header-main {
-  flex: 1;
-  margin-right: 20rpx;
-}
-
-.demand-title {
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #1a1a1a;
-  display: block;
-  margin-bottom: 16rpx;
-  line-height: 1.4;
-}
-
-.header-details {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.address {
-  font-size: 28rpx;
-  color: #666;
-  flex: 1;
-  margin-right: 20rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.expand-icon {
-  font-size: 24rpx;
-  color: #999;
-  transition: transform 0.3s ease;
-}
-
-.expand-icon.expanded {
-  transform: rotate(180deg);
-}
-
-/* 可展开的内容 */
-.expandable-content {
-  padding: 0 30rpx 30rpx;
-  border-top: 1rpx solid #f0f0f0;
-  animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 1000px;
-  }
-}
-
-.demand-info {
-  margin: 30rpx 0;
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16rpx;
-  font-size: 28rpx;
-  line-height: 1.5;
-}
-
-.info-label {
-  color: #666;
-  min-width: 160rpx;
-  font-weight: 500;
-}
-
-.info-value {
-  color: #333;
-  flex: 1;
-}
-
-.budget {
-  color: #ff6b6b;
-  font-weight: 600;
-  font-size: 32rpx;
-}
-
-.demand-desc {
-  border-top: 1rpx solid #f0f0f0;
-  padding-top: 30rpx;
-  margin-bottom: 30rpx;
-}
-
-.desc-label {
-  color: #666;
-  font-size: 28rpx;
-  display: block;
-  margin-bottom: 16rpx;
-  font-weight: 500;
-}
-
-.desc-content {
-  color: #333;
-  font-size: 28rpx;
-  line-height: 1.6;
-  display: block;
-  word-break: break-all;
-}
-
-.card-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1rpx solid #f0f0f0;
-  padding-top: 30rpx;
-}
-
-.create-time {
-  color: #999;
-  font-size: 24rpx;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 20rpx;
-}
-
-.action-btn {
-  border: none;
-  border-radius: 12rpx;
-  padding: 16rpx 32rpx;
-  font-size: 26rpx;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.action-btn:after {
-  border: none;
-}
-
-.edit-btn {
-  background: #52c41a;
-  color: white;
-}
-
-.edit-btn:active {
-  background: #389e0d;
-  transform: scale(0.98);
-}
-
-.detail-btn {
-  background: #4a6fa5;
-  color: white;
-}
-
-.detail-btn:active {
-  background: #3a5a85;
-  transform: scale(0.98);
-}
-
-.delete-btn {
-  background: #f8f9fa;
-  color: #ff4757;
-  border: 1rpx solid #ff4757;
-}
-
-.delete-btn:active {
-  background: #ffeaea;
-  transform: scale(0.98);
-}
-
-.status-badge {
-  padding: 8rpx 20rpx;
-  border-radius: 20rpx;
-  font-size: 24rpx;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.status-pending {
-  background: #fff7e6;
-  color: #fa8c16;
-  border: 1rpx solid #ffd591;
-}
-
-.status-processing {
-  background: #e6f7ff;
-  color: #1890ff;
-  border: 1rpx solid #91d5ff;
-}
-
-.status-completed {
-  background: #f6ffed;
-  color: #52c41a;
-  border: 1rpx solid #b7eb8f;
-}
-
-.status-cancelled {
-  background: #fff2f0;
-  color: #ff4d4f;
-  border: 1rpx solid #ffccc7;
-}
-
-.status-draft {
-  background: #fafafa;
-  color: #8c8c8c;
-  border: 1rpx solid #d9d9d9;
-}
-
-.bottom-actions {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  padding: 30rpx 40rpx;
-  border-top: 1rpx solid #f0f0f0;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.08);
-  z-index: 100;
-}
-
-.bottom-btn {
-  border: none;
-  border-radius: 16rpx;
-  padding: 28rpx;
-  font-size: 32rpx;
-  font-weight: 600;
-  width: 100%;
-  transition: all 0.3s ease;
-}
-
-.bottom-btn:after {
-  border: none;
-}
-
-.create-new-btn {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
-  box-shadow: 0 4rpx 16rpx rgba(102, 126, 234, 0.3);
-}
-
-.create-new-btn:active {
-  transform: scale(0.98);
-  box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.4);
-}
-
-/* 响应式设计 */
-@media (max-width: 750px) {
-  .container {
-    padding: 16rpx;
-  }
-  
-  .page-header {
-    padding: 40rpx 30rpx;
-    border-radius: 16rpx;
-  }
-  
-  .page-title {
-    font-size: 38rpx;
-  }
-  
-  .page-subtitle {
-    font-size: 26rpx;
-  }
-  
-  .card-header {
-    padding: 24rpx;
-  }
-  
-  .header-details {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12rpx;
-  }
-  
-  .address {
-    margin-right: 0;
-    margin-bottom: 8rpx;
-  }
-  
-  .card-actions {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20rpx;
-  }
-  
-  .action-buttons {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  
-  .demand-card {
-    border-radius: 16rpx;
-  }
-  
-  .expandable-content {
-    padding: 0 24rpx 24rpx;
-  }
-  
-  .info-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8rpx;
-  }
-  
-  .info-label {
-    min-width: auto;
-  }
-}
-</style>
