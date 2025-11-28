@@ -143,6 +143,18 @@ export default {
           followers: '860',
           style: '法式、复古、艺术风',
           description: '艺术院校背景，擅长将艺术元素融入室内设计，为空间注入独特的艺术气息和个性魅力。'
+        },
+        {
+          id: 6,
+          name: 'Geniuslee',
+          rating: 4.8,
+          projects: 45,
+          location: '四川宜宾',
+          phone: '136****8888',
+          experience: '9年',
+          followers: '135',
+          style: '现代简约、北欧风格、新中式',
+          description: '9年室内设计经验，专注于现代简约风格设计。擅长空间规划与功能布局，注重细节处理，为客户打造舒适实用的居住环境。'
         }
       ]
     }
@@ -187,8 +199,9 @@ export default {
     },
     
     goToDesignerDetail(designer) {
+      console.log('跳转到设计师详情:', designer.id);
       uni.navigateTo({
-        url: `/pages/find-design/design-detail?designerId=${designer.id}`
+        url: `/pages/find-design/design-detail?id=${designer.id}`
       });
     },
     
