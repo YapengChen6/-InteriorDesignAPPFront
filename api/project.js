@@ -4,7 +4,7 @@ import request from '@/utils/request'
 const baseURL = '/project'
 
 /**
- * 项目API
+ * 项目API - 只保留后端实际存在的接口
  */
 export const projectApi = {
   /**
@@ -36,33 +36,6 @@ export const projectApi = {
   },
 
   /**
-   * 根据ID查询项目详情 - 需要后端添加此接口
-   * @param {Number} projectId 项目ID
-   * @returns {Promise}
-   */
-  getById(projectId) {
-    return request({
-      url: `${baseURL}/${projectId}`, 
-      method: 'get',
-      loading: true
-    })
-  },
-
-  /**
-   * 接取项目
-   * @param {Number} projectId 项目ID
-   * @returns {Promise}
-   */
-  takeProject(projectId) {
-    return request({
-      url: `${baseURL}/take`,
-      method: 'post',
-      data: { projectId },
-      loading: true
-    })
-  },
-
-  /**
    * 删除项目
    * @param {Number} projectId 项目ID
    * @returns {Promise}
@@ -86,6 +59,24 @@ export const projectApi = {
       url: baseURL, // PUT /project
       method: 'put',
       data: projectDTO,
+      loading: true
+    })
+  },
+
+  /**
+   * 更新项目状态 - 修正：使用params而不是data
+   * @param {Number} projectId 项目ID
+   * @param {Number} status 状态值
+   * @returns {Promise}
+   */
+  updateStatus(projectId, status) {
+    return request({
+      url: `${baseURL}/updateStatus`,
+      method: 'put',
+      params: {  // 使用 params 而不是 data
+        projectId: projectId,
+        status: status
+      },
       loading: true
     })
   }
@@ -172,21 +163,11 @@ export const projectService = {
    */
   async getProjectDetail(projectId) {
     try {
-      // 方法1: 如果后端有详情接口
-      try {
-        const res = await projectApi.getById(projectId)
-        if (res.code === 200 || res.success) {
-          return Promise.resolve(res.data || res.result)
-        }
-      } catch (error) {
-        console.log('详情接口不可用，使用列表数据查找')
-      }
-      
-      // 方法2: 从项目列表中查找对应项目
+      // 从项目列表中查找对应项目
       const listRes = await projectApi.getList({})
       if (listRes.code === 200 || listRes.success) {
-        const projectList = listRes.data || listRes.result || []
-        const project = projectList.find(item => item.projectId == projectId)
+        const projectList = listRes.data?.records || listRes.data || listRes.result || []
+        const project = projectList.find(item => item.projectId == projectId || item.id == projectId)
         if (project) {
           return Promise.resolve(project)
         }
@@ -196,26 +177,6 @@ export const projectService = {
       
     } catch (error) {
       console.error('获取项目详情异常:', error)
-      throw error
-    }
-  },
-
-  /**
-   * 接取项目
-   * @param {Number} projectId 项目ID
-   * @returns {Promise}
-   */
-  async takeProject(projectId) {
-    try {
-      const res = await projectApi.takeProject(projectId)
-      if (res.code === 200 || res.success) {
-        return Promise.resolve(res.data || res.result)
-      } else {
-        const errorMsg = res.msg || res.message || '接单失败'
-        return Promise.reject(new Error(errorMsg))
-      }
-    } catch (error) {
-      console.error('接取项目异常:', error)
       throw error
     }
   },
@@ -236,6 +197,33 @@ export const projectService = {
       }
     } catch (error) {
       console.error('更新项目异常:', error)
+      throw error
+    }
+  },
+
+  /**
+   * 更新项目状态
+   * @param {Number} projectId 项目ID
+   * @param {Number} status 状态值
+   * @returns {Promise}
+   */
+  async updateProjectStatus(projectId, status) {
+    try {
+      console.log('🔄 更新项目状态 - 调用接口:', { projectId, status })
+      
+      const res = await projectApi.updateStatus(projectId, status)
+      console.log('📡 状态更新接口响应:', res)
+      
+      if (res.code === 200 || res.success) {
+        console.log('✅ 状态更新成功')
+        return Promise.resolve(res.data || res.result)
+      } else {
+        const errorMsg = res.msg || res.message || '更新状态失败'
+        console.error('❌ 状态更新失败:', errorMsg)
+        return Promise.reject(new Error(errorMsg))
+      }
+    } catch (error) {
+      console.error('❌ 更新项目状态异常:', error)
       throw error
     }
   },
@@ -272,6 +260,28 @@ export const projectService = {
       })
     } catch (error) {
       return Promise.reject(error)
+    }
+  },
+
+  /**
+   * 接取项目并更新状态
+   * @param {Object} acceptData 接单数据
+   * @returns {Promise}
+   */
+  async acceptProject(acceptData) {
+    try {
+      const { projectId, status, acceptedBy, acceptedRole } = acceptData
+      
+      console.log('🎯 接取项目 - 参数:', { projectId, status, acceptedBy, acceptedRole })
+      
+      // 直接调用更新状态接口
+      const result = await this.updateProjectStatus(projectId, status)
+      
+      console.log('✅ 接单成功:', result)
+      return Promise.resolve(result)
+    } catch (error) {
+      console.error('❌ 接取项目异常:', error)
+      throw error
     }
   }
 }

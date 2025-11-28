@@ -83,7 +83,7 @@
 					<text class="tag" v-if="project.area">{{ project.area }}㎡</text>
 					<text class="tag">{{ getRoleText(project.requiredRoles) }}</text>
 					<!-- 显示角色匹配标签 -->
-					<text class="tag match-tag" v-if="isRoleMatch(project.requiredRoles)">匹配身份</text>
+					<text class="tag match-tag" v-if="isRoleMatch(project)">可接单</text>
 					<!-- 查看权限提示 -->
 					<text class="tag view-only-tag" v-if="isViewOnly">仅可查看</text>
 				</view>
@@ -108,9 +108,9 @@
 						<button 
 							class="detail-btn" 
 							:class="{ 'disabled-btn': isViewOnly }"
-							@click.stop="handleDetailClick(project)"
+							@click.stop="viewProjectDetail(project.projectId)"
 						>
-							{{ isViewOnly ? '仅查看' : '详情' }}
+							详情
 						</button>
 					</view>
 				</view>
@@ -219,10 +219,10 @@ export default {
   computed: {
     // 根据角色和状态过滤项目列表
     filteredProjectList() {
-      // 首先过滤状态：只显示状态为1（发布中）或2（部分接单）的项目
+      // 首先过滤状态：不显示草稿(0)、已取消(5)和已完成(4)的项目
       const availableProjects = this.projectList.filter(project => {
         const status = parseInt(project.status)
-        return status === 1 || status === 2
+        return status !== 0 && status !== 5 && status !== 4  // 不显示草稿、已取消和已完成的项目
       })
       
       // 如果是材料商，直接返回空数组（不能接项目）
@@ -235,12 +235,8 @@ export default {
         return availableProjects
       }
       
-      // 设计师和监理：根据角色映射过滤项目
-      const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
-      return availableProjects.filter(project => {
-        const requiredRole = parseInt(project.requiredRoles)
-        return requiredRole && allowedTypes.includes(requiredRole)
-      })
+      // 设计师和监理：根据角色映射和状态过滤项目
+      return availableProjects.filter(project => this.canTakeOrder(project))
     }
   },
   async onLoad() {
@@ -271,6 +267,52 @@ export default {
     }
   },
   methods: {
+    // 检查是否可以接单
+    canTakeOrder(project) {
+      if (!this.currentRole || this.isViewOnly || this.currentRole === 'material_supplier') {
+        return false
+      }
+      
+      const status = parseInt(project.status)
+      const requiredRole = parseInt(project.requiredRoles)
+      const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
+      
+      // 检查项目类型是否匹配
+      if (!requiredRole || !allowedTypes.includes(requiredRole)) {
+        return false
+      }
+      
+      // 根据角色和项目类型检查状态
+      if (this.currentRole === 'designer') {
+        if (requiredRole === 1) {
+          // 设计师项目：只有状态为1（发布中）时可以接单
+          return status === 1
+        } else if (requiredRole === 3) {
+          // 设计师+监理项目：状态为1（发布中）或3（监理接单）时可以接设计师部分
+          return status === 1 || status === 3
+        }
+      } else if (this.currentRole === 'supervisor') {
+        if (requiredRole === 2) {
+          // 监理项目：只有状态为1（发布中）时可以接单
+          return status === 1
+        } else if (requiredRole === 3) {
+          // 设计师+监理项目：状态为1（发布中）或2（设计师接单）时可以接监理部分
+          return status === 1 || status === 2
+        }
+      }
+      
+      return false
+    },
+    
+    // 检查角色是否匹配（显示标签用）
+    isRoleMatch(project) {
+      if (!this.currentRole || this.isViewOnly || this.currentRole === 'material_supplier') return false
+      
+      const requiredRole = parseInt(project.requiredRoles)
+      const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
+      return requiredRole && allowedTypes.includes(requiredRole)
+    },
+
     // 获取用户角色并设置权限
     async getUserRole() {
       try {
@@ -327,17 +369,6 @@ export default {
       }
     },
     
-    // 处理详情按钮点击
-    handleDetailClick(project) {
-      if (this.isViewOnly) {
-        // 仅查看模式：显示提示信息
-        this.showViewOnlyTip()
-      } else {
-        // 可操作模式：跳转到详情页
-        this.viewProjectDetail(project.projectId)
-      }
-    },
-    
     // 显示仅查看提示
     showViewOnlyTip() {
       uni.showToast({
@@ -380,15 +411,6 @@ export default {
         if (roleLower.includes('user')) return 'user'
       }
       return 'user'
-    },
-    
-    // 检查角色是否匹配项目需求
-    isRoleMatch(requiredRole) {
-      if (!this.currentRole || this.isViewOnly || this.currentRole === 'material_supplier') return false
-      
-      const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
-      const requiredRoleNum = parseInt(requiredRole)
-      return requiredRoleNum && allowedTypes.includes(requiredRoleNum)
     },
 
     // 地区输入
@@ -438,10 +460,10 @@ export default {
         let dataList = this.extractDataList(result)
         console.log('📊 提取的项目列表:', dataList)
         
-        // 在前端过滤状态为1和2的项目
+        // 在前端过滤状态：不显示草稿(0)、已取消(5)和已完成(4)的项目
         dataList = dataList.filter(project => {
           const status = parseInt(project.status)
-          return status === 1 || status === 2
+          return status !== 0 && status !== 5 && status !== 4
         })
         
         console.log('✅ 过滤后的项目列表:', dataList)
@@ -654,9 +676,10 @@ export default {
       const statusMap = {
         0: 'draft',
         1: 'bidding',
-        2: 'partial',
-        3: 'completed',
-        4: 'cancelled'
+        2: 'designer-taken',
+        3: 'supervisor-taken',
+        4: 'completed',
+        5: 'cancelled'
       }
       return statusMap[statusNum] || 'draft'
     },
@@ -667,9 +690,10 @@ export default {
       const statusTextMap = {
         0: '草稿',
         1: '发布中',
-        2: '部分接单',
-        3: '全部接单',
-        4: '已取消'
+        2: '设计师接单',
+        3: '监理接单',
+        4: '全部接单',
+        5: '已取消'
       }
       return statusTextMap[statusNum] || '未知状态'
     },
@@ -738,7 +762,6 @@ export default {
   }
 }
 </script>
-
 <style>
 	.order-hall-container {
 		min-height: 100vh;
@@ -932,14 +955,19 @@ export default {
 		color: #52c41a;
 	}
 	
-	.order-status.partial {
+	.order-status.designer-taken {
+		background-color: #e6f7ff;
+		color: #1890ff;
+	}
+	
+	.order-status.supervisor-taken {
 		background-color: #fff7e6;
 		color: #fa8c16;
 	}
 	
 	.order-status.completed {
-		background-color: #e6f7ff;
-		color: #1890ff;
+		background-color: #f6ffed;
+		color: #389e0d;
 	}
 	
 	.order-status.cancelled {

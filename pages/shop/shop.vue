@@ -460,7 +460,7 @@ export default {
     // 添加商品
     handleAddProduct() {
       uni.navigateTo({
-        url: '/pages/merchant/productupdate?type=add'
+        url: '/pages/test'
       });
     },
     
