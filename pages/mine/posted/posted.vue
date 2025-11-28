@@ -57,7 +57,8 @@
               <view class="post-info" @tap="togglePost(post.id)">
                 <text class="post-title">{{ post.title }}</text>
                 <view class="post-meta">
-                  <text class="post-type" :class="`type-${post.threadType}`">
+                  <!-- 修复：使用映射对象替代函数调用 -->
+                  <text class="post-type" :class="postTypeClasses[post.threadType]">
                     {{ getTypeLabel(post.threadType) }}
                   </text>
                   <text class="post-stats">
@@ -74,7 +75,8 @@
             <view class="post-content" v-if="post.expanded">
               <!-- 媒体展示 - 图片和视频一起显示 -->
               <view class="media-container" v-if="post.mediaUrls && post.mediaUrls.length > 0">
-                <view class="media-grid" :class="`grid-${Math.min(post.mediaUrls.length, 4)}`">
+                <!-- 修复：使用映射对象替代函数调用 -->
+                <view class="media-grid" :class="mediaGridClasses[Math.min(post.mediaUrls.length, 4)]">
                   <view 
                     v-for="(media, index) in post.mediaUrls" 
                     :key="index"
@@ -103,7 +105,8 @@
                       </view>
                     </view>
                     <!-- 文件类型标识 -->
-                    <view class="media-type-tag" :class="getMediaTypeClass(media.fileUrl || media)">
+                    <!-- 修复：使用映射对象替代函数调用 -->
+                    <view class="media-type-tag" :class="mediaTypeClasses[getMediaType(media.fileUrl || media)]">
                       {{ getMediaTypeText(media.fileUrl || media) }}
                     </view>
                   </view>
@@ -287,7 +290,25 @@ export default {
         { value: 3, label: '普通帖' },
         { value: 4, label: '材料展示' }
       ],
-      posts: []
+      posts: [],
+      // 修复：预定义所有样式类映射
+      postTypeClasses: {
+        '1': 'type-1',
+        '2': 'type-2',
+        '3': 'type-3',
+        '4': 'type-4'
+      },
+      mediaGridClasses: {
+        1: 'grid-1',
+        2: 'grid-2',
+        3: 'grid-3',
+        4: 'grid-4'
+      },
+      mediaTypeClasses: {
+        'image': 'image-tag',
+        'video': 'video-tag',
+        'other': 'other-tag'
+      }
     }
   },
   
@@ -308,6 +329,13 @@ export default {
   },
   
   methods: {
+    // 修复：获取媒体类型
+    getMediaType(url) {
+      if (this.isImage(url)) return 'image'
+      if (this.isVideo(url)) return 'video'
+      return 'other'
+    },
+
     async initData() {
       try {
         uni.showLoading({
@@ -747,12 +775,6 @@ export default {
       }
       
       return '/static/images/video-cover.png'
-    },
-    
-    getMediaTypeClass(url) {
-      if (this.isImage(url)) return 'image-tag'
-      if (this.isVideo(url)) return 'video-tag'
-      return 'other-tag'
     },
     
     getMediaTypeText(url) {

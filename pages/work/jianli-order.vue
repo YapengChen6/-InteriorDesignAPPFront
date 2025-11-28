@@ -76,7 +76,8 @@
 						<text class="order-number">订单号：DD{{ order.orderId }}</text>
 						<text class="order-time">{{ formatTime(order.createTime) }}</text>
 					</view>
-					<view class="order-status" :class="getStatusClass(order.status)">
+					<!-- 修复：使用映射表而不是函数调用 -->
+					<view class="order-status" :class="statusClassMap[order.status]">
 						{{ getStatusText(order.status) }}
 					</view>
 				</view>
@@ -234,6 +235,14 @@
 					'1': 0,
 					'2': 0,
 					'3': 0
+				},
+				
+				// 修复：添加状态类映射表
+				statusClassMap: {
+					0: 'status-pending',
+					1: 'status-progress',
+					2: 'status-completed',
+					3: 'status-canceled'
 				}
 			}
 		},
@@ -261,7 +270,7 @@
 			goToConstructionStage(orderId) {
 				console.log('🏗️ 跳转到施工阶段页面，订单ID:', orderId, '用户ID:', this.userInfo.userId);
 				uni.navigateTo({
-					url: `/pages/order-hall/order-have?orderId=${orderId}&userId=${this.userInfo.userId}`
+					url: `/pages/order-hall/design-update?orderId=${orderId}&userId=${this.userInfo.userId}`
 				});
 			},
 
@@ -673,17 +682,6 @@
 			// 获取状态文本
 			getStatusText(status) {
 				return orderService.getOrderStatusText(status)
-			},
-			
-			// 获取状态样式类
-			getStatusClass(status) {
-				const classMap = {
-					0: 'status-pending',
-					1: 'status-progress',
-					2: 'status-completed',
-					3: 'status-canceled'
-				}
-				return classMap[status] || '';
 			},
 			
 			// 获取订单类型文本

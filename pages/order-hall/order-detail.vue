@@ -14,8 +14,9 @@
 
 		<!-- 项目基本信息 -->
 		<view class="basic-info-section">
-			<view class="project-status" :class="getStatusClass(projectDetail.status)">
-				{{ getStatusText(projectDetail.status) }}
+			<!-- 修复：使用计算属性 -->
+			<view class="project-status" :class="statusClass">
+				{{ statusText }}
 			</view>
 			
 			<view class="project-title">{{ projectDetail.title || '加载中...' }}</view>
@@ -27,11 +28,11 @@
 				</view>
 				<view class="meta-item">
 					<text class="meta-icon">⏰</text>
-					<text class="meta-text">{{ formatDate(projectDetail.deadline) }}</text>
+					<text class="meta-text">{{ formattedDeadline }}</text>
 				</view>
 				<view class="meta-item">
 					<text class="meta-icon">💰</text>
-					<text class="meta-text budget">{{ formatBudget(projectDetail.budget) }}</text>
+					<text class="meta-text budget">{{ formattedBudget }}</text>
 				</view>
 			</view>
 		</view>
@@ -73,7 +74,7 @@
 			<view class="card-content">
 				<view class="requirement-item">
 					<text class="requirement-label">所需角色：</text>
-					<text class="requirement-value">{{ getRoleText(projectDetail.requiredRoles) }}</text>
+					<text class="requirement-value">{{ roleText }}</text>
 				</view>
 				<view class="requirement-item">
 					<text class="requirement-label">项目面积：</text>
@@ -81,7 +82,7 @@
 				</view>
 				<view class="requirement-item">
 					<text class="requirement-label">项目类型：</text>
-					<text class="requirement-value">{{ getProjectTypeText(projectDetail.projectType) }}</text>
+					<text class="requirement-value">{{ projectTypeText }}</text>
 				</view>
 				<view class="requirement-item">
 					<text class="requirement-label">风格偏好：</text>
@@ -103,14 +104,14 @@
 				<view class="publisher-info">
 					<view class="publisher-avatar">
 						<image 
-							:src="getPublisherAvatar()" 
+							:src="publisherAvatar" 
 							class="avatar-image" 
 							mode="aspectFill"
 						/>
 					</view>
 					<view class="publisher-details">
-						<text class="publisher-name">{{ getPublisherName() }}</text>
-						<text class="publisher-meta">发布于 {{ formatTime(projectDetail.createTime) }}</text>
+						<text class="publisher-name">{{ publisherName }}</text>
+						<text class="publisher-meta">发布于 {{ formattedCreateTime }}</text>
 					</view>
 				</view>
 				
@@ -147,7 +148,7 @@
 					<text class="dialog-title">确认接单</text>
 				</view>
 				<view class="dialog-content">
-					<text class="dialog-message">确定要接取这个订单吗？接单后您将负责此项目的{{ getRoleText(projectDetail.requiredRoles) }}工作。</text>
+					<text class="dialog-message">确定要接取这个订单吗？接单后您将负责此项目的{{ roleText }}工作。</text>
 				</view>
 				<view class="dialog-actions">
 					<button class="dialog-btn cancel" @click="closeAcceptDialog">取消</button>
@@ -216,6 +217,101 @@ export default {
 				3: '办公室装修',
 				4: '其他'
 			}
+		}
+	},
+	
+	computed: {
+		// 状态类名
+		statusClass() {
+			const status = this.projectDetail.status
+			return this.statusMap[status]?.class || 'pending'
+		},
+		
+		// 状态文本
+		statusText() {
+			const status = this.projectDetail.status
+			return this.statusMap[status]?.text || '未知状态'
+		},
+		
+		// 角色文本
+		roleText() {
+			const role = this.projectDetail.requiredRoles
+			return this.roleMap[role] || '未知角色'
+		},
+		
+		// 项目类型文本
+		projectTypeText() {
+			const type = this.projectDetail.projectType
+			return this.projectTypeMap[type] || '其他'
+		},
+		
+		// 格式化截止日期
+		formattedDeadline() {
+			const date = this.projectDetail.deadline
+			if (!date) return '未设置'
+			if (date.includes(' ')) {
+				return date.split(' ')[0]
+			}
+			return date
+		},
+		
+		// 格式化预算
+		formattedBudget() {
+			const budget = this.projectDetail.budget
+			if (!budget) return '面议'
+			if (typeof budget === 'number') {
+				if (budget >= 10000) {
+					return `¥${(budget / 10000).toFixed(1)}万`
+				}
+				return `¥${budget}元`
+			}
+			return `¥${budget}`
+		},
+		
+		// 格式化创建时间
+		formattedCreateTime() {
+			const time = this.projectDetail.createTime
+			if (!time) return ''
+			
+			try {
+				const now = new Date()
+				const createTime = new Date(time)
+				
+				if (isNaN(createTime.getTime())) {
+					return '时间未知'
+				}
+				
+				const diff = now - createTime
+				const minutes = Math.floor(diff / (1000 * 60))
+				const hours = Math.floor(diff / (1000 * 60 * 60))
+				const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+				
+				if (minutes < 1) return '刚刚'
+				if (minutes < 60) return `${minutes}分钟前`
+				if (hours < 24) return `${hours}小时前`
+				if (days < 7) return `${days}天前`
+				
+				return `${createTime.getFullYear()}-${createTime.getMonth() + 1}-${createTime.getDate()}`
+			} catch (error) {
+				console.error('格式化时间错误:', error)
+				return '时间未知'
+			}
+		},
+		
+		// 发布者名称
+		publisherName() {
+			if (this.publisherInfo && this.publisherInfo.name) {
+				return this.publisherInfo.name
+			}
+			return this.projectDetail.createBy || '匿名用户'
+		},
+		
+		// 发布者头像
+		publisherAvatar() {
+			if (this.publisherInfo && this.publisherInfo.avatar) {
+				return this.publisherInfo.avatar
+			}
+			return '/static/images/default-avatar.png'
 		}
 	},
 	
@@ -334,22 +430,6 @@ export default {
 				userId: '',
 				currentRoleType: 'user'
 			}
-		},
-		
-		// 获取发布者显示名称
-		getPublisherName() {
-			if (this.publisherInfo && this.publisherInfo.name) {
-				return this.publisherInfo.name
-			}
-			return this.projectDetail.createBy || '匿名用户'
-		},
-		
-		// 获取发布者头像
-		getPublisherAvatar() {
-			if (this.publisherInfo && this.publisherInfo.avatar) {
-				return this.publisherInfo.avatar
-			}
-			return '/static/images/default-avatar.png'
 		},
 		
 		// 获取发布者手机号（用于联系）
@@ -498,76 +578,6 @@ export default {
 		// 返回上一页
 		goBack() {
 			uni.navigateBack()
-		},
-		
-		// 获取状态样式类
-		getStatusClass(status) {
-			return this.statusMap[status]?.class || 'pending'
-		},
-		
-		// 获取状态文本
-		getStatusText(status) {
-			return this.statusMap[status]?.text || '未知状态'
-		},
-		
-		// 获取角色文本
-		getRoleText(role) {
-			return this.roleMap[role] || '未知角色'
-		},
-		
-		// 获取项目类型文本
-		getProjectTypeText(type) {
-			return this.projectTypeMap[type] || '其他'
-		},
-		
-		// 格式化日期
-		formatDate(date) {
-			if (!date) return '未设置'
-			if (date.includes(' ')) {
-				return date.split(' ')[0]
-			}
-			return date
-		},
-		
-		// 格式化预算
-		formatBudget(budget) {
-			if (!budget) return '面议'
-			if (typeof budget === 'number') {
-				if (budget >= 10000) {
-					return `¥${(budget / 10000).toFixed(1)}万`
-				}
-				return `¥${budget}元`
-			}
-			return `¥${budget}`
-		},
-		
-		// 格式化时间
-		formatTime(time) {
-			if (!time) return ''
-			
-			try {
-				const now = new Date()
-				const createTime = new Date(time)
-				
-				if (isNaN(createTime.getTime())) {
-					return '时间未知'
-				}
-				
-				const diff = now - createTime
-				const minutes = Math.floor(diff / (1000 * 60))
-				const hours = Math.floor(diff / (1000 * 60 * 60))
-				const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-				
-				if (minutes < 1) return '刚刚'
-				if (minutes < 60) return `${minutes}分钟前`
-				if (hours < 24) return `${hours}小时前`
-				if (days < 7) return `${days}天前`
-				
-				return `${createTime.getFullYear()}-${createTime.getMonth() + 1}-${createTime.getDate()}`
-			} catch (error) {
-				console.error('格式化时间错误:', error)
-				return '时间未知'
-			}
 		}
 	}
 }
@@ -986,5 +996,26 @@ export default {
 	border-radius: 16rpx;
 	padding: 20rpx 40rpx;
 	font-size: 28rpx;
+}
+
+/* 状态样式类 */
+.project-status.pending {
+	background: rgba(255, 255, 255, 0.2);
+}
+
+.project-status.bidding {
+	background: rgba(255, 255, 255, 0.3);
+}
+
+.project-status.in-progress {
+	background: rgba(255, 255, 255, 0.4);
+}
+
+.project-status.completed {
+	background: rgba(255, 255, 255, 0.5);
+}
+
+.project-status.cancelled {
+	background: rgba(255, 255, 255, 0.1);
 }
 </style>

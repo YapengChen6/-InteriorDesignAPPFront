@@ -79,12 +79,13 @@
 					<view class="order-info">
 						<text class="order-number">订单号：DD{{ order.orderId }}</text>
 						<text class="order-time">{{ formatTime(order.createTime) }}</text>
-						<!-- 添加订单类型标签 -->
-						<view class="order-type-tag" :class="getOrderTypeClass(order.type)">
+						<!-- 修复：使用对象语法 -->
+						<view :class="['order-type-tag', orderTypeClass[order.type]]">
 							{{ getOrderTypeText(order.type) }}
 						</view>
 					</view>
-					<view class="order-status" :class="getStatusClass(order)">
+					<!-- 修复：使用对象语法 -->
+					<view :class="['order-status', statusClass[order.status]]">
 						{{ getStatusText(order.status) }}
 					</view>
 				</view>
@@ -281,6 +282,20 @@
 					'1': 0,
 					'2': 0,
 					'3': 0
+				},
+				
+				// 修复：使用计算属性替代函数调用
+				statusClass: {
+					0: 'status-pending',
+					1: 'status-progress',
+					2: 'status-completed',
+					3: 'status-canceled'
+				},
+				
+				// 修复：使用计算属性替代函数调用
+				orderTypeClass: {
+					'1': 'type-design',
+					'2': 'type-supervisor'
 				}
 			}
 		},
@@ -919,7 +934,7 @@
 					console.error('❌ 获取设计师信息失败:', error)
 					return {
 						name: '设计师',
-						phone: '暂无联系方式',
+							phone: '暂无联系方式',
 						avatar: '/static/images/default-avatar.png',
 						role: '设计师'
 					}
@@ -940,17 +955,6 @@
 				return orderService.getOrderStatusText(status)
 			},
 			
-			// 获取状态样式
-			getStatusClass(status) {
-				const classMap = {
-					0: 'status-pending',
-					1: 'status-progress',
-					2: 'status-completed',
-					3: 'status-canceled'
-				}
-				return classMap[status] || '';
-			},
-			
 			// 获取订单类型文本
 			getOrderTypeText(type) {
 				const typeMap = {
@@ -958,15 +962,6 @@
 					'2': '监理订单'
 				}
 				return typeMap[String(type)] || '未知类型';
-			},
-			
-			// 获取订单类型样式
-			getOrderTypeClass(type) {
-				const classMap = {
-					'1': 'type-design',
-					'2': 'type-supervisor'
-				}
-				return classMap[String(type)] || '';
 			},
 			
 			// 格式化时间
@@ -1122,7 +1117,7 @@
 </script>
 
 <style scoped>
-	/* 调试信息样式 */
+	/* 样式保持不变 */
 	.debug-info {
 		background: #fff3cd;
 		padding: 20rpx;
@@ -1133,7 +1128,6 @@
 		color: #856404;
 	}
 	
-	/* 其他样式保持不变 */
 	.back-btn {
 		display: flex;
 		align-items: center;

@@ -66,8 +66,8 @@
 				@click="openMessage(item)"
 			>
 				<!-- 左侧图标 -->
-				<view class="icon-box" :class="getTypeClass(item.type)">
-					<text class="msg-icon">{{ getAvatarIcon(item.type) }}</text>
+				<view class="icon-box" :class="item.typeClass">
+					<text class="msg-icon">{{ item.avatarIcon }}</text>
 					<view v-if="!item.read" class="unread-dot"></view>
 				</view>
 
@@ -75,7 +75,7 @@
 				<view class="msg-content">
 					<view class="msg-header">
 						<text class="msg-title">{{ item.title }}</text>
-						<text class="msg-time">{{ formatTime(item.time) }}</text>
+						<text class="msg-time">{{ item.formattedTime }}</text>
 					</view>
 					<text class="msg-desc">{{ item.content }}</text>
 				</view>
@@ -118,7 +118,7 @@
 			<view class="popup-body">
 			  <view class="message-meta">
 				<text class="sender">发件人：{{ selectedMessage.sender }}</text>
-				<text class="time">{{ formatFullTime(selectedMessage.time) }}</text>
+				<text class="time">{{ selectedMessage.formattedFullTime }}</text>
 			  </view>
 			  <view class="message-detail">
 				<text>{{ selectedMessage.content }}</text>
@@ -216,19 +216,17 @@ export default {
 		}
 	},
 	methods: {
-		getAvatarIcon(type) {
-			const icons = { project: '🏠', system: '🔔', chat: '💬', 'chat-request': '🤝' };
-			return icons[type] || '✉️';
-		},
-		getTypeClass(type) {
-			const map = {
-				'system': 'bg-blue',
-				'project': 'bg-orange',
-				'chat-request': 'bg-purple',
-				'chat': 'bg-green'
+		// 预定义类型对应的样式类和图标
+		getTypeConfig(type) {
+			const configs = {
+				'system': { class: 'bg-blue', icon: '🔔' },
+				'project': { class: 'bg-orange', icon: '🏠' },
+				'chat-request': { class: 'bg-purple', icon: '🤝' },
+				'chat': { class: 'bg-green', icon: '💬' }
 			};
-			return map[type] || 'bg-blue';
+			return configs[type] || { class: 'bg-blue', icon: '✉️' };
 		},
+		
 		// 使用与 chatMain.vue 相同的时间格式化方法
 		formatTime,
 		formatFullTime(time) {
@@ -244,6 +242,28 @@ export default {
 				minute: '2-digit'
 			});
 		},
+		
+		// 处理消息数据，预先计算好所有显示相关的属性
+		processMessageData(item, index) {
+			const config = this.getTypeConfig(item.type);
+			const processedItem = {
+				...item,
+				typeClass: config.class,
+				avatarIcon: config.icon
+			};
+			
+			// 处理时间显示
+			if (item.time) {
+				processedItem.formattedTime = this.formatTime(item.time);
+				processedItem.formattedFullTime = this.formatFullTime(item.time);
+			} else {
+				processedItem.formattedTime = '未知时间';
+				processedItem.formattedFullTime = '时间未知';
+			}
+			
+			return processedItem;
+		},
+		
 		goToChatList() {
 			uni.navigateTo({ url: '/pages/chat/chatMain' });
 		},
@@ -352,13 +372,13 @@ export default {
 								fromUserId = parsed.fromUserId || null;
 								const fromName = parsed.fromNickName || (parsed.fromUserId ? `用户${parsed.fromUserId}` : '对方');
 								title = `${fromName} 请求和你聊天`;
-								content = '对方向你发起了聊天请求，点击“同意聊天”开始会话。';
+								content = '对方向你发起了聊天请求，点击"同意聊天"开始会话。';
 								sender = fromName;
 							}
 						} catch (e) { console.warn('解析系统消息失败:', e); }
 					}
 					
-					return {
+					const baseMessage = {
 						id: item.messageId || index + 1,
 						messageId: item.messageId,
 						messageStatusId: item.messageStatusId,
@@ -374,6 +394,9 @@ export default {
 						conversationId: item.conversationId,
 						senderId: item.senderId
 					};
+					
+					// 处理显示相关的属性
+					return this.processMessageData(baseMessage, index);
 				});
 				
 				this.hasMore = false; // 暂时假设一次拉取完
@@ -424,7 +447,8 @@ export default {
 			await this.loadMessages(false);
 		},
 		openMessage(message) {
-			this.selectedMessage = message;
+			// 确保弹窗中的消息也有完整的显示属性
+			this.selectedMessage = this.processMessageData(message);
 			this.$refs.messagePopup.open();
 			if (!message.read && message.type !== 'chat-request') {
 				this.markAsRead(message);
@@ -538,6 +562,7 @@ export default {
 	}
 };
 </script>
+
 
 <style scoped>
 	.message-container {

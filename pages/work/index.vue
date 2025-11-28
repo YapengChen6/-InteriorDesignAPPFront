@@ -87,7 +87,15 @@
 						<text class="order-number">订单号：DD{{ order.orderId }}</text>
 						<text class="order-time">{{ formatTime(order.createTime) }}</text>
 					</view>
-					<view class="order-status" :class="getStatusClass(order)">
+					<!-- 修复：使用内联对象语法 -->
+					<view class="order-status" 
+						:class="{
+							'status-waiting-payment': isWaitingPayment(order),
+							'status-pending': order.status === 0 && !isWaitingPayment(order),
+							'status-progress': order.status === 1 && !isWaitingPayment(order),
+							'status-completed': order.status === 2,
+							'status-canceled': order.status === 3
+						}">
 						{{ getDesignerStatusText(order) }}
 					</view>
 				</view>
@@ -299,20 +307,6 @@
 					return '待付款';
 				}
 				return this.getStatusText(order.status);
-			},
-
-			// 设计师专属状态样式
-			getStatusClass(order) {
-				if (this.isWaitingPayment(order)) {
-					return 'status-waiting-payment';
-				}
-				const classMap = {
-					0: 'status-pending',
-					1: 'status-progress',
-					2: 'status-completed',
-					3: 'status-canceled'
-				}
-				return classMap[order.status] || '';
 			},
 
 			// 查看订单详情

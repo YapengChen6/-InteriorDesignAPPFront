@@ -346,6 +346,13 @@
   	{
   		"navigationBarTitleText" : "监理订单施工阶段页面"
   	}
+  },
+  {
+  	"path" : "pages/order-hall/design-update",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单监理上传阶段页面"
+  	}
   }
   ],
   "tabBar": {
