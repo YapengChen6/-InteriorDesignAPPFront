@@ -1,6 +1,9 @@
 {
   "dependencies": {
+    "@dcloudio/uni-app": "^3.0.0-alpha-4080720251125001",
+    "@dcloudio/uni-mp-weixin": "^3.0.0-alpha-4080720251125001",
     "@dcloudio/uni-ui": "^1.5.11",
-    "china-regions": "^1.0.0"
+    "china-regions": "^1.0.0",
+    "vue": "3"
   }
 }

@@ -2,7 +2,6 @@
 	<view class="container">
 		<!-- 顶部标题栏 -->
 		<view class="header-section">
-			<!-- 添加返回按钮 -->
 			<view class="back-btn" @click="goBack">
 				<text class="back-icon">←</text>
 				<text class="back-text">返回</text>
@@ -11,10 +10,6 @@
 			<view class="header-actions">
 				<view class="action-item" @click="goToMessage">
 					<text class="action-icon">💬</text>
-				</view>
-				<!-- 调试按钮 -->
-				<view class="action-item" @click="testUploadFunctionality" style="margin-left: 20rpx;">
-					<text class="action-icon">🧪</text>
 				</view>
 			</view>
 		</view>
@@ -40,13 +35,6 @@
 						<text>进行中</text>
 						<text v-if="statusCount['1'] > 0" class="count-badge">{{ statusCount['1'] }}</text>
 					</view>
-					<!-- 设计师专属：待付款状态 -->
-					<view class="filter-item" 
-						:class="{ active: activeStatus === '4' }" 
-						@click="changeStatus('4')">
-						<text>待付款</text>
-						<text v-if="statusCount['4'] > 0" class="count-badge">{{ statusCount['4'] }}</text>
-					</view>
 					<view class="filter-item" 
 						:class="{ active: activeStatus === '2' }" 
 						@click="changeStatus('2')">
@@ -63,38 +51,47 @@
 		
 		<!-- 订单列表 -->
 		<scroll-view class="order-list" scroll-y="true" @scrolltolower="loadMore" refresher-enabled @refresherrefresh="onRefresh">
+			<!-- 调试信息 -->
+			<view class="debug-info" v-if="orderList.length > 0">
+				<text>调试信息: 订单类型={{ orderList[0].type }}, 状态={{ orderList[0].status }}, 合同状态={{ orderList[0].contractStatus }}</text>
+			</view>
+			
 			<!-- 下拉刷新 -->
 			<view class="refresh-container" v-if="refreshing">
 				<text class="refresh-text">刷新中...</text>
 			</view>
 			
 			<!-- 空状态 -->
-			<view v-if="!loading && filteredOrderList.length === 0" class="empty-state">
-				<view class="empty-icon">🎨</view>
+			<view v-if="!loading && orderList.length === 0" class="empty-state">
+				<view class="empty-icon">👤</view>
 				<view class="empty-text">暂无订单</view>
-				<view class="empty-desc">您还没有接到的订单</view>
+				<view class="empty-desc">您还没有任何订单</view>
 			</view>
 			
 			<!-- 加载状态 -->
-			<view v-if="loading && filteredOrderList.length === 0" class="loading-state">
+			<view v-if="loading && orderList.length === 0" class="loading-state">
 				<text class="loading-text">加载中...</text>
 			</view>
 			
 			<!-- 订单项 -->
-			<view class="order-item" v-for="order in filteredOrderList" :key="order.orderId">
+			<view class="order-item" v-for="order in orderList" :key="order.orderId">
 				<view class="order-header">
 					<view class="order-info">
 						<text class="order-number">订单号：DD{{ order.orderId }}</text>
 						<text class="order-time">{{ formatTime(order.createTime) }}</text>
+						<!-- 添加订单类型标签 -->
+						<view class="order-type-tag" :class="getOrderTypeClass(order.type)">
+							{{ getOrderTypeText(order.type) }}
+						</view>
 					</view>
 					<view class="order-status" :class="getStatusClass(order)">
-						{{ getDesignerStatusText(order) }}
+						{{ getStatusText(order.status) }}
 					</view>
 				</view>
 				
 				<view class="order-content" @click="viewOrderDetail(order.orderId)">
 					<view class="project-info">
-						<view class="project-title">{{ order.projectInfo ? order.projectInfo.title : '设计项目' }}</view>
+						<view class="project-title">{{ order.projectInfo ? order.projectInfo.title : '监理项目' }}</view>
 						<view class="project-desc">{{ order.projectInfo ? order.projectInfo.description : (order.remark || '暂无描述') }}</view>
 						<view class="project-tags">
 							<text class="tag" v-if="order.projectInfo && order.projectInfo.budget">预算 {{ order.projectInfo.budget }}元</text>
@@ -105,24 +102,24 @@
 						</view>
 					</view>
 					
-					<!-- 显示发布人（客户）信息 -->
-					<view class="designer-info" v-if="order.userId">
+					<!-- 显示设计师信息 -->
+					<view class="designer-info" v-if="order.contractorId">
 						<view class="designer-avatar">
-							<image :src="order.publisherInfo.avatar" mode="aspectFill" />
+							<image :src="order.contractorInfo.avatar" mode="aspectFill" />
 						</view>
 						<view class="designer-details">
-							<text class="designer-name">{{ order.publisherInfo.name }}</text>
-							<text class="designer-role">客户</text>
-							<text class="designer-phone">电话: {{ order.publisherInfo.phone }}</text>
+							<text class="designer-name">{{ order.contractorInfo.name }}</text>
+							<text class="designer-role">{{ order.contractorInfo.role }}</text>
+							<text class="designer-phone">电话: {{ order.contractorInfo.phone }}</text>
 						</view>
-						<view class="contact-btn" @click.stop="contactCustomer(order.userId)">
+						<view class="contact-btn" @click.stop="contactDesigner(order.contractorId)">
 							联系
 						</view>
 					</view>
 					
-					<!-- 未获取客户信息 -->
+					<!-- 未分配设计师 -->
 					<view class="no-designer" v-else>
-						<text class="no-designer-text">暂未获取客户信息</text>
+						<text class="no-designer-text">暂未分配监理师</text>
 					</view>
 				</view>
 				
@@ -137,6 +134,9 @@
 							<button class="btn secondary" @click="cancelOrder(order.orderId)">
 								取消订单
 							</button>
+							<button class="btn primary" @click="confirmOrder(order.orderId)">
+								确认订单
+							</button>
 						</template>
 						
 						<!-- 状态1：进行中 -->
@@ -146,9 +146,6 @@
 								<button class="btn secondary" @click="cancelOrder(order.orderId)">
 									取消订单
 								</button>
-								<button class="btn primary" @click="uploadContract(order.orderId)">
-									上传合同
-								</button>
 							</template>
 							
 							<!-- 合同状态1：合同待确认 -->
@@ -156,28 +153,46 @@
 								<button class="btn secondary" @click="viewContract(order)">
 									查看合同
 								</button>
-								<button class="btn secondary" @click="cancelOrder(order.orderId)">
-									取消订单
+								<button class="btn secondary" @click="rejectContract(order.orderId)">
+									拒绝合同
 								</button>
-								<button class="btn primary" @click="uploadContract(order.orderId, true)">
-									修改合同
+								<button class="btn primary" @click="confirmContract(order.orderId)">
+									确认合同
 								</button>
 							</template>
 							
 							<!-- 合同状态2：合同已确认 -->
 							<template v-else-if="order.contractStatus === 2">
-								<button v-if="order.effectButtonText && order.effectButtonText !== '设计方案已完成'" 
-										class="btn primary" 
-										@click="uploadEffectDrawing(order)" 
-										:loading="order.loadingEffect">
-									{{ order.effectButtonText }}
-								</button>
-								<button v-if="order.showConstructionButton" 
-										class="btn primary" 
-										@click="uploadConstructionDrawing(order)" 
-										:loading="order.loadingConstruction">
-									上传施工设计图
-								</button>
+								<!-- 设计师订单：保持原有逻辑 -->
+								<template v-if="String(order.type) === '1'">
+									<!-- 效果图未完成时显示确认效果图按钮 -->
+									<button v-if="order.effectDrawingStatus !== '2'" 
+											class="btn primary" 
+											@click="confirmEffectDrawing(order.orderId)">
+										确认效果图
+									</button>
+									
+									<!-- 效果图已完成但施工设计图未完成时显示确认施工设计图按钮 -->
+									<button v-if="order.effectDrawingStatus === '2' && order.constructionDrawingStatus !== '2'" 
+											class="btn primary" 
+											@click="confirmConstructionDrawing(order.orderId)">
+										确认施工设计图
+									</button>
+									
+									<!-- 效果图和施工设计图都已完成时显示付款按钮 -->
+									<button v-if="order.effectDrawingStatus === '2' && order.constructionDrawingStatus === '2'" 
+											class="btn primary" 
+											@click="payOrder(order.orderId)">
+										立即付款
+									</button>
+								</template>
+								
+								<!-- 监理订单：合同确认后显示施工阶段按钮 -->
+								<template v-else-if="String(order.type) === '2'">
+									<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+										施工阶段
+									</button>
+								</template>
 							</template>
 						</template>
 						
@@ -186,19 +201,27 @@
 							<button class="btn secondary" @click="viewOrderDetail(order.orderId)">
 								查看详情
 							</button>
+							<!-- 显示评价按钮，根据是否有评价决定是否显示 -->
+							<button v-if="!order.hasReview" class="btn primary" @click="goToReview(order.orderId)">
+								评价订单
+							</button>
+							<!-- 如果已有评价，显示已评价状态 -->
+							<text v-if="order.hasReview" class="status-text">
+								已评价
+							</text>
 						</template>
 					</view>
 				</view>
 			</view>
 			
 			<!-- 加载更多 -->
-			<view v-if="loading && filteredOrderList.length > 0" class="load-more">
+			<view v-if="loading && orderList.length > 0" class="load-more">
 				<text class="load-more-text">加载中...</text>
 			</view>
-			<view v-if="hasMore && filteredOrderList.length > 0" class="load-more">
+			<view v-if="hasMore && orderList.length > 0" class="load-more">
 				<text class="load-more-text">上拉加载更多</text>
 			</view>
-			<view v-if="!hasMore && filteredOrderList.length > 0" class="load-more">
+			<view v-if="!hasMore && orderList.length > 0" class="load-more">
 				<text class="load-more-text">没有更多数据了</text>
 			</view>
 		</scroll-view>
@@ -209,7 +232,8 @@
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
 	import { getUserProfile } from '@/api/users.js'
-	import { getDesignSchemeList, saveNullScheme } from '@/api/designScheme.js'
+	import { getDesignSchemeList } from '@/api/designScheme.js'
+	import { orderReviewApi } from '@/api/orderReview.js'
 	
 	// 方案类型常量
 	const SCHEME_TYPE = {
@@ -217,6 +241,12 @@
 		CONSTRUCTION_DRAWING: "2"
 	}
 	
+	// 订单类型常量
+	const ORDER_TYPE = {
+		DESIGN: "1",      // 设计师订单
+		SUPERVISOR: "2"   // 监理订单
+	}
+
 	export default {
 		data() {
 			return {
@@ -250,27 +280,16 @@
 					'0': 0,
 					'1': 0,
 					'2': 0,
-					'3': 0,
-					'4': 0 // 新增：待付款状态统计
+					'3': 0
 				}
-			}
-		},
-		computed: {
-			// 过滤后的订单列表（用于待付款筛选）
-			filteredOrderList() {
-				if (this.activeStatus === '4') {
-					// 筛选待付款订单
-					return this.orderList.filter(order => this.isWaitingPayment(order));
-				}
-				return this.orderList;
 			}
 		},
 		onLoad() {
-			console.log('🚀 设计师订单页面加载');
+			console.log('🚀 用户订单页面加载');
 			this.loadUserInfo();
 		},
 		onShow() {
-			console.log('🔄 设计师订单页面显示，刷新数据');
+			console.log('🔄 用户订单页面显示，刷新数据');
 			if (this.userInfo.userId) {
 				this.pagination.pageNum = 1;
 				this.loadOrderList();
@@ -285,37 +304,54 @@
 				});
 			},
 
-			// 判断是否为待付款订单
-			isWaitingPayment(order) {
-				return order.status === 1 &&                    // 进行中
-					   order.contractStatus === 2 &&           // 合同已确认
-					   order.effectDrawingStatus === '2' &&    // 效果图已完成
-					   order.constructionDrawingStatus === '2'; // 施工设计图已完成
+			// 跳转到施工阶段页面（监理订单）
+			goToConstructionStage(orderId) {
+				console.log('🏗️ 跳转到施工阶段页面，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+				uni.navigateTo({
+					url: `/pages/order-hall/order-have?orderId=${orderId}&userId=${this.userInfo.userId}`
+				});
 			},
 
-			// 设计师专属状态文本
-			getDesignerStatusText(order) {
-				if (this.isWaitingPayment(order)) {
-					return '待付款';
+			// 检查订单是否有评价
+			async checkOrderReviewStatus(orderId) {
+				try {
+					console.log('🔍 检查订单评价状态，订单ID:', orderId);
+					const result = await orderReviewApi.getList({ orderId: orderId });
+					console.log('📋 评价查询结果:', result);
+					
+					if (result && result.code === 200) {
+						let reviewList = [];
+						
+						// 解析评价列表
+						if (Array.isArray(result.data)) {
+							reviewList = result.data;
+						} else if (result.data && Array.isArray(result.data.records)) {
+							reviewList = result.data.records;
+						} else if (result.data && Array.isArray(result.data.list)) {
+							reviewList = result.data.list;
+						}
+						
+						console.log('📝 订单评价列表:', reviewList);
+						// 如果有评价记录，返回true，否则返回false
+						return reviewList.length > 0;
+					}
+					
+					return false;
+				} catch (error) {
+					console.error('❌ 检查评价状态失败:', error);
+					return false;
 				}
-				return this.getStatusText(order.status);
 			},
 
-			// 设计师专属状态样式
-			getStatusClass(order) {
-				if (this.isWaitingPayment(order)) {
-					return 'status-waiting-payment';
-				}
-				const classMap = {
-					0: 'status-pending',
-					1: 'status-progress',
-					2: 'status-completed',
-					3: 'status-canceled'
-				}
-				return classMap[order.status] || '';
+			// 用户跳转到评价页面
+			goToReview(orderId) {
+				console.log('📝 跳转到评价页面，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+				uni.navigateTo({
+					url: `/pages/review/review?orderId=${orderId}&userId=${this.userInfo.userId}`
+				});
 			},
 
-			// 查看订单详情
+			// 查看订单详情（根据类型跳转不同页面）
 			viewOrderDetail(orderId) {
 				const order = this.orderList.find(item => item.orderId === orderId);
 				if (!order) {
@@ -326,12 +362,30 @@
 					return;
 				}
 				
-				console.log('📋 查看订单详情，订单ID:', orderId, '订单状态:', order.status);
+				console.log('📋 查看订单详情，订单ID:', orderId, '订单类型:', order.type, '订单状态:', order.status);
 				
-				// 设计师查看订单详情
-				uni.navigateTo({
-					url: `/pages/order-hall/order-detail?id=${orderId}`
-				});
+				// 根据订单类型和状态跳转到不同的详情页面
+				if (order.status === 2) { // 状态2：已完成
+					console.log('✅ 跳转到已完成订单详情页面');
+					uni.navigateTo({
+						url: `/pages/finishedorder-detail/finishedorder-detail?orderId=${orderId}&userId=${this.userInfo.userId}&orderType=${order.type}`
+					});
+				} else {
+					// 根据订单类型跳转到不同的详情页面
+					if (String(order.type) === '1') {
+						// 设计师订单跳转到设计订单详情
+						console.log('🎨 跳转到设计师订单详情页面');
+						uni.navigateTo({
+							url: `/pages/order-hall/order-detail?id=${orderId}&type=design`
+						});
+					} else if (String(order.type) === '2') {
+						// 监理订单跳转到监理订单详情
+						console.log('🏗️ 跳转到监理订单详情页面');
+						uni.navigateTo({
+							url: `/pages/supervisor/supervisor-order-detail?id=${orderId}&type=supervisor`
+						});
+					}
+				}
 			},
 
 			// 统一的错误处理方法
@@ -359,19 +413,19 @@
 			// 加载用户信息
 			async loadUserInfo() {
 				try {
-					console.log('👤 开始获取设计师信息...')
+					console.log('👤 开始获取用户信息...')
 					const res = await getUserProfile();
 					if (res.code === 200) {
 						this.userInfo = res.data;
-						console.log('👤 设计师信息加载完成:', this.userInfo);
+						console.log('👤 用户信息加载完成:', this.userInfo);
 						this.loadOrderList();
 					} else {
-						console.error('获取设计师信息失败:', res.msg)
-						this.handleApiError(res.msg, '获取设计师信息失败');
+						console.error('获取用户信息失败:', res.msg)
+						this.handleApiError(res.msg, '获取用户信息失败');
 					}
 				} catch (error) {
-					console.error('❌ 获取设计师信息失败:', error);
-					this.handleApiError(error, '获取设计师信息失败');
+					console.error('❌ 获取用户信息失败:', error);
+					this.handleApiError(error, '获取用户信息失败');
 				}
 			},
 			
@@ -387,14 +441,14 @@
 						pageSize: this.pagination.pageSize
 					}
 					
-					if (this.activeStatus !== '' && this.activeStatus !== '4') {
+					if (this.activeStatus !== '') {
 						queryParams.status = this.activeStatus
 					}
 					
-					console.log('📋 加载设计师订单列表 - 设计师ID:', this.userInfo.userId, '查询参数:', queryParams)
+					console.log('📋 加载用户订单列表 - 用户ID:', this.userInfo.userId, '查询参数:', queryParams)
 					
 					const result = await orderService.getOrderListByUserId(this.userInfo.userId, queryParams)
-					console.log('✅ 设计师订单列表响应:', result)
+					console.log('✅ 用户订单列表响应:', result)
 					
 					let list = []
 					let total = 0
@@ -417,7 +471,7 @@
 					const ordersWithDetails = []
 					for (const order of list) {
 						let projectInfo = {}
-						let publisherInfo = {}
+						let contractorInfo = {}
 						
 						if (order.projectId) {
 							try {
@@ -427,33 +481,51 @@
 							}
 						}
 						
-						if (order.userId) {
+						if (order.contractorId) {
 							try {
-								publisherInfo = await this.getPublisherInfo(order.userId) || {}
+								contractorInfo = await this.getDesignerInfo(order.contractorId) || {}
 							} catch (error) {
-								console.error(`获取订单 ${order.orderId} 的发布人信息失败:`, error)
+								console.error(`获取订单 ${order.orderId} 的设计师信息失败:`, error)
+							}
+						}
+						
+						// 检查订单是否有评价（只在已完成状态时检查）
+						let hasReview = false
+						if (order.status === 2) {
+							try {
+								hasReview = await this.checkOrderReviewStatus(order.orderId)
+								console.log(`📝 订单 ${order.orderId} 评价状态:`, hasReview ? '已评价' : '未评价')
+							} catch (error) {
+								console.error(`检查订单 ${order.orderId} 评价状态失败:`, error)
+								hasReview = false
 							}
 						}
 						
 						let orderWithDetails = {
 							...order,
 							projectInfo,
-							publisherInfo,
-							loadingEffect: false,
-							loadingConstruction: false,
-							effectButtonText: '检查中...',
-							showConstructionButton: false,
+							contractorInfo,
+							hasReview,
 							effectDrawingStatus: null,
 							constructionDrawingStatus: null
 						}
 						
-						if (order.contractStatus === 2) {
-							await this.checkAndSetDesignSchemeButtons(orderWithDetails);
+						// 只有设计师订单才需要检查设计方案状态
+						if (String(order.type) === '1' && order.contractStatus === 2) {
+							orderWithDetails.effectDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
+							orderWithDetails.constructionDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
+							
+							console.log(`🎨 设计师订单 ${order.orderId} 方案状态:`, {
+								效果图: orderWithDetails.effectDrawingStatus,
+								施工设计图: orderWithDetails.constructionDrawingStatus,
+								合同状态: order.contractStatus,
+								订单状态: order.status
+							});
 						}
 						
 						ordersWithDetails.push(orderWithDetails)
 					}
-					console.log('✅ 设计师订单数据整合完成:', ordersWithDetails)
+					console.log('✅ 用户订单数据整合完成:', ordersWithDetails)
 					
 					if (this.pagination.pageNum === 1) {
 						this.orderList = ordersWithDetails
@@ -472,128 +544,6 @@
 				} finally {
 					this.loading = false
 					this.refreshing = false
-				}
-			},
-			
-			// 检查并设置设计方案按钮状态
-			async checkAndSetDesignSchemeButtons(order) {
-				try {
-					console.log(`🔍 检查订单 ${order.orderId} 的设计方案状态`);
-					
-					const effectDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
-					const constructionDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
-					
-					console.log(`📊 订单 ${order.orderId} 方案状态:`, {
-						效果图状态: effectDrawingStatus,
-						施工设计图状态: constructionDrawingStatus
-					});
-					
-					if (!effectDrawingStatus) {
-						order.effectButtonText = '上传效果图';
-						order.showConstructionButton = false;
-					} else if (effectDrawingStatus === "1") {
-						order.effectButtonText = '效果图待确认';
-						order.showConstructionButton = false;
-					} else if (effectDrawingStatus === "2") {
-						if (!constructionDrawingStatus) {
-							order.effectButtonText = '效果图已完成';
-							order.showConstructionButton = true;
-						} else if (constructionDrawingStatus === "1") {
-							order.effectButtonText = '效果图已完成';
-							order.showConstructionButton = false;
-						} else if (constructionDrawingStatus === "2") {
-							order.effectButtonText = '设计方案已完成';
-							order.showConstructionButton = false;
-						}
-					}
-					
-					console.log(`✅ 订单 ${order.orderId} 按钮设置:`, {
-						effectButtonText: order.effectButtonText,
-						showConstructionButton: order.showConstructionButton
-					});
-					
-				} catch (error) {
-					console.error(`❌ 检查设计方案按钮状态失败:`, error);
-					order.effectButtonText = '上传效果图';
-					order.showConstructionButton = false;
-				}
-			},
-			
-			// 上传效果图
-			async uploadEffectDrawing(order) {
-				try {
-					console.log('🎨 开始上传效果图，订单ID:', order.orderId);
-					
-					order.loadingEffect = true;
-					
-					const effectDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
-					
-					if (effectDrawingStatus) {
-						uni.showToast({
-							title: '效果图已存在',
-							icon: 'none'
-						});
-						order.loadingEffect = false;
-						return;
-					}
-					
-					uni.showModal({
-						title: '上传效果图',
-						content: '确定要上传效果图设计方案吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								await this.createDesignScheme(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
-							}
-							order.loadingEffect = false;
-						},
-						fail: () => {
-							order.loadingEffect = false;
-						}
-					});
-					
-				} catch (error) {
-					order.loadingEffect = false;
-					console.error('❌ 上传效果图失败:', error);
-					this.handleApiError(error, '上传效果图失败');
-				}
-			},
-			
-			// 上传施工设计图
-			async uploadConstructionDrawing(order) {
-				try {
-					console.log('🏗️ 开始上传施工设计图，订单ID:', order.orderId);
-					
-					order.loadingConstruction = true;
-					
-					const constructionDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
-					
-					if (constructionDrawingStatus) {
-						uni.showToast({
-							title: '施工设计图已存在',
-							icon: 'none'
-						});
-						order.loadingConstruction = false;
-						return;
-					}
-					
-					uni.showModal({
-						title: '上传施工设计图',
-						content: '确定要上传施工设计图吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								await this.createDesignScheme(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
-							}
-							order.loadingConstruction = false;
-						},
-						fail: () => {
-							order.loadingConstruction = false;
-						}
-					});
-					
-				} catch (error) {
-					order.loadingConstruction = false;
-					console.error('❌ 上传施工设计图失败:', error);
-					this.handleApiError(error, '上传施工设计图失败');
 				}
 			},
 			
@@ -660,44 +610,125 @@
 					return null;
 				}
 			},
-			
-			// 创建设计方案
-			async createDesignScheme(orderId, schemeType) {
+
+			// 用户确认效果图
+			async confirmEffectDrawing(orderId) {
 				try {
-					console.log('🆕 创建设计方案:', { orderId, schemeType });
+					console.log('✅ 用户确认效果图，订单ID:', orderId);
 					
-					uni.showLoading({ title: '创建方案中...' });
-					
-					const nullSchemeResult = await saveNullScheme();
-					
-					if (nullSchemeResult.code === 200) {
-						const schemeId = nullSchemeResult.data;
-						
-						uni.hideLoading();
-						
-						console.log('✅ 空白方案创建成功，方案ID:', schemeId);
-						
-						this.navigateToUploadPage(orderId, schemeId, schemeType);
-						
-					} else {
-						throw new Error(nullSchemeResult.msg || '创建空白方案失败');
+					const order = this.orderList.find(item => item.orderId === orderId);
+					if (!order) {
+						throw new Error('未找到对应的订单信息');
 					}
 					
+					let designerName = '';
+					if (order.contractorInfo && order.contractorInfo.name) {
+						designerName = order.contractorInfo.name;
+					} else if (order.contractorId) {
+						const designerInfo = await this.getDesignerInfo(order.contractorId);
+						designerName = designerInfo.name || '未知设计师';
+					}
+					
+					console.log('📤 跳转参数:', {
+						orderId: orderId,
+						schemeType: SCHEME_TYPE.EFFECT_DRAWING,
+						designerName: designerName
+					});
+					
+					uni.navigateTo({
+						url: `/pages/design/xgt?orderId=${orderId}&schemeType=${SCHEME_TYPE.EFFECT_DRAWING}&designerName=${encodeURIComponent(designerName)}`
+					});
+					
 				} catch (error) {
-					uni.hideLoading();
-					console.error('❌ 创建设计方案失败:', error);
-					this.handleApiError(error, '创建设计方案失败');
+					console.error('❌ 跳转效果图确认页面失败:', error);
+					this.handleApiError(error, '跳转失败');
 				}
 			},
-			
-			// 跳转到上传页面
-			navigateToUploadPage(orderId, schemeId, schemeType) {
-				const schemeTypeText = schemeType === SCHEME_TYPE.EFFECT_DRAWING ? 'effect' : 'construction';
-				const pageTitle = schemeType === SCHEME_TYPE.EFFECT_DRAWING ? '效果图上传' : '施工设计图上传';
-				
-				uni.navigateTo({
-					url: `/pages/design/upload?orderId=${orderId}&schemeId=${schemeId}&schemeType=${schemeTypeText}&title=${pageTitle}`
-				});
+
+			// 用户确认施工设计图
+			async confirmConstructionDrawing(orderId) {
+				try {
+					console.log('✅ 用户确认施工设计图，订单ID:', orderId);
+					
+					const order = this.orderList.find(item => item.orderId === orderId);
+					if (!order) {
+						throw new Error('未找到对应的订单信息');
+					}
+					
+					let designerName = '';
+					if (order.contractorInfo && order.contractorInfo.name) {
+						designerName = order.contractorInfo.name;
+					} else if (order.contractorId) {
+						const designerInfo = await this.getDesignerInfo(order.contractorId);
+						designerName = designerInfo.name || '未知设计师';
+					}
+					
+					console.log('📤 跳转施工设计图确认参数:', {
+						orderId: orderId,
+						schemeType: SCHEME_TYPE.CONSTRUCTION_DRAWING,
+						designerName: designerName
+					});
+					
+					uni.navigateTo({
+						url: `/pages/design/xgt?orderId=${orderId}&schemeType=${SCHEME_TYPE.CONSTRUCTION_DRAWING}&designerName=${encodeURIComponent(designerName)}`
+					});
+					
+				} catch (error) {
+					console.error('❌ 跳转施工设计图确认页面失败:', error);
+					this.handleApiError(error, '跳转失败');
+				}
+			},
+
+			// 立即付款
+			async payOrder(orderId) {
+				try {
+					console.log('💰 立即付款，订单ID:', orderId);
+					
+					uni.showModal({
+						title: '确认付款',
+						content: '确定要支付这个订单吗？付款后订单将标记为已完成。',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '付款中...' });
+								
+								try {
+									console.log('📤 调用 completeOrder API，订单ID:', orderId);
+									
+									const result = await orderService.completeOrder(orderId);
+									
+									console.log('📡 completeOrder API 响应:', result);
+									
+									uni.hideLoading();
+									
+									if (result === true || (result && result.code === 200)) {
+										uni.showToast({
+											title: '付款成功，订单已完成',
+											icon: 'success',
+											duration: 2000
+										});
+										
+										// 付款成功后跳转到评价页面
+										setTimeout(() => {
+											this.goToReview(orderId);
+										}, 1500);
+										
+									} else {
+										console.error('❌ completeOrder 返回错误:', result);
+										throw new Error(result?.msg || '付款失败');
+									}
+								} catch (error) {
+									uni.hideLoading();
+									console.error('❌ 付款失败:', error);
+									this.handleApiError(error, '付款失败');
+								}
+							}
+						}
+					});
+					
+				} catch (error) {
+					console.error('❌ 付款操作失败:', error);
+					this.handleApiError(error, '付款操作失败');
+				}
 			},
 
 			// 查看合同
@@ -730,256 +761,167 @@
 				}
 			},
 
-			// 设计师上传/修改合同图片
-			async uploadContract(orderId, isModify = false) {
+			// 拒绝合同
+			async rejectContract(orderId) {
 				try {
-					console.log(`📄 开始${isModify ? '修改' : '上传'}合同图片，订单ID:`, orderId);
-					
-					const imageRes = await this.chooseContractImage();
-					if (!imageRes.tempFilePaths || imageRes.tempFilePaths.length === 0) {
-						console.log('❌ 用户取消选择图片');
-						return;
-					}
-
-					const imagePath = imageRes.tempFilePaths[0];
-					const imageFile = imageRes.tempFiles[0];
-
-					console.log('🖼️ 选择的图片信息:', {
-						path: imagePath,
-						size: imageFile.size,
-						type: imageFile.type,
-						name: imageFile.name
-					});
-
-					const maxSize = 10 * 1024 * 1024;
-					if (imageFile.size > maxSize) {
-						uni.showToast({
-							title: '图片大小不能超过10MB',
-							icon: 'none'
-						});
-						return;
-					}
-
-					uni.showLoading({ 
-						title: `${isModify ? '修改' : '上传'}合同中...`,
-						mask: true
-					});
-
-					// 1. 上传合同图片到媒体服务
-					const uploadResult = await this.uploadContractImageDirect(orderId, imagePath);
-					
-					if (uploadResult && uploadResult.code === 200) {
-						console.log(`✅ 合同图片${isModify ? '修改' : '上传'}成功:`, uploadResult);
-						
-						// 2. 获取上传成功的图片URL
-						const contractUrl = uploadResult.data?.url || uploadResult.data?.fileUrl;
-						console.log('📸 合同图片URL:', contractUrl);
-						
-						if (contractUrl) {
-							// 3. 使用专用接口同时更新合同URL和状态
-							uni.showLoading({ title: '更新合同信息...' });
-							
-							try {
-								// 合同状态设为1（待确认）
-								const updateResult = await orderService.updateContractUrlAndContractStatus(
-									orderId, 
-									contractUrl, 
-									1  // contractStatus = 1 (合同待确认)
-								);
+					uni.showModal({
+						title: '拒绝合同',
+						content: '确定要拒绝这份合同吗？',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '处理中...' });
 								
-								console.log('✅ 合同URL和状态更新成功:', updateResult);
-								
-								uni.hideLoading();
-								
-								uni.showToast({
-									title: `合同${isModify ? '修改' : '上传'}成功`,
-									icon: 'success',
-									duration: 2000
-								});
-								
-								// 刷新列表
-								this.pagination.pageNum = 1;
-								this.loadOrderList();
-								
-							} catch (updateError) {
-								uni.hideLoading();
-								console.error('❌ 更新合同URL和状态失败:', updateError);
-								this.handleApiError(updateError, '更新合同信息失败');
+								try {
+									const result = await this.updateContractStatus(orderId, 0);
+									
+									uni.hideLoading();
+									
+									if (result && (result.code === 200 || result.success)) {
+										uni.showToast({
+											title: '合同已拒绝',
+											icon: 'success'
+										});
+										
+										this.pagination.pageNum = 1;
+										this.loadOrderList();
+									} else {
+										throw new Error(result?.msg || '拒绝合同失败');
+									}
+								} catch (error) {
+									uni.hideLoading();
+									console.error('❌ 拒绝合同失败:', error);
+									this.handleApiError(error, '拒绝合同失败');
+								}
 							}
-						} else {
-							throw new Error('未获取到合同图片URL');
 						}
-						
-					} else {
-						throw new Error(uploadResult?.msg || `${isModify ? '修改' : '上传'}失败`);
-					}
-					
+					});
 				} catch (error) {
 					uni.hideLoading();
-					console.error(`❌ 合同${isModify ? '修改' : '上传'}失败:`, error);
-					this.handleApiError(error, `${isModify ? '修改' : '上传'}失败`);
+					console.error('❌ 拒绝合同失败:', error);
+					this.handleApiError(error, '拒绝合同失败');
 				}
 			},
 
-			// 选择合同图片
-			chooseContractImage() {
-				return new Promise((resolve, reject) => {
-					uni.chooseImage({
-						count: 1,
-						sizeType: ['compressed', 'original'],
-						sourceType: ['album', 'camera'],
-						success: (res) => {
-							console.log('🖼️ 选择的合同图片:', res);
-							resolve(res);
-						},
-						fail: (error) => {
-							console.error('❌ 选择图片失败:', error);
-							reject(new Error('选择图片失败: ' + error.errMsg));
-						}
-					});
-				});
-			},
-
-			// 修复后的上传方法
-			async uploadContractImageDirect(orderId, filePath) {
-				return new Promise((resolve, reject) => {
-					const token = uni.getStorageSync('token');
-					if (!token) {
-						reject(new Error('用户未登录'));
-						return;
-					}
-
-					const formData = {
-						relatedType: 9,
-						relatedId: orderId,
-						description: '订单合同图片',
-						stage: 'CONTRACT',
-						sequence: 0
-					};
-
-					console.log('📤 上传合同图片到8081端口:', { 
-						orderId, 
-						filePath, 
-						formData,
-						baseURL: 'http://localhost:8081'
-					});
-
-					const uploadTask = uni.uploadFile({
-						url: 'http://localhost:8081/api/media/upload',
-						filePath: filePath,
-						name: 'file',
-						formData: formData,
-						header: {
-							'Authorization': 'Bearer ' + token,
-						},
-						success: (res) => {
-							console.log('📡 上传响应状态码:', res.statusCode);
-							console.log('📡 上传响应数据:', res.data);
-							
-							if (res.statusCode === 200) {
-								try {
-									const data = JSON.parse(res.data);
-									console.log('📡 解析后的响应:', data);
-									if (data.code === 200) {
-										resolve(data);
-									} else {
-										reject(new Error(data.msg || '上传失败'));
-									}
-								} catch (e) {
-									console.error('❌ JSON解析错误:', e, '原始响应:', res.data);
-									reject(new Error('服务器响应格式错误'));
-								}
-							} else {
-								reject(new Error(`上传失败，状态码: ${res.statusCode}`));
-							}
-						},
-						fail: (error) => {
-							console.error('❌ 上传请求失败:', error);
-							reject(new Error('网络请求失败: ' + error.errMsg));
-						}
-					});
-
-					uploadTask.onProgressUpdate((res) => {
-						console.log('📊 上传进度:', res.progress + '%');
-						if (res.progress < 100) {
-							uni.showLoading({
-								title: `上传中 ${res.progress}%`,
-								mask: true
-							});
-						} else {
-							uni.hideLoading();
-						}
-					});
-				});
-			},
-
-			// 测试上传功能
-			async testUploadFunctionality() {
+			// 用户确认合同
+			async confirmContract(orderId) {
 				try {
-					console.log('🧪 测试上传功能...');
-					
-					const imageRes = await this.chooseContractImage();
-					if (!imageRes.tempFilePaths || imageRes.tempFilePaths.length === 0) {
-						console.log('❌ 测试：用户取消选择图片');
-						return;
-					}
-					
-					const testImagePath = imageRes.tempFilePaths[0];
-					console.log('🖼️ 测试图片路径:', testImagePath);
-					
-					let testOrderId = 1;
-					if (this.orderList.length > 0) {
-						testOrderId = this.orderList[0].orderId;
-					}
-					
-					console.log('🚀 开始测试上传，订单ID:', testOrderId);
-					uni.showLoading({ title: '测试上传中...' });
-					
-					const result = await this.uploadContractImageDirect(testOrderId, testImagePath);
-					console.log('✅ 测试上传成功:', result);
-					
-					uni.hideLoading();
-					uni.showToast({
-						title: '上传测试成功',
-						icon: 'success'
+					uni.showModal({
+						title: '确认合同',
+						content: '确定要确认这份合同吗？',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '确认中...' });
+								
+								try {
+									const result = await this.updateContractStatus(orderId, 2);
+									
+									uni.hideLoading();
+									
+									if (result && (result.code === 200 || result.success)) {
+										uni.showToast({
+											title: '合同已确认',
+											icon: 'success'
+										});
+										
+										this.pagination.pageNum = 1;
+										this.loadOrderList();
+									} else {
+										throw new Error(result?.msg || '确认合同失败');
+									}
+								} catch (error) {
+									uni.hideLoading();
+									console.error('❌ 确认合同失败:', error);
+									this.handleApiError(error, '确认合同失败');
+								}
+							}
+						}
 					});
-					
 				} catch (error) {
 					uni.hideLoading();
-					console.error('❌ 测试上传失败:', error);
-					this.handleApiError(error, '测试上传失败');
+					console.error('❌ 确认合同失败:', error);
+					this.handleApiError(error, '确认合同失败');
+				}
+			},
+
+			// 统一的合同状态更新方法
+			async updateContractStatus(orderId, contractStatus) {
+				try {
+					console.log('🔄 更新合同状态:', {
+						orderId: orderId,
+						contractStatus: contractStatus
+					});
+					
+					console.log('📤 发送合同状态更新请求 - 使用请求参数方式');
+					
+					const result = await new Promise((resolve, reject) => {
+						uni.request({
+							url: `http://localhost:8081/order/updateContractStatus?orderId=${orderId}&contractStatus=${contractStatus}`,
+							method: 'PUT',
+							header: {
+								'Content-Type': 'application/json',
+								'Authorization': 'Bearer ' + uni.getStorageSync('token')
+							},
+							success: (res) => {
+								console.log('📡 合同状态更新响应:', res);
+								
+								if (res.statusCode === 200) {
+									if (res.data && (res.data.code === 200 || res.data.success)) {
+										resolve(res.data);
+									} else {
+										resolve({
+											code: 200,
+											data: res.data,
+											msg: '操作成功'
+										});
+									}
+								} else {
+									reject(new Error(`请求失败，状态码: ${res.statusCode}`));
+								}
+							},
+							fail: (error) => {
+								console.error('❌ 合同状态更新请求失败:', error);
+								reject(error);
+							}
+						});
+					});
+					
+					return result;
+					
+				} catch (error) {
+					console.error('❌ 合同状态更新失败:', error);
+					throw error;
 				}
 			},
 			
-			// 根据用户ID获取发布人信息
-			async getPublisherInfo(userId) {
-				if (!userId) {
+			// 根据设计师ID获取设计师信息
+			async getDesignerInfo(contractorId) {
+				if (!contractorId) {
 					return null
 				}
 				
 				try {
-					console.log('👤 获取发布人信息，用户ID:', userId)
-					const publisherInfo = await getUserProfile(userId)
-					console.log('✅ 发布人信息获取成功:', publisherInfo)
+					console.log('👨‍🎨 获取设计师信息，设计师ID:', contractorId)
+					const designerInfo = await getUserProfile(contractorId)
+					console.log('✅ 设计师信息获取成功:', designerInfo)
 					
-					let publisherData = publisherInfo
-					if (publisherInfo && publisherInfo.data) {
-						publisherData = publisherInfo.data
+					let designerData = designerInfo
+					if (designerInfo && designerInfo.data) {
+						designerData = designerInfo.data
 					}
 					
 					return {
-						name: publisherData.name || publisherData.nickname || '未知用户',
-						phone: publisherData.phone || publisherData.mobile || '暂无联系方式',
-						avatar: publisherData.avatar || '/static/images/default-avatar.png',
-						role: '客户'
+						name: designerData.name || designerData.nickname || '未知设计师',
+						phone: designerData.phone || designerData.mobile || '暂无联系方式',
+						avatar: designerData.avatar || '/static/images/default-avatar.png',
+						role: designerData.role || '设计师'
 					}
 				} catch (error) {
-					console.error('❌ 获取发布人信息失败:', error)
+					console.error('❌ 获取设计师信息失败:', error)
 					return {
-						name: '客户',
+						name: '设计师',
 						phone: '暂无联系方式',
 						avatar: '/static/images/default-avatar.png',
-						role: '客户'
+						role: '设计师'
 					}
 				}
 			},
@@ -998,9 +940,33 @@
 				return orderService.getOrderStatusText(status)
 			},
 			
+			// 获取状态样式
+			getStatusClass(status) {
+				const classMap = {
+					0: 'status-pending',
+					1: 'status-progress',
+					2: 'status-completed',
+					3: 'status-canceled'
+				}
+				return classMap[status] || '';
+			},
+			
 			// 获取订单类型文本
 			getOrderTypeText(type) {
-				return orderService.getOrderTypeText(type)
+				const typeMap = {
+					'1': '设计师订单',
+					'2': '监理订单'
+				}
+				return typeMap[String(type)] || '未知类型';
+			},
+			
+			// 获取订单类型样式
+			getOrderTypeClass(type) {
+				const classMap = {
+					'1': 'type-design',
+					'2': 'type-supervisor'
+				}
+				return classMap[String(type)] || '';
 			},
 			
 			// 格式化时间
@@ -1042,21 +1008,16 @@
 			
 			// 更新状态统计
 			updateStatusCount() {
-				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 }
+				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0 }
 				
 				this.orderList.forEach(order => {
 					const status = order.status.toString()
 					if (this.statusCount[status] !== undefined) {
 						this.statusCount[status]++
 					}
-					
-					// 统计待付款订单数量
-					if (this.isWaitingPayment(order)) {
-						this.statusCount['4']++
-					}
 				})
 				
-				console.log('📊 设计师订单状态统计:', this.statusCount)
+				console.log('📊 用户订单状态统计:', this.statusCount)
 			},
 			
 			// 加载更多
@@ -1075,18 +1036,44 @@
 				this.loadOrderList()
 			},
 			
-			// 联系客户
-			async contactCustomer(customerId) {
-				if (!customerId) {
+			// 联系设计师（跳转聊天页面）
+			contactDesigner(designerId) {
+				if (!designerId) {
 					uni.showToast({
-						title: '暂无客户信息',
+						title: '暂无设计师信息',
 						icon: 'none'
 					})
 					return
 				}
 				uni.navigateTo({
-					url: `/pages/chat/customer?id=${customerId}`
+					url: `/pages/chat/designer?id=${designerId}`
 				})
+			},
+			
+			// 确认订单
+			async confirmOrder(orderId) {
+				try {
+					uni.showModal({
+						title: '确认订单',
+						content: '确定要确认这个订单吗？',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '确认中...' })
+								await orderService.confirmOrder(orderId)
+								uni.hideLoading()
+								uni.showToast({
+									title: '订单已确认',
+									icon: 'success'
+								})
+								this.pagination.pageNum = 1
+								this.loadOrderList()
+							}
+						}
+					})
+				} catch (error) {
+					uni.hideLoading()
+					this.handleApiError(error, '确认订单失败')
+				}
 			},
 			
 			// 取消订单
@@ -1135,7 +1122,18 @@
 </script>
 
 <style scoped>
-	/* 返回按钮样式 */
+	/* 调试信息样式 */
+	.debug-info {
+		background: #fff3cd;
+		padding: 20rpx;
+		margin: 20rpx;
+		border-radius: 10rpx;
+		border: 1px solid #ffeaa7;
+		font-size: 24rpx;
+		color: #856404;
+	}
+	
+	/* 其他样式保持不变 */
 	.back-btn {
 		display: flex;
 		align-items: center;
@@ -1170,14 +1168,7 @@
 		color: #333;
 		flex: 1;
 		text-align: center;
-		margin-right: 120rpx; /* 为右侧按钮留出空间 */
-	}
-	
-	/* 其他样式保持不变 */
-	.status-waiting-payment {
-		color: #ff6b35;
-		background-color: #fff0e6;
-		border: 1px solid #ff6b35;
+		margin-right: 120rpx;
 	}
 	
 	.container {
@@ -1303,7 +1294,7 @@
 	.order-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
+		align-items: flex-start;
 		margin-bottom: 20rpx;
 		padding-bottom: 20rpx;
 		border-bottom: 1rpx solid #f0f0f0;
@@ -1323,6 +1314,29 @@
 	.order-time {
 		font-size: 24rpx;
 		color: #999;
+		display: block;
+		margin-bottom: 10rpx;
+	}
+	
+	/* 订单类型标签样式 */
+	.order-type-tag {
+		display: inline-block;
+		padding: 6rpx 12rpx;
+		font-size: 22rpx;
+		border-radius: 12rpx;
+		font-weight: normal;
+	}
+	
+	.type-design {
+		background: #E6F7FF;
+		color: #1890FF;
+		border: 1rpx solid #91D5FF;
+	}
+	
+	.type-supervisor {
+		background: #F6FFED;
+		color: #52C41A;
+		border: 1rpx solid #B7EB8F;
 	}
 	
 	.order-status {

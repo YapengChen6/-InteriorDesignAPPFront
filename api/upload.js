@@ -708,7 +708,7 @@ export default {
   getUploadTestLogs,
   clearTestLogs,
   addTestLog,
-  
+  getImagesPreview,
   // 常量和工具函数
   RELATED_TYPES,
   MEDIA_TYPES,

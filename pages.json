@@ -18,7 +18,7 @@
   }, {
     "path": "pages/work/index",
     "style": {
-      "navigationBarTitleText": "订单页面"
+      "navigationBarTitleText": "设计师订单页面"
     }
   }, {
     "path": "pages/mine/index4",
@@ -309,7 +309,42 @@
   	"path" : "pages/review/review",
   	"style" : 
   	{
-  		"navigationBarTitleText" : ""
+  		"navigationBarTitleText" : "订单评价"
+  	}
+  },
+  {
+  	"path" : "pages/work/jianli-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/order-choose",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "订单选择页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/material_supplier-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "商家订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/user-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "用户订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/order-have",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单施工阶段页面"
   	}
   }
   ],
@@ -336,7 +371,7 @@
         "text": "发布"
       },
       {
-        "pagePath": "pages/work/index",
+        "pagePath": "pages/work/order-choose",
         "iconPath": "/static/images/tabbar/design.png",
         "selectedIconPath": "/static/images/tabbar/design_.png",
         "text": "订单"
