@@ -33,7 +33,7 @@
           :class="{
             'selected': selectedRoleType === role.roleType, 
             'current': currentRoleType === role.roleType,
-            'disabled': !isRoleAvailable(role)
+            'disabled': !isRoleAvailable(role) && currentRoleType !== role.roleType
           }"
           @click="selectRole(role)"
         >
@@ -43,7 +43,13 @@
               <text class="role-title">{{ role.roleTypeName }}</text>
               <text class="role-subtitle">{{ getRoleDesc(role.roleType) }}</text>
               <!-- 显示认证状态 -->
-              <text class="role-status-text" :class="getStatusClass(role.certificationStatus)">
+              <text class="role-status-text" :class="{
+                'status-approved': role.certificationStatus === CERTIFICATION_STATUS.APPROVED,
+                'status-pending': role.certificationStatus === CERTIFICATION_STATUS.PENDING || role.certificationStatus === CERTIFICATION_STATUS.REVIEWING,
+                'status-rejected': role.certificationStatus === CERTIFICATION_STATUS.REJECTED,
+                'status-not-applied': role.certificationStatus === CERTIFICATION_STATUS.NOT_APPLIED,
+                'status-unknown': !role.certificationStatus
+              }">
                 {{ role.certificationStatusText }}
               </text>
             </view>
@@ -142,7 +148,8 @@ export default {
       defaultAvatar: 'https://design.gemcoder.com/staticResource/echoAiSystemImages/378da9ddd57051faab2f02fd247494da.png',
       scrollViewHeight: 400,
       showScrollHint: true,
-      hasScrolled: false
+      hasScrolled: false,
+      CERTIFICATION_STATUS: CERTIFICATION_STATUS // 将常量暴露到data中，方便模板使用
     }
   },
   computed: {
@@ -188,6 +195,12 @@ export default {
   },
   onResize() {
     this.calculateScrollHeight()
+  },
+  onUnload() {
+    // 清理事件监听，避免内存泄漏
+    uni.$off('roleChanged')
+    uni.$off('userInfoUpdated')
+    uni.$off('roleSwitchCompleted')
   },
   methods: {
     calculateScrollHeight() {
@@ -277,25 +290,6 @@ export default {
       }
       // 其他角色：认证状态为 "2"（已通过）即可用
       return role.certificationStatus === CERTIFICATION_STATUS.APPROVED
-    },
-
-    // 更新认证状态样式类
-    getStatusClass(status) {
-      if (!status) return 'status-unknown'
-      
-      switch (status) {
-        case CERTIFICATION_STATUS.APPROVED:
-          return 'status-approved'
-        case CERTIFICATION_STATUS.PENDING:
-        case CERTIFICATION_STATUS.REVIEWING:
-          return 'status-pending'
-        case CERTIFICATION_STATUS.REJECTED:
-          return 'status-rejected'
-        case CERTIFICATION_STATUS.NOT_APPLIED:
-          return 'status-not-applied'
-        default:
-          return 'status-unknown'
-      }
     },
 
     getStoredRole() {
@@ -606,12 +600,12 @@ export default {
       }
     },
 
-    // 改进错误处理，提供更详细的错误信息
     async handleConfirm() {
-      console.log('确认切换:', {
+      console.log('确认切换角色详情:', {
         当前角色: this.currentRoleType,
         选中角色: this.selectedRoleType,
-        用户信息角色: this.userInfo.currentRoleType
+        是否可用: this.isSelectedRoleAvailable,
+        用户信息: this.userInfo.currentRoleType
       })
 
       if (this.selectedRoleType === this.currentRoleType) {

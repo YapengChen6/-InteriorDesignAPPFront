@@ -52,14 +52,14 @@
 		<view class="order-list">
 			<view 
 				class="order-item" 
-				:class="{ 'disabled-item': isViewOnly }"
+				:class="{'disabled-item': isViewOnly}"
 				v-for="project in filteredProjectList" 
 				:key="project.projectId" 
 				@click="handleItemClick(project)"
 			>
 				<view class="order-header">
 					<text class="order-title">{{ project.title || '未命名项目' }}</text>
-					<view class="order-status" :class="getStatusClass(project.status)">
+					<view class="order-status" :class="statusClassMap[project.status]">
 						{{ getStatusText(project.status) }}
 					</view>
 				</view>
@@ -107,7 +107,7 @@
 					<view class="detail-btn-container">
 						<button 
 							class="detail-btn" 
-							:class="{ 'disabled-btn': isViewOnly }"
+							:class="{'disabled-btn': isViewOnly}"
 							@click.stop="viewProjectDetail(project.projectId)"
 						>
 							详情
@@ -128,7 +128,7 @@
 					<view class="budget-option" 
 					      v-for="budget in budgetOptions" 
 					      :key="budget.value"
-					      :class="{ active: selectedBudget === budget.label }"
+					      :class="{'active': selectedBudget === budget.label}"
 					      @click="selectBudget(budget)">
 						<text class="budget-label">{{ budget.label }}</text>
 						<text class="budget-range">{{ budget.range }}</text>
@@ -204,6 +204,16 @@ export default {
       
       // 用户信息缓存
       userInfoCache: new Map(),
+      
+      // 状态类名映射
+      statusClassMap: {
+        '0': 'draft',
+        '1': 'bidding',
+        '2': 'designer-taken',
+        '3': 'supervisor-taken',
+        '4': 'completed',
+        '5': 'cancelled'
+      },
       
       // 预算选项
       budgetOptions: [
@@ -670,20 +680,6 @@ export default {
       });
     },
     
-    // 获取状态样式类
-    getStatusClass(status) {
-      const statusNum = parseInt(status)
-      const statusMap = {
-        0: 'draft',
-        1: 'bidding',
-        2: 'designer-taken',
-        3: 'supervisor-taken',
-        4: 'completed',
-        5: 'cancelled'
-      }
-      return statusMap[statusNum] || 'draft'
-    },
-    
     // 获取状态文本
     getStatusText(status) {
       const statusNum = parseInt(status)
@@ -762,6 +758,7 @@ export default {
   }
 }
 </script>
+
 <style>
 	.order-hall-container {
 		min-height: 100vh;

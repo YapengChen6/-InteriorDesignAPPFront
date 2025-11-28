@@ -218,7 +218,7 @@ export const orderService = {
       const orderDTO = {
         projectId: orderData.projectId,
         userId: orderData.userId,
-        type: OrderType.DESIGN,
+        type: orderData.type || OrderType.DESIGN,  // ✅ 修改：使用传入的类型，默认设计订单
         expectedEndTime: orderData.expectedEndTime,
         totalAmount: orderData.totalAmount,
         remark: orderData.remark || '',
@@ -268,6 +268,41 @@ export const orderService = {
       return handleResponse(res, '创建监理订单')
     } catch (error) {
       console.error('❌ 创建监理订单异常:', error)
+      throw error
+    }
+  },
+
+  /**
+   * 统一创建订单方法（推荐使用）
+   * @param {Object} orderData 订单数据
+   * @returns {Promise}
+   */
+  async createOrder(orderData) {
+    try {
+      console.log('🎯 开始创建订单，输入数据:', orderData)
+      
+      const validation = this.validateOrderData(orderData)
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join('; '))
+      }
+      
+      // 直接使用传入的订单数据
+      const orderDTO = {
+        projectId: orderData.projectId,
+        userId: orderData.userId,
+        type: orderData.type,  // 使用传入的类型
+        expectedEndTime: orderData.expectedEndTime,
+        totalAmount: orderData.totalAmount,
+        remark: orderData.remark || '',
+        contractorId: orderData.contractorId
+      }
+      
+      console.log('✅ 构建的订单DTO:', JSON.stringify(orderDTO, null, 2))
+      
+      const res = await orderApi.save(orderDTO)
+      return handleResponse(res, '创建订单')
+    } catch (error) {
+      console.error('❌ 创建订单异常:', error)
       throw error
     }
   },
