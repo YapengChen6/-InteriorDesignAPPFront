@@ -1,49 +1,76 @@
 <template>
 	<view class="container">
-		<!-- 顶部搜索区域 -->
+		<!-- 顶部搜索区域 - 已修改 -->
 		<view class="search-section">
 			<view class="search-container">
-				<!-- 定位按钮 -->
-				<view class="location-btn" @click="goToLocationPage">
-					<text class="location-icon">📍</text>
-					<text class="location-text">{{ locationText }}</text>
-					<text class="location-arrow">▼</text>
-				</view>
 				<!-- 搜索框 -->
 				<view class="search-box">
-					<text class="search-icon">🔍</text>
 					<input type="text" placeholder="搜索装修相关内容" v-model="searchKeyword" @confirm="onSearch">
+					<view class="search-icon" @click="onSearch">
+						<!-- 搜索图标 SVG -->
+						<svg class="search-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+							<path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2"/>
+						</svg>
+					</view>
 					<text v-if="searchKeyword" class="clear-icon" @click="clearSearch">×</text>
 				</view>
 			</view>
 		</view>
 		
-		<!-- 主菜单 -->
+		<!-- 主菜单 - 图标已替换 -->
 		<view class="main-menu">
 			<view class="menu-item" :class="{ active: activeMainMenu === 0 }" @click="goToOrderHall()">
-				<view class="menu-icon">📋</view>
+				<view class="menu-icon">
+					<!-- 订单大厅 SVG 图标 -->
+					<svg class="icon-svg" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+						<path d="M897.024 1012.224H126.976c-28.16 0-51.2-23.04-51.2-51.2V190.976c0-28.16 23.04-51.2 51.2-51.2h102.4v76.8c0 15.36 10.24 25.6 25.6 25.6H768c15.36 0 25.6-10.24 25.6-25.6v-76.8h102.4c28.16 0 51.2 23.04 51.2 51.2v770.048c1.024 28.16-22.016 51.2-50.176 51.2zM742.912 345.088H281.088c-15.36 0-25.6 10.24-25.6 25.6s10.24 25.6 25.6 25.6h461.824c15.36 0 25.6-10.24 25.6-25.6s-10.24-25.6-25.6-25.6z m0 205.312H281.088c-15.36 0-25.6 10.24-25.6 25.6s10.24 25.6 25.6 25.6h461.824c15.36 0 25.6-10.24 25.6-25.6s-10.24-25.6-25.6-25.6z m0 205.312H281.088c-15.36 0-25.6 10.24-25.6 25.6s10.24 25.6 25.6 25.6h461.824c15.36 0 25.6-10.24 25.6-25.6s-10.24-25.6-25.6-25.6z m-25.6-564.736H306.688c-15.36 0-25.6-10.24-25.6-25.6s10.24-25.6 25.6-25.6h76.8c0-71.68 56.32-128.512 128.512-128.512s128.512 56.32 128.512 128.512h76.8c15.36 0 25.6 10.24 25.6 25.6s-10.24 25.6-25.6 25.6z m-205.312-128c-43.52 0-76.8 33.28-76.8 76.8h153.6c0-43.52-33.28-76.8-76.8-76.8z" fill="currentColor"></path>
+					</svg>
+				</view>
 				<text>订单大厅</text>
 			</view>
 			<view class="menu-item" 
 			      :class="{ active: activeMainMenu === 1 }" 
 			      @click="goToShopPage()">
-				<view class="menu-icon">🏠</view>
+				<view class="menu-icon">
+					<!-- 购买居家建材 SVG 图标 -->
+					<svg class="icon-svg" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+						<path d="M504.384 154.608l-348.8 235.808a8.192 8.192 0 0 0-3.584 6.784v214.08a28 28 0 0 1-56 0v-214.08c0-21.84 10.736-42.24 28.608-54.304L477.76 104.16a47.264 47.264 0 0 1 52.352-0.48l368.32 239.328A65.488 65.488 0 0 1 928 397.968v469.184C928 903.152 899.36 928 864 928H490.352a26.352 26.352 0 1 1 0-52.704H864c4.416 0 8-3.648 8-8.144V397.968a8.192 8.192 0 0 0-3.696-6.88L504.384 154.624z m53.216 101.44l259.168 171.872-0.688 301.888a64 64 0 0 1-64 63.856H455.024a48 48 0 0 1-36.8-17.184l-78.576-93.888a116.784 116.784 0 0 0-91.184-41.824l-23.088 0.32a32 32 0 0 1-32.448-31.984l-0.032-165.184 275.504-187.36a80 80 0 0 1 89.2-0.512z m113.008 377.6H667.2l33.952-141.84a16 16 0 0 0-13.824-19.632l-290.576-31.728-3.792-27.696c-1.008-7.2-6.816-12.512-13.328-12.592a14.032 14.032 0 0 0-2.272-0.16h-42.672c-8.048 0-14.688 5.808-14.688 12.96 0 7.104 6.592 12.96 14.688 12.96h33.456l32.448 220.928c1.04 7.52 7.296 12.992 14.192 12.592l255.856 0.032c8.096 0 14.688-5.808 14.688-12.864-0.032-7.152-6.672-12.96-14.72-12.96z m-168.32 71.744a30.56 30.56 0 0 0-30.496-30.608 30.56 30.56 0 0 0-30.512 30.608c0 16.912 13.632 30.608 30.512 30.608a30.56 30.56 0 0 0 30.496-30.608z m152.544 0a30.56 30.56 0 0 0-30.512-30.608 30.56 30.56 0 0 0-30.512 30.608c0 16.912 13.648 30.608 30.512 30.608a30.56 30.56 0 0 0 30.512-30.608z m-355.744 72.64l-51.84-54.816a26.352 26.352 0 0 1 0.112-36.32 23.84 23.84 0 0 1 34.544 0.112l97.344 102.912c3.568 3.776 4.96 8.832 4.16 13.6a16 16 0 0 1-4.08 14.048l-97.344 102.928a23.84 23.84 0 0 1-34.544 0.096 26.352 26.352 0 0 1-0.096-36.32l52.048-55.04H121.616a25.6 25.6 0 1 1 0-51.2h177.472z" fill="currentColor"></path>
+					</svg>
+				</view>
 				<text>购买居家建材</text>
 			</view>
 			<view class="menu-item" 
 			      :class="{ active: activeMainMenu === 2 }" 
 			      @click="goToFindDesigner()">
-				<view class="menu-icon">👨‍🎨</view>
+				<view class="menu-icon">
+					<!-- 找设计师 SVG 图标 -->
+					<svg class="icon-svg" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+						<path d="M935.936 854.016c-14.848-39.424-36.864-73.728-65.536-101.376-48.64-47.104-117.76-76.8-211.456-91.648l-13.312-2.048-7.168 13.312c-18.432 33.792-32.768 70.656-46.592 105.472-5.12 13.312-10.24 26.112-15.36 38.4 0-13.312 0-29.184-0.512-47.616v-57.856h-133.12l1.024 26.112c1.536 29.696 2.56 51.2 3.072 68.096-17.92-46.592-36.864-93.184-60.928-133.632l-7.168-12.288-12.288 2.048C272.896 675.84 204.8 705.536 156.16 752.64c-28.16 27.648-50.176 61.44-65.024 100.864-15.872 41.472-24.576 90.112-25.6 144.896l-0.512 25.088h894.464v-24.576c-0.512-54.272-8.192-103.424-23.552-144.896z" fill="currentColor"></path>
+						<path d="M240.128 386.048c4.096 33.792 23.552 63.488 51.2 78.848 18.944 53.76 46.08 101.888 76.8 136.704 40.96 46.592 90.112 71.168 141.824 71.168 3.072 0 6.656 0 9.728-0.512 55.296-3.072 104.448-30.208 145.92-79.36 35.328-42.496 58.88-94.208 72.704-133.12 20.992-9.728 36.352-28.672 41.984-54.272 7.68-32.768-2.048-69.632-23.552-93.696 3.072-51.2 22.528-82.432 26.112-136.704 3.584-53.76-14.336-113.152-88.064-146.432-44.032-19.968-143.36-29.696-195.072-28.16C449.024 1.536 348.16 18.944 307.2 45.568c-36.352 24.064-54.784 57.856-61.44 111.616-5.12 43.008 9.728 111.104 14.336 160.256-15.36 16.896-23.04 41.472-19.968 68.608z" fill="currentColor"></path>
+					</svg>
+				</view>
 				<text>找设计师</text>
 			</view>
 			<view class="menu-item" 
 			      :class="{ active: activeMainMenu === 3 }" 
 			      @click="goToFindSupervisor()">
-				<view class="menu-icon">👷</view>
+				<view class="menu-icon">
+					<!-- 找监工 SVG 图标 -->
+					<svg class="icon-svg" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+						<path d="M3.968992 3.968992l1016.062016 0 0 1016.062016-1016.062016 0 0-1016.062016Z" fill="#FFFFFF"></path>
+						<path d="M196.893767 690.922171l167.618481-43.341395 32.545736 25.115783 69.949519 187.622202 23.401178-108.337612-27.179659-21.30555 16.892031-50.676093 24.353736 0 22.639132 0 24.353736 0 16.860279 50.676093-27.147907 21.30555 24.321984 112.497116 63.56738-191.749953 32.228217-25.242791 173.873612 43.341395 8.763535 2.159132 5.556589 7.20769c5.778853 7.429953 11.049674 15.082171 15.875969 22.893147 34.038078 75.379101 56.740713 159.267721 33.75231 277.416682l-22.76614 0L150.218419 1000.503566 128.404837 1000.503566l-3.810233-21.559566c-11.748217-66.456806-11.906977-121.990946-1.905116-167.904248 10.47814-48.16769 32.069457-85.761984 63.218109-114.211721l4.667535-4.286512L196.893767 690.922171 196.893767 690.922171zM253.507473 371.211907l26.417612 0 8.382512 56.581953c9.716093 52.581209 31.62493 99.859845 61.821023 137.041364 42.801612 52.771721 102.272992 85.539721 168.063008 85.539721l0 0c65.790016 0 125.293147-32.768 168.09476-85.539721 29.402295-36.260713 50.898357-82.07876 61.027225-133.008868l10.509891-60.61445 17.622326 0 21.337302 0 34.89538 0L831.678512 304.945612l-41.817302-12.097488C793.703194 228.423442 758.649054 126.531473 698.542636 87.952868c-10.763907 49.818791-31.656682 89.508713-62.773581 119.006264-3.905488 0-7.779225 0-11.684713 0 27.560682-62.487814 40.832992-108.845643 42.801612-142.53445C625.830698 38.451597 576.837457 23.496434 522.509891 23.496434c-56.962977 0-110.083969 16.415752-154.917705 44.706729 2.698915 33.371287 15.971225 78.586047 42.515845 138.724217-3.873736 0-7.779225 0-11.652961 0-30.48186-28.894264-51.12062-67.568124-62.106791-115.958078C275.606822 128.11907 239.346109 228.328186 240.203411 291.80031L196.131721 304.945612l0 66.298047L253.507473 371.243659 253.507473 371.211907zM334.792434 371.211907l123.959566 0 241.50524 0 1.333581 0c-1.111318 62.900589-22.162853 119.736558-55.597643 160.88707-33.117271 40.864744-78.395535 66.234543-127.80155 66.234543l0 0c-49.406016 0-94.684279-25.369798-127.80155-66.234543C356.955287 490.948465 335.872 434.144248 334.792434 371.211907z" fill="currentColor"></path>
+					</svg>
+				</view>
 				<text>找监工</text>
 			</view>
-			<view class="menu-item" :class="{ active: activeMainMenu === 4 }" @click="activeMainMenu = 4">
-				<view class="menu-icon">📖</view>
+			<view class="menu-item" :class="{ active: activeMainMenu === 4 }" @click="goToViewCases()">
+				<view class="menu-icon">
+					<!-- 查看案例 SVG 图标 -->
+					<svg class="icon-svg" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+						<path d="M820.515051 129.292692C806.439474 114.951055 787.336394 106.896612 767.423879 106.910938H432.682002s-14.06739 0.202615-28.031427 10.856256c-13.967106 10.653641-11.062963 23.652699-11.062963 23.652699V279.099602s1.550309 13.20372-10.413164 27.322276c-11.964496 14.120602-29.78435 16.517185-29.78435 16.517185H226.190067s-21.273513-1.121544-31.236422 6.881734c-9.960863 8.003278-13.414521 28.952402-13.414521 28.952403V840.628646c0 42.228777 33.617655 76.460416 75.087139 76.460416h510.74645c41.47153 0 75.087139-34.231639 75.087139-76.460416V183.371354c0.027629-20.278859-7.867178-39.733956-21.944801-54.078662zM463.969589 402.609591h212.747405c10.368138 0 18.772552 8.55791 18.772552 19.115359s-8.404414 19.11536-18.772552 19.11536H463.969589c-10.368138 0-18.772552-8.55791-18.772553-19.11536s8.404414-19.11536 18.772553-19.115359z m212.847689 308.494073h-332.789409c-10.368138 0-18.772552-8.55791-18.772552-19.11536s8.404414-19.11536 18.772552-19.11536h332.788386c10.368138 0 18.772552 8.55791 18.772552 19.11536 0.001023 10.55745-8.403391 19.11536-18.771529 19.11536z m0-132.583645h-332.789409c-10.368138 0-18.772552-8.55791-18.772552-19.113313 0-10.55745 8.404414-19.11536 18.772552-19.11536h332.788386c10.368138 0 18.772552 8.55791 18.772552 19.11536 0.001023 10.555403-8.403391 19.113313-18.771529 19.113313zM212.874807 283.891745h104.021122s37.545104-9.583263 34.440393-46.998407l0.750083-104.343463s-0.750083-26.251897-16.367782-10.346649c-15.618723 15.903202-131.404796 137.016607-131.404796 137.016607s-24.27794 24.671912 8.56098 24.671912z" fill="currentColor"></path>
+					</svg>
+				</view>
 				<text>查看案例</text>
 			</view>
 		</view>
@@ -108,8 +135,8 @@
 							lazy-load
 						></image>
 						
-						<!-- 图片角标 -->
-						<view class="image-badge" :class="getPostTypeClass(post.threadType)">
+						<!-- 图片角标 - 修复 :class 绑定 -->
+						<view class="image-badge" :class="postTypeClasses[post.threadType] || 'normal-tag'">
 							{{ getThreadTypeName(post.threadType) }}
 						</view>
 						
@@ -265,6 +292,14 @@ export default {
 			showImageInfo: false, // 是否显示图片信息
 			imageDetailsCache: new Map(), // 图片详情缓存
 			loadingImageDetails: new Set(), // 正在加载的图片详情
+			
+			// 帖子类型样式类映射 - 修复 :class 绑定问题
+			postTypeClasses: {
+				1: 'portfolio-tag',    // 作品集
+				2: 'case-tag',         // 案例集
+				3: 'normal-tag',       // 普通帖
+				4: 'material-tag'      // 材料展示
+			},
 			
 			// 防止重复点击
 			isNavigating: false
@@ -1136,17 +1171,6 @@ export default {
 			return typeMap[typeId] || '帖子';
 		},
 		
-		// 获取帖子类型标签样式类
-		getPostTypeClass(typeId) {
-			const classMap = {
-				1: 'portfolio-tag',    // 作品集
-				2: 'case-tag',         // 案例集
-				3: 'normal-tag',       // 普通帖
-				4: 'material-tag'      // 材料展示
-			};
-			return classMap[typeId] || 'normal-tag';
-		},
-		
 		// 加载更多
 		async loadMore() {
 			if (this.loading || !this.hasMore) return;
@@ -1218,7 +1242,7 @@ export default {
 </script>
 
 <style>
-	/* 样式部分保持不变 */
+	/* 容器样式保持不变 */
 	.container {
 		max-width: 750px;
 		margin: 0 auto;
@@ -1228,93 +1252,81 @@ export default {
 		padding-bottom: 60px;
 	}
 	
-	.search-section {
-		padding: 15px;
-		background-color: #fff;
-		border-bottom: 1px solid #eee;
-	}
-	
-	.search-container {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
-	
-	.location-btn {
-		display: flex;
-		align-items: center;
-		background-color: #f8f9fa;
-		border-radius: 20px;
-		padding: 8px 12px;
-		min-width: 80px;
-		cursor: pointer;
-		transition: all 0.3s;
-		border: 1px solid #eee;
-		flex-shrink: 0;
-	}
-	
-	.location-btn:active {
-		background-color: #e9ecef;
-		transform: scale(0.98);
-	}
-	
-	.location-icon {
-		font-size: 14px;
-		margin-right: 4px;
-	}
-	
-	.location-text {
-		font-size: 13px;
-		color: #333;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 60px;
-	}
-	
-	.location-arrow {
-		font-size: 10px;
-		color: #999;
-		margin-left: 4px;
-	}
-	
+	/* 搜索框样式 - 已修复 */
 	.search-box {
-		display: flex;
-		align-items: center;
-		background-color: #f5f5f5;
-		border-radius: 20px;
-		padding: 8px 15px;
-		flex: 1;
-		position: relative;
+	    display: flex;
+	    align-items: center;
+	    background-color: #f5f5f5;
+	    border-radius: 25px;
+	    padding: 8px 15px; /* 调整上下内边距 */
+	    flex: 1;
+	    position: relative;
+	    border: 1px solid #e0e0e0;
+	    min-height: 44px; /* 确保最小高度，方便点击 */
 	}
 	
 	.search-box input {
-		flex: 1;
-		border: none;
-		background: transparent;
-		outline: none;
-		font-size: 14px;
-		padding: 5px;
+	    flex: 1;
+	    border: none;
+	    background: transparent;
+	    outline: none;
+	    font-size: 16px; /* 适当增大字体大小 */
+	    padding: 8px 0; /* 增加上下内边距 */
+	    padding-right: 30px; /* 为搜索图标留出空间 */
+	    line-height: 1.4; /* 设置合适的行高 */
+	    height: auto; /* 高度自适应 */
+	    min-height: 28px; /* 最小高度 */
 	}
 	
+	/* 搜索图标样式 */
 	.search-icon {
-		color: #999;
-		font-size: 16px;
-		margin-right: 8px;
+	    position: absolute;
+	    right: 15px;
+	    top: 50%;
+	    transform: translateY(-50%);
+	    width: 20px;
+	    height: 20px;
+	    cursor: pointer;
+	    color: #666;
+	    transition: color 0.3s;
+	    display: flex;
+	    align-items: center;
+	    justify-content: center;
+	}
+	
+	.search-icon-svg {
+	    width: 100%;
+	    height: 100%;
+	}
+	
+	.search-icon:active {
+		color: #4a90e2;
+		transform: translateY(-50%) scale(0.95);
 	}
 	
 	.clear-icon {
-		color: #999;
-		font-size: 18px;
-		padding: 2px;
-		cursor: pointer;
-		transition: color 0.3s;
+	    position: absolute;
+	    right: 45px; /* 在搜索图标左侧 */
+	    top: 50%;
+	    transform: translateY(-50%);
+	    color: #999;
+	    font-size: 20px; /* 稍微增大清空图标 */
+	    width: 20px;
+	    height: 20px;
+	    display: flex;
+	    align-items: center;
+	    justify-content: center;
+	    cursor: pointer;
+	    transition: color 0.3s;
+	    z-index: 2;
+	    line-height: 1;
 	}
 	
 	.clear-icon:active {
 		color: #666;
 	}
 	
+	/* 主菜单样式 - 图标样式已修改 */
 	.main-menu {
 		display: flex;
 		justify-content: space-between;
@@ -1341,10 +1353,33 @@ export default {
 	}
 	
 	.menu-icon {
-		font-size: 20px;
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		margin-bottom: 5px;
+		background: #f8f9fa;
+		border-radius: 12px;
+		transition: all 0.3s;
 	}
 	
+	.menu-item.active .menu-icon {
+		background: #fff2e8;
+		color: #ff6b00;
+	}
+	
+	.menu-item:active .menu-icon {
+		transform: scale(0.95);
+	}
+	
+	.icon-svg {
+		width: 24px;
+		height: 24px;
+		color: currentColor;
+	}
+	
+	/* 其他样式保持不变 */
 	.banner-section {
 		padding: 15px;
 		background-color: #f8f9fa;
@@ -1469,20 +1504,20 @@ export default {
 	.post-container.xhs-style {
 	    display: grid;
 	    grid-template-columns: repeat(2, 1fr);
-	    gap: 0; /* 行和列间隙都设为0 */
-	    padding: 0; /* 移除容器内边距 */
+	    gap: 0;
+	    padding: 0;
 	    background-color: #f8f9fa;
 	}
 	
 	.post-item {
 	    background-color: #fff;
-	    border-radius: 0; /* 移除圆角，避免重叠 */
+	    border-radius: 0;
 	    overflow: hidden;
 	    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 	    transition: transform 0.3s, box-shadow 0.3s;
 	    cursor: pointer;
 	    margin: 0;
-	    border: 1px solid #f0f0f0; /* 添加边框来分隔帖子 */
+	    border: 1px solid #f0f0f0;
 	}
 	
 	.post-item:hover {
@@ -1758,31 +1793,29 @@ export default {
 		white-space: nowrap;
 	}
 	
+	/* 响应式设计 */
 	@media (max-width: 480px) {
 		.search-section {
 			padding: 12px;
 		}
 		
-		.search-container {
-			gap: 8px;
-		}
-		
-		.location-btn {
-			padding: 6px 10px;
-			min-width: 70px;
-		}
-		
-		.location-text {
-			font-size: 12px;
-			max-width: 50px;
-		}
-		
 		.search-box {
-			padding: 6px 12px;
+			padding: 8px 12px;
 		}
 		
 		.search-box input {
 			font-size: 13px;
+		}
+		
+		.search-icon {
+			right: 12px;
+			width: 18px;
+			height: 18px;
+		}
+		
+		.clear-icon {
+			right: 35px;
+			font-size: 16px;
 		}
 		
 		.banner-section {
@@ -1821,6 +1854,16 @@ export default {
 			font-size: 13px;
 		}
 		
+		.menu-icon {
+			width: 36px;
+			height: 36px;
+		}
+		
+		.icon-svg {
+			width: 20px;
+			height: 20px;
+		}
+		
 		.main-menu {
 			padding: 12px;
 		}
@@ -1837,14 +1880,6 @@ export default {
 	}
 	
 	@media (max-width: 375px) {
-		.location-text {
-			max-width: 45px;
-		}
-		
-		.location-btn {
-			min-width: 65px;
-		}
-		
 		.tab-item {
 			padding: 10px 10px;
 			font-size: 13px;

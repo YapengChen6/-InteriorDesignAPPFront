@@ -306,10 +306,10 @@
     }
   },
   {
-  	"path" : "pages/review/review",
+  	"path" : "pages/find-design/design-detail",
   	"style" : 
   	{
-  		"navigationBarTitleText" : ""
+  		"navigationBarTitleText" : "设计师详情页面"
   	}
   }
   ],
