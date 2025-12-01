@@ -7,280 +7,783 @@
       <view class="header-placeholder"></view>
     </view>
     
+    <!-- 加载状态 -->
+    <view v-if="loading" class="loading">
+      <view class="spinner"></view>
+      <text>正在加载监工信息...</text>
+    </view>
+    
     <!-- 监理基本信息 -->
-    <view class="supervisor-header" v-if="supervisor">
-      <view class="supervisor-avatar">{{ supervisor.name.charAt(0) }}</view>
+    <view class="supervisor-header" v-else-if="supervisorInfo">
+      <view class="supervisor-avatar">
+        <image 
+          v-if="userInfo.avatar" 
+          :src="userInfo.avatar" 
+          class="avatar-image"
+          mode="aspectFill"
+          @error="handleAvatarError"
+        />
+        <text v-else class="avatar-text">{{ userInfo.nickName ? userInfo.nickName.charAt(0) : '监' }}</text>
+      </view>
       <view class="supervisor-basic-info">
-        <view class="supervisor-name">{{ supervisor.name }}</view>
+        <view class="supervisor-name">{{ userInfo.nickName || '匿名监工' }}</view>
         <view class="supervisor-tags">
-          <view class="tag">资深监理</view>
-          <view class="tag">{{ supervisor.experience }}经验</view>
+          <view class="tag">专业监理</view>
+          <view class="tag" v-if="supervisorInfo.city">{{ supervisorInfo.city }}</view>
+          <view class="tag status-tag" :class="getStatusClass(supervisorInfo.certificationStatus)">
+            {{ getStatusText(supervisorInfo.certificationStatus) }}
+          </view>
         </view>
         <view class="supervisor-stats">
           <view class="stat-item">
-            <text class="stat-value">{{ supervisor.rating }}</text>
-            <text class="stat-label">评分</text>
+            <text class="stat-value">{{ totalCases || 0 }}</text>
+            <text class="stat-label">案例</text>
           </view>
           <view class="stat-divider"></view>
           <view class="stat-item">
-            <text class="stat-value">{{ supervisor.projects }}</text>
-            <text class="stat-label">项目</text>
+            <text class="stat-value">{{ totalViews || 0 }}</text>
+            <text class="stat-label">浏览</text>
           </view>
           <view class="stat-divider"></view>
-          <view class="stat-item">
-            <text class="stat-value">{{ supervisor.certificates.length }}</text>
-            <text class="stat-label">证书</text>
+          <view class="stat-item like-btn" @click="toggleLike" :class="{ 'liked': isLiked, 'liking': isLiking }">
+            <text class="stat-icon">{{ isLiked ? '❤️' : '🤍' }}</text>
+            <text class="stat-value">{{ totalLikes || 0 }}</text>
+            <text class="stat-label">点赞</text>
           </view>
         </view>
       </view>
     </view>
     
-    <!-- 监理详细信息 -->
-    <view class="supervisor-details" v-if="supervisor">
+    <!-- 选项卡 -->
+    <view class="tabs">
+      <view 
+        class="tab-item" 
+        :class="{ active: activeTab === 'info' }"
+        @click="activeTab = 'info'"
+      >
+        基本信息
+      </view>
+      <view 
+        class="tab-item" 
+        :class="{ active: activeTab === 'cases' }"
+        @click="activeTab = 'cases'"
+      >
+        案例作品 ({{ caseList.length }})
+      </view>
+    </view>
+    
+    <!-- 基本信息标签页 -->
+    <scroll-view 
+      v-if="activeTab === 'info' && supervisorInfo" 
+      class="tab-content info-tab"
+      scroll-y="true"
+      :scroll-with-animation="true"
+    >
       <view class="detail-section">
         <view class="section-title">基本信息</view>
         <view class="info-list">
           <view class="info-item">
             <text class="info-label">📍 所在地</text>
-            <text class="info-value">{{ supervisor.location }}</text>
+            <text class="info-value">{{ supervisorInfo.city || '未设置' }}</text>
           </view>
           <view class="info-item">
             <text class="info-label">📞 联系电话</text>
-            <text class="info-value">{{ supervisor.phone }}</text>
+            <text class="info-value">{{ userInfo.phonenumber || '电话未提供' }}</text>
           </view>
           <view class="info-item">
-            <text class="info-label">⭐ 擅长领域</text>
-            <text class="info-value">{{ supervisor.specialty }}</text>
+            <text class="info-label">📧 邮箱</text>
+            <text class="info-value">{{ userInfo.email || '未设置' }}</text>
+          </view>
+          <view class="info-item">
+            <text class="info-label">👤 真实姓名</text>
+            <text class="info-value">{{ supervisorInfo.name || '未实名' }}</text>
+          </view>
+          <view class="info-item">
+            <text class="info-label">⭐ 认证状态</text>
+            <text class="info-value" :class="getStatusClass(supervisorInfo.certificationStatus)">
+              {{ getStatusText(supervisorInfo.certificationStatus) }}
+            </text>
+          </view>
+          <view class="info-item" v-if="supervisorInfo.margin">
+            <text class="info-label">💰 保证金</text>
+            <text class="info-value">{{ supervisorInfo.margin }}元</text>
+          </view>
+          <view class="info-item" v-if="supervisorInfo.marginStatus">
+            <text class="info-label">🔒 保证金状态</text>
+            <text class="info-value">{{ getMarginStatusText(supervisorInfo.marginStatus) }}</text>
           </view>
         </view>
       </view>
       
-      <view class="detail-section">
-        <view class="section-title">个人简介</view>
-        <view class="supervisor-description">
-          {{ supervisor.description }}
+      <view class="detail-section" v-if="supervisorInfo.qualificationCertificate">
+        <view class="section-title">资质证书</view>
+        <view class="section-desc">查看该监工的专业资质证书</view>
+        <view class="certificate-images">
+          <image 
+            :src="getImageUrl(supervisorInfo.qualificationCertificate)" 
+            class="certificate-image"
+            mode="aspectFit"
+            @click="previewImage(supervisorInfo.qualificationCertificate)"
+          />
         </view>
       </view>
       
-      <view class="detail-section">
-        <view class="section-title">专业证书</view>
-        <view class="certificate-list">
-          <view 
-            class="certificate-item" 
-            v-for="certificate in supervisor.certificates" 
-            :key="certificate"
-          >
-            <text class="certificate-icon">🏆</text>
-            <text class="certificate-name">{{ certificate }}</text>
+      <view class="detail-section" v-if="supervisorInfo.idCardFrontPhoto || supervisorInfo.idCardBackPhoto">
+        <view class="section-title">身份认证</view>
+        <view class="section-desc">已进行身份实名认证</view>
+        <view class="id-card-images">
+          <image 
+            v-if="supervisorInfo.idCardFrontPhoto"
+            :src="getImageUrl(supervisorInfo.idCardFrontPhoto)" 
+            class="id-card-image"
+            mode="aspectFit"
+            @click="previewImage(supervisorInfo.idCardFrontPhoto)"
+          />
+          <image 
+            v-if="supervisorInfo.idCardBackPhoto"
+            :src="getImageUrl(supervisorInfo.idCardBackPhoto)" 
+            class="id-card-image"
+            mode="aspectFit"
+            @click="previewImage(supervisorInfo.idCardBackPhoto)"
+          />
+        </view>
+      </view>
+
+      <view class="detail-section" v-if="supervisorInfo.handheldIdPhoto">
+        <view class="section-title">手持身份证</view>
+        <view class="section-desc">确保认证信息真实有效</view>
+        <view class="certificate-images">
+          <image 
+            :src="getImageUrl(supervisorInfo.handheldIdPhoto)" 
+            class="certificate-image"
+            mode="aspectFit"
+            @click="previewImage(supervisorInfo.handheldIdPhoto)"
+          />
+        </view>
+      </view>
+
+      <view class="detail-section" v-if="supervisorInfo.rejectionReason">
+        <view class="section-title">审核信息</view>
+        <view class="section-desc">认证审核相关记录</view>
+        <view class="info-list">
+          <view class="info-item" v-if="supervisorInfo.rejectionReason">
+            <text class="info-label">❌ 拒绝原因</text>
+            <text class="info-value">{{ supervisorInfo.rejectionReason }}</text>
+          </view>
+          <view class="info-item" v-if="supervisorInfo.reviewTime">
+            <text class="info-label">⏰ 审核时间</text>
+            <text class="info-value">{{ formatTime(supervisorInfo.reviewTime) }}</text>
           </view>
         </view>
       </view>
-      
-      <view class="detail-section">
-        <view class="section-title">服务内容</view>
-        <view class="service-list">
-          <view class="service-item" v-for="service in services" :key="service">
-            <text class="service-icon">✅</text>
-            <text class="service-text">{{ service }}</text>
+    </scroll-view>
+    
+    <!-- 案例作品标签页 -->
+    <scroll-view 
+      v-if="activeTab === 'cases'" 
+      class="tab-content case-tab"
+      scroll-y="true"
+      :scroll-with-animation="true"
+    >
+      <!-- 案例列表 -->
+      <view class="case-list">
+        <view 
+          v-for="caseItem in caseList" 
+          :key="caseItem.threadId"
+          class="case-card"
+          @click="viewCaseDetail(caseItem.threadId)"
+        >
+          <view class="case-cover">
+            <image 
+              :src="getImageUrl(caseItem.coverImage || caseItem.coverUrl) || '/static/images/default-case.jpg'" 
+              class="cover-image"
+              mode="aspectFill"
+              @error="handleImageError"
+            />
+            <view class="case-stats">
+              <view class="stat" @click.stop="viewCaseDetail(caseItem.threadId)">
+                <text class="stat-icon">👁️</text>
+                <text class="stat-number">{{ caseItem.viewCount || 0 }}</text>
+              </view>
+              <view class="stat">
+                <text class="stat-icon">❤️</text>
+                <text class="stat-number">{{ caseItem.likeCount || 0 }}</text>
+              </view>
+              <view class="stat">
+                <text class="stat-icon">💬</text>
+                <text class="stat-number">{{ caseItem.commentCount || 0 }}</text>
+              </view>
+            </view>
           </view>
-        </view>
-      </view>
-      
-      <view class="detail-section">
-        <view class="section-title">监理流程</view>
-        <view class="process-steps">
-          <view class="process-step" v-for="(step, index) in processSteps" :key="index">
-            <view class="step-number">{{ index + 1 }}</view>
-            <view class="step-content">
-              <text class="step-title">{{ step.title }}</text>
-              <text class="step-desc">{{ step.description }}</text>
+          <view class="case-info">
+            <view class="case-title">{{ caseItem.title || '无标题' }}</view>
+            <view class="case-content" v-if="caseItem.content">
+              {{ caseItem.content.length > 60 ? caseItem.content.substring(0, 60) + '...' : caseItem.content }}
+            </view>
+            <view class="case-meta">
+              <view class="case-time">{{ formatTime(caseItem.createTime) }}</view>
+              <view class="case-images" v-if="caseItem.imageCount">
+                📸 {{ caseItem.imageCount }}张图片
+              </view>
             </view>
           </view>
         </view>
       </view>
+      
+      <!-- 空状态 -->
+      <view v-if="caseList.length === 0 && !loading" class="empty-case">
+        <view class="empty-icon">📁</view>
+        <view class="empty-text">暂无案例作品</view>
+        <view class="empty-desc">该监工还没有发布任何案例</view>
+      </view>
+    </scroll-view>
+    
+    <!-- 错误状态 -->
+    <view v-if="!loading && !supervisorInfo" class="error-state">
+      <view class="error-icon">😔</view>
+      <view class="error-text">加载失败</view>
+      <view class="error-desc">无法获取监工信息，请稍后重试</view>
+      <button class="retry-btn" @click="loadSupervisorDetail">重新加载</button>
     </view>
     
     <!-- 底部操作栏 -->
-    <view class="bottom-actions">
+    <view class="bottom-actions" v-if="supervisorInfo">
       <button class="favorite-btn" @click="toggleFavorite">
         <text class="favorite-icon">{{ isFavorite ? '❤️' : '🤍' }}</text>
-        收藏
+        <text class="btn-text">{{ isFavorite ? '已收藏' : '收藏' }}</text>
       </button>
-      <button class="contact-btn" @click="contactSupervisor">立即联系</button>
+      <button class="contact-btn" @click="contactSupervisor">
+        <text class="contact-icon">📞</text>
+        <text class="btn-text">立即联系</text>
+      </button>
     </view>
   </view>
 </template>
 
 <script>
+// 导入监工信息获取
+import { getSupervisorDetail } from '@/api/supervisor2.js'
+// 导入点赞相关API
+import { toggleUserLike, checkLikeStatus, getUserLikeCount } from '@/api/like.js'
+
 export default {
   data() {
     return {
       supervisorId: null,
-      supervisor: null,
+      supervisorInfo: null,
+      userInfo: null,
+      caseList: [],
+      totalCases: 0,
+      totalViews: 0,
+      totalLikes: 0,
+      loading: false,
       isFavorite: false,
-      services: [
-        '施工质量检查',
-        '材料验收',
-        '工艺监督',
-        '进度控制',
-        '安全监督',
-        '验收指导',
-        '问题整改跟踪',
-        '竣工验收'
-      ],
-      processSteps: [
-        {
-          title: '前期交底',
-          description: '参与施工前技术交底，了解工程要求'
-        },
-        {
-          title: '材料验收',
-          description: '对进场材料进行质量检查和验收'
-        },
-        {
-          title: '过程监督',
-          description: '定期巡查施工现场，监督施工质量'
-        },
-        {
-          title: '问题整改',
-          description: '发现质量问题，督促施工单位整改'
-        },
-        {
-          title: '竣工验收',
-          description: '参与工程竣工验收，出具监理报告'
-        }
-      ]
+      activeTab: 'info',
+      
+      // 点赞相关状态
+      isLiked: false,      // 当前用户是否点赞了该监工
+      isLiking: false,     // 防止重复点击
+      likeCheckLoading: false  // 检查点赞状态加载
     }
   },
   
   onLoad(options) {
-    this.supervisorId = options.supervisorId;
-    this.loadSupervisorDetail();
+    console.log('详情页面接收到的参数:', options)
+    this.supervisorId = options.supervisorId || options.id || options.userId
+    if (!this.supervisorId) {
+      console.error('未接收到监工ID')
+      uni.showToast({
+        title: '参数错误',
+        icon: 'error'
+      })
+      setTimeout(() => {
+        uni.navigateBack()
+      }, 1500)
+      return
+    }
+    this.loadSupervisorDetail()
+  },
+  
+  onShow() {
+    // 页面显示时检查点赞状态
+    if (this.supervisorId) {
+      this.checkLikeStatus()
+      this.getLikeCount()
+    }
+  },
+  
+  onPullDownRefresh() {
+    this.loadSupervisorDetail().finally(() => {
+      uni.stopPullDownRefresh()
+    })
   },
   
   methods: {
     goBack() {
-      uni.navigateBack();
+      uni.navigateBack()
     },
     
-    loadSupervisorDetail() {
-      // 模拟监理数据，实际项目中应该从API获取
-      const supervisors = {
-        '1': {
-          id: 1,
-          name: '张明监理',
-          rating: 4.9,
-          projects: 156,
-          location: '北京朝阳区',
-          phone: '138****1234',
-          experience: '8年',
-          certificates: ['国家注册监理工程师', '一级建造师', '安全工程师'],
-          specialty: '住宅工程、装修监理',
-          description: '资深监理工程师，拥有丰富的施工现场管理经验，擅长发现和解决施工过程中的质量问题。曾参与多个大型住宅项目和商业空间监理工作，对装修工艺和材料有深入的了解。'
-        },
-        '2': {
-          id: 2,
-          name: '李华监理工作室',
-          rating: 4.8,
-          projects: 243,
-          location: '上海浦东新区',
-          phone: '139****5678',
-          experience: '10年',
-          certificates: ['高级监理工程师', '安全工程师', '造价工程师'],
-          specialty: '商业空间、办公室装修',
-          description: '专业监理团队，提供全方位的工程监理服务，确保工程质量和使用安全。团队成员均持有相关专业证书，具备丰富的实战经验。'
-        },
-        '3': {
-          id: 3,
-          name: '王芳监理',
-          rating: 5.0,
-          projects: 98,
-          location: '广州天河区',
-          phone: '136****9012',
-          experience: '6年',
-          certificates: ['注册监理工程师', '质量工程师', '装饰监理师'],
-          specialty: '精装修、别墅监理',
-          description: '女性监理师，注重细节和工艺品质，擅长处理精装修工程中的各种技术问题。特别关注环保材料和施工安全。'
-        },
-        '4': {
-          id: 4,
-          name: '陈伟监理事务所',
-          rating: 4.7,
-          projects: 320,
-          location: '深圳南山区',
-          phone: '137****3456',
-          experience: '12年',
-          certificates: ['国家级监理工程师', '造价工程师', '项目管理师'],
-          specialty: '大型工程、全过程监理',
-          description: '拥有大型工程项目监理经验，能够提供从设计到竣工的全过程监理服务。熟悉各类建筑规范和验收标准。'
-        },
-        '5': {
-          id: 5,
-          name: '刘洋独立监理',
-          rating: 4.9,
-          projects: 187,
-          location: '杭州西湖区',
-          phone: '135****7890',
-          experience: '7年',
-          certificates: ['注册监理师', '建筑工程师', '室内监理师'],
-          specialty: '二手房改造、局部装修',
-          description: '专注于家庭装修监理，特别擅长二手房改造和局部装修的质量控制。了解杭州本地装修市场和施工队伍。'
+    async loadSupervisorDetail() {
+      this.loading = true
+      
+      try {
+        console.log('开始加载监工详情，ID:', this.supervisorId)
+        
+        // 真实的API调用
+        const response = await getSupervisorDetail(this.supervisorId)
+        
+        console.log('监工详情接口响应:', response)
+        
+        if (response.code === 200 && response.data) {
+          this.handleSuccessResponse(response.data)
+          
+          // 加载完成后检查点赞状态
+          this.checkLikeStatus()
+          this.getLikeCount()
+        } else if (response.code === 401) {
+          this.handleTokenExpired()
+        } else {
+          this.handleErrorResponse(response.msg || response.message || '获取监工信息失败')
         }
-      };
-      
-      this.supervisor = supervisors[this.supervisorId] || null;
-      
-      if (!this.supervisor) {
-        uni.showToast({
-          title: '监理不存在',
-          icon: 'error'
-        });
-        setTimeout(() => {
-          uni.navigateBack();
-        }, 1500);
+      } catch (error) {
+        console.error('加载监工详情失败:', error)
+        this.handleNetworkError(error)
+      } finally {
+        this.loading = false
       }
     },
     
-    toggleFavorite() {
-      this.isFavorite = !this.isFavorite;
-      uni.showToast({
-        title: this.isFavorite ? '已收藏' : '已取消收藏',
-        icon: 'success'
-      });
+    // 处理成功响应
+    handleSuccessResponse(data) {
+      this.supervisorInfo = data.supervisorInfo
+      this.userInfo = data.userInfo
+      this.caseList = data.caseList || []
+      this.totalCases = data.totalCases || 0
+      this.totalViews = data.totalViews || 0
+      this.totalLikes = data.totalLikes || 0
+      
+      // 检查是否已经收藏过
+      this.checkFavoriteStatus()
+      
+      // 默认显示案例标签页如果有案例
+      if (this.caseList.length > 0) {
+        this.activeTab = 'cases'
+      }
+      
+      console.log('监工数据加载成功')
     },
     
-    contactSupervisor() {
+    // 处理token过期
+    handleTokenExpired() {
       uni.showModal({
-        title: '联系监理',
-        content: `确定要联系 ${this.supervisor.name} 吗？\n电话：${this.supervisor.phone}`,
+        title: '提示',
+        content: '登录已过期，请重新登录',
+        showCancel: false,
+        success: () => {
+          uni.navigateTo({
+            url: '/pages/login/login'
+          })
+        }
+      })
+    },
+    
+    // 处理错误响应
+    handleErrorResponse(message) {
+      console.error('获取监工详情失败:', message)
+      uni.showToast({
+        title: message || '获取监工信息失败',
+        icon: 'none',
+        duration: 3000
+      })
+    },
+    
+    // 处理网络错误
+    handleNetworkError(error) {
+      let errorMessage = '网络错误，请检查网络连接'
+      if (error.message && error.message.includes('timeout')) {
+        errorMessage = '请求超时，请稍后重试'
+      } else if (error.message && error.message.includes('Network Error')) {
+        errorMessage = '网络连接失败，请检查网络'
+      }
+      
+      uni.showToast({
+        title: errorMessage,
+        icon: 'none',
+        duration: 3000
+      })
+    },
+    
+    // ====================== 点赞相关方法 ======================
+    
+    // 检查当前用户是否点赞了该监工
+    async checkLikeStatus() {
+      if (!this.supervisorId || this.likeCheckLoading) return
+      
+      this.likeCheckLoading = true
+      try {
+        const response = await checkLikeStatus(this.supervisorId)
+        
+        if (response.code === 200) {
+          this.isLiked = response.data
+          console.log('点赞状态检查结果:', this.isLiked)
+        } else if (response.code === 401) {
+          // 未登录，默认未点赞
+          this.isLiked = false
+        }
+      } catch (error) {
+        console.error('检查点赞状态失败:', error)
+        this.isLiked = false
+      } finally {
+        this.likeCheckLoading = false
+      }
+    },
+    
+    // 获取监工的点赞总数
+    async getLikeCount() {
+      if (!this.supervisorId) return
+      
+      try {
+        const response = await getUserLikeCount(this.supervisorId)
+        
+        if (response.code === 200) {
+          this.totalLikes = response.data
+          console.log('点赞总数:', this.totalLikes)
+        }
+      } catch (error) {
+        console.error('获取点赞数失败:', error)
+      }
+    },
+    
+    // 点赞/取消点赞
+    async toggleLike() {
+      if (!this.supervisorId || this.isLiking) return
+      
+      // 检查登录状态
+      const token = uni.getStorageSync('token')
+      if (!token) {
+        uni.showModal({
+          title: '提示',
+          content: '请先登录后才能点赞',
+          confirmText: '去登录',
+          success: (res) => {
+            if (res.confirm) {
+              uni.navigateTo({
+                url: '/pages/login/login'
+              })
+            }
+          }
+        })
+        return
+      }
+      
+      this.isLiking = true
+      
+      try {
+        // 先更新本地状态，提升用户体验
+        const oldIsLiked = this.isLiked
+        const oldTotalLikes = this.totalLikes
+        
+        this.isLiked = !oldIsLiked
+        this.totalLikes = oldIsLiked ? Math.max(0, oldTotalLikes - 1) : oldTotalLikes + 1
+        
+        const response = await toggleUserLike(this.supervisorId)
+        
+        if (response.code === 200) {
+          const result = response.data
+          this.isLiked = result.isLiked
+          this.totalLikes = result.likeCount
+          
+          uni.showToast({
+            title: result.isLiked ? '点赞成功' : '已取消点赞',
+            icon: 'success',
+            duration: 1500
+          })
+          
+          // 触发点赞事件通知其他组件
+          uni.$emit('userLikeChanged', {
+            userId: this.supervisorId,
+            isLiked: this.isLiked,
+            likeCount: this.totalLikes
+          })
+          
+        } else if (response.code === 400) {
+          // 特殊处理：不能给自己点赞
+          if (response.message && response.message.includes('不能给自己点赞')) {
+            uni.showToast({
+              title: '不能给自己点赞哦~',
+              icon: 'none',
+              duration: 2000
+            })
+          } else {
+            uni.showToast({
+              title: response.message || '操作失败',
+              icon: 'none'
+            })
+          }
+          
+          // 恢复之前的状态
+          this.isLiked = oldIsLiked
+          this.totalLikes = oldTotalLikes
+          
+        } else if (response.code === 401) {
+          uni.showModal({
+            title: '提示',
+            content: '登录已过期，请重新登录',
+            confirmText: '去登录',
+            success: (res) => {
+              if (res.confirm) {
+                uni.navigateTo({
+                  url: '/pages/login/login'
+                })
+              }
+            }
+          })
+          
+          // 恢复之前的状态
+          this.isLiked = oldIsLiked
+          this.totalLikes = oldTotalLikes
+          
+        } else {
+          // 其他错误
+          uni.showToast({
+            title: response.message || '操作失败',
+            icon: 'none'
+          })
+          
+          // 恢复之前的状态
+          this.isLiked = oldIsLiked
+          this.totalLikes = oldTotalLikes
+        }
+      } catch (error) {
+        console.error('点赞操作失败:', error)
+        uni.showToast({
+          title: '网络错误，请重试',
+          icon: 'none'
+        })
+        
+        // 恢复之前的状态
+        const oldIsLiked = this.isLiked
+        const oldTotalLikes = this.totalLikes
+        this.isLiked = !oldIsLiked
+        this.totalLikes = oldTotalLikes
+      } finally {
+        this.isLiking = false
+      }
+    },
+    
+    // 检查收藏状态（需要根据你的实际业务实现）
+    async checkFavoriteStatus() {
+      try {
+        // 这里需要根据你的业务实现收藏状态的检查
+        // 例如：调用API检查当前用户是否收藏了该监工
+        // const response = await checkFavoriteStatus(this.supervisorId)
+        // this.isFavorite = response.data.isFavorite || false
+        
+        // 临时使用本地存储
+        const favorites = uni.getStorageSync('supervisor_favorites') || []
+        this.isFavorite = favorites.includes(this.supervisorId)
+      } catch (error) {
+        console.error('检查收藏状态失败:', error)
+      }
+    },
+    
+    // 查看案例详情
+    viewCaseDetail(threadId) {
+      uni.navigateTo({
+        url: `/pages/find-supervisor/case-detail?threadId=${threadId}`
+      })
+    },
+    
+    // 图片预览
+    previewImage(url) {
+      if (!url) {
+        uni.showToast({
+          title: '图片暂不可用',
+          icon: 'none'
+        })
+        return
+      }
+      
+      const fullUrl = this.getImageUrl(url)
+      uni.previewImage({
+        urls: [fullUrl],
+        current: fullUrl
+      })
+    },
+    
+    // 处理头像加载失败
+    handleAvatarError(e) {
+      console.log('头像加载失败:', e)
+      // 设置默认头像
+      this.$set(this.userInfo, 'avatar', '')
+    },
+    
+    // 处理图片加载失败
+    handleImageError(e) {
+      console.log('图片加载失败:', e)
+    },
+    
+    // 获取完整的图片URL（处理相对路径）
+    getImageUrl(url) {
+      if (!url) return ''
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url
+      }
+      // 如果是相对路径，添加基础URL
+      const baseUrl = 'http://your-domain.com' // 请替换为你的实际域名
+      return baseUrl + (url.startsWith('/') ? url : '/' + url)
+    },
+    
+    // 获取认证状态文本
+    getStatusText(status) {
+      const statusMap = {
+        '0': '未认证',
+        '1': '认证中', 
+        '2': '已认证',
+        '3': '认证失败'
+      }
+      return statusMap[status] || '未知状态'
+    },
+    
+    // 获取认证状态样式类
+    getStatusClass(status) {
+      const classMap = {
+        '0': 'status-pending',
+        '1': 'status-processing',
+        '2': 'status-approved',
+        '3': 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
+    },
+
+    // 获取保证金状态文本
+    getMarginStatusText(status) {
+      const statusMap = {
+        '1': '待支付',
+        '2': '已支付', 
+        '3': '已退回'
+      }
+      return statusMap[status] || '未知状态'
+    },
+    
+    // 格式化时间
+    formatTime(timeString) {
+      if (!timeString) return ''
+      
+      try {
+        const date = new Date(timeString)
+        const now = new Date()
+        
+        // 如果是今天
+        if (date.toDateString() === now.toDateString()) {
+          return date.toLocaleTimeString('zh-CN', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })
+        }
+        
+        // 如果是今年
+        if (date.getFullYear() === now.getFullYear()) {
+          return date.toLocaleDateString('zh-CN', { 
+            month: '2-digit', 
+            day: '2-digit' 
+          })
+        }
+        
+        return date.toLocaleDateString('zh-CN', { 
+          year: 'numeric',
+          month: '2-digit', 
+          day: '2-digit' 
+        })
+      } catch (error) {
+        console.error('时间格式化错误:', error)
+        return timeString
+      }
+    },
+    
+    // 切换收藏状态
+    async toggleFavorite() {
+      try {
+        // 这里需要根据你的业务实现收藏API调用
+        // const response = await toggleFavorite(this.supervisorId)
+        // this.isFavorite = response.data.isFavorite
+        
+        // 临时使用本地存储
+        const favorites = uni.getStorageSync('supervisor_favorites') || []
+        const index = favorites.indexOf(this.supervisorId)
+        
+        if (index > -1) {
+          // 已收藏，取消收藏
+          favorites.splice(index, 1)
+          this.isFavorite = false
+          uni.showToast({
+            title: '已取消收藏',
+            icon: 'success'
+          })
+        } else {
+          // 未收藏，添加收藏
+          favorites.push(this.supervisorId)
+          this.isFavorite = true
+          uni.showToast({
+            title: '收藏成功',
+            icon: 'success'
+          })
+        }
+        
+        uni.setStorageSync('supervisor_favorites', favorites)
+      } catch (error) {
+        console.error('收藏操作失败:', error)
+        uni.showToast({
+          title: '操作失败，请重试',
+          icon: 'none'
+        })
+      }
+    },
+    
+    // 联系监工
+    contactSupervisor() {
+      if (!this.userInfo) return
+      
+      const phone = this.userInfo.phonenumber
+      if (!phone) {
+        uni.showToast({
+          title: '该监工未提供联系电话',
+          icon: 'none'
+        })
+        return
+      }
+      
+      uni.showModal({
+        title: '联系监工',
+        content: `确定要联系 ${this.userInfo.nickName} 吗？\n电话：${phone}`,
         success: (res) => {
           if (res.confirm) {
             uni.makePhoneCall({
-              phoneNumber: this.supervisor.phone.replace('****', '0000')
-            });
+              phoneNumber: phone
+            })
           }
         }
-      });
+      })
     }
   }
 }
 </script>
 
 <style scoped>
+/* 样式保持不变但添加了修复 */
 .container {
-  background-color: #f8f8f8;
+  background-color: #f5f7fa;
   min-height: 100vh;
-  padding-bottom: 120rpx;
+  padding-bottom: 160rpx; /* 增加底部内边距，防止按钮遮挡内容 */
 }
 
-/* 顶部导航 */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 30rpx;
-  background-color: #fff;
-  border-bottom: 1px solid #eee;
+  background: white;
+  border-bottom: 1px solid #f0f0f0;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -289,38 +792,74 @@ export default {
 .back-btn {
   font-size: 36rpx;
   color: #333;
+  padding: 10rpx;
 }
 
 .header-title {
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 600;
+  color: #333;
 }
 
 .header-placeholder {
-  width: 48rpx;
+  width: 60rpx;
 }
 
-/* 监理头部信息 */
+.loading {
+  text-align: center;
+  padding: 100rpx 0;
+  color: #999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid #f3f3f3;
+  border-top: 4rpx solid #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .supervisor-header {
-  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-  padding: 60rpx 30rpx;
-  color: white;
+  background: white;
+  padding: 40rpx 30rpx;
   display: flex;
   align-items: center;
+  gap: 30rpx;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .supervisor-avatar {
-  width: 160rpx;
-  height: 160rpx;
+  width: 120rpx;
+  height: 120rpx;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 60rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.avatar-text {
+  color: white;
+  font-size: 48rpx;
   font-weight: bold;
-  margin-right: 40rpx;
-  border: 4rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .supervisor-basic-info {
@@ -328,82 +867,191 @@ export default {
 }
 
 .supervisor-name {
-  font-size: 44rpx;
+  font-size: 36rpx;
   font-weight: 600;
+  color: #333;
   margin-bottom: 20rpx;
 }
 
 .supervisor-tags {
   display: flex;
-  gap: 20rpx;
-  margin-bottom: 40rpx;
+  gap: 16rpx;
+  margin-bottom: 30rpx;
+  flex-wrap: wrap;
 }
 
 .tag {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 8rpx 24rpx;
-  border-radius: 30rpx;
+  background: #f8f8f8;
+  color: #666;
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
   font-size: 24rpx;
-  backdrop-filter: blur(10px);
+}
+
+.status-tag.status-approved {
+  background: #d4f8e8;
+  color: #059669;
+}
+
+.status-tag.status-pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-tag.status-processing {
+  background: #cce7ff;
+  color: #0066cc;
+}
+
+.status-tag.status-rejected {
+  background: #f8d7da;
+  color: #721c24;
 }
 
 .supervisor-stats {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20rpx;
-  padding: 30rpx;
-  backdrop-filter: blur(10px);
+  background: #f8f8f8;
+  border-radius: 16rpx;
+  padding: 20rpx;
 }
 
 .stat-item {
   flex: 1;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.stat-item.like-btn {
+  position: relative;
+}
+
+.stat-item.liking {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.stat-item.liked .stat-icon {
+  color: #ff4757;
+  animation: heartBeat 0.6s ease;
+}
+
+.stat-icon {
+  font-size: 32rpx;
+  transition: all 0.3s ease;
 }
 
 .stat-value {
-  display: block;
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 600;
-  margin-bottom: 8rpx;
+  color: #333;
+  transition: all 0.3s ease;
+}
+
+.stat-item.liked .stat-value {
+  color: #ff4757;
 }
 
 .stat-label {
   font-size: 24rpx;
-  opacity: 0.8;
+  color: #666;
+  transition: all 0.3s ease;
+}
+
+.stat-item.liked .stat-label {
+  color: #ff4757;
 }
 
 .stat-divider {
   width: 1px;
   height: 40rpx;
-  background: rgba(255, 255, 255, 0.3);
+  background: #e0e0e0;
 }
 
-/* 详细信息区域 */
-.supervisor-details {
+/* 心跳动画 */
+@keyframes heartBeat {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.2); }
+  30% { transform: scale(0.95); }
+  45% { transform: scale(1.1); }
+  60% { transform: scale(0.98); }
+  75% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.tabs {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid #f0f0f0;
+  position: sticky;
+  top: 88rpx; /* header高度 + 内边距 */
+  z-index: 90;
+}
+
+.tab-item {
+  flex: 1;
+  text-align: center;
   padding: 30rpx;
+  font-size: 28rpx;
+  color: #666;
+  position: relative;
+}
+
+.tab-item.active {
+  color: #8b5cf6;
+  font-weight: 500;
+}
+
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80rpx;
+  height: 4rpx;
+  background: #8b5cf6;
+  border-radius: 2rpx;
+}
+
+.tab-content {
+  padding: 30rpx;
+  box-sizing: border-box;
+}
+
+.info-tab, .case-tab {
+  height: calc(100vh - 400rpx); /* 根据实际情况调整高度 */
 }
 
 .detail-section {
   background: white;
-  border-radius: 20rpx;
-  padding: 40rpx;
-  margin-bottom: 30rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+  border-radius: 16rpx;
+  padding: 30rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
 }
 
 .section-title {
   font-size: 32rpx;
   font-weight: 600;
-  margin-bottom: 30rpx;
   color: #333;
-  border-left: 8rpx solid #4CAF50;
-  padding-left: 20rpx;
+  margin-bottom: 8rpx;
 }
 
-/* 基本信息列表 */
+.section-desc {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 24rpx;
+}
+
 .info-list {
-  space-y: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
 }
 
 .info-item {
@@ -411,7 +1059,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 20rpx 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f5f5f5;
 }
 
 .info-item:last-child {
@@ -419,121 +1067,177 @@ export default {
 }
 
 .info-label {
-  color: #666;
   font-size: 28rpx;
+  color: #666;
 }
 
 .info-value {
-  color: #333;
   font-size: 28rpx;
+  color: #333;
   font-weight: 500;
   text-align: right;
-  flex: 1;
-  margin-left: 20rpx;
+  max-width: 60%;
 }
 
-/* 个人简介 */
-.supervisor-description {
-  line-height: 1.8;
-  color: #666;
-  font-size: 28rpx;
+.info-value.status-approved {
+  color: #059669;
 }
 
-/* 证书列表 */
-.certificate-list {
-  space-y: 20rpx;
+.info-value.status-pending {
+  color: #856404;
 }
 
-.certificate-item {
+.info-value.status-processing {
+  color: #0066cc;
+}
+
+.info-value.status-rejected {
+  color: #721c24;
+}
+
+.certificate-images, .id-card-images {
   display: flex;
-  align-items: center;
-  padding: 24rpx;
-  background: #f8f9fa;
-  border-radius: 12rpx;
-  border-left: 6rpx solid #4CAF50;
-}
-
-.certificate-icon {
-  margin-right: 20rpx;
-  font-size: 32rpx;
-}
-
-.certificate-name {
-  font-size: 28rpx;
-  color: #333;
-  font-weight: 500;
-}
-
-/* 服务列表 */
-.service-list {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 20rpx;
+  flex-wrap: wrap;
 }
 
-.service-item {
-  display: flex;
-  align-items: center;
-  padding: 20rpx;
-  background: #f8f9fa;
+.certificate-image, .id-card-image {
+  width: 300rpx;
+  height: 200rpx;
   border-radius: 12rpx;
+  border: 1px solid #f0f0f0;
+  background: #f8f8f8;
 }
 
-.service-icon {
-  margin-right: 16rpx;
-  font-size: 28rpx;
+.id-card-image {
+  width: calc(50% - 10rpx);
+  height: 150rpx;
 }
 
-.service-text {
-  font-size: 26rpx;
-  color: #333;
-}
-
-/* 监理流程 */
-.process-steps {
-  space-y: 30rpx;
-}
-
-.process-step {
+.case-list {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 24rpx;
 }
 
-.step-number {
-  width: 60rpx;
-  height: 60rpx;
-  border-radius: 50%;
-  background: #4CAF50;
-  color: white;
+.case-card {
+  background: white;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.case-card:active {
+  transform: translateY(-2px);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
+}
+
+.case-cover {
+  position: relative;
+  height: 400rpx;
+  background: #f8f8f8;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+}
+
+.case-stats {
+  position: absolute;
+  bottom: 20rpx;
+  right: 20rpx;
+  display: flex;
+  gap: 20rpx;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 12rpx 20rpx;
+  border-radius: 20rpx;
+}
+
+.stat {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 28rpx;
-  font-weight: 600;
-  margin-right: 24rpx;
-  flex-shrink: 0;
+  gap: 8rpx;
+  color: white;
+  font-size: 24rpx;
 }
 
-.step-content {
-  flex: 1;
-  padding-top: 8rpx;
+.stat-icon {
+  font-size: 24rpx;
 }
 
-.step-title {
-  display: block;
-  font-size: 28rpx;
+.stat-number {
+  font-size: 24rpx;
+}
+
+.case-info {
+  padding: 30rpx;
+}
+
+.case-title {
+  font-size: 32rpx;
   font-weight: 600;
   color: #333;
-  margin-bottom: 8rpx;
+  margin-bottom: 16rpx;
+  line-height: 1.4;
 }
 
-.step-desc {
-  font-size: 26rpx;
+.case-content {
+  font-size: 28rpx;
   color: #666;
-  line-height: 1.6;
+  line-height: 1.5;
+  margin-bottom: 20rpx;
 }
 
-/* 底部操作栏 */
+.case-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.case-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.empty-case, .error-state {
+  text-align: center;
+  padding: 100rpx 40rpx;
+  background: white;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+}
+
+.empty-icon, .error-icon {
+  font-size: 120rpx;
+  margin-bottom: 30rpx;
+  opacity: 0.5;
+}
+
+.empty-text, .error-text {
+  font-size: 32rpx;
+  color: #666;
+  margin-bottom: 16rpx;
+}
+
+.empty-desc, .error-desc {
+  font-size: 28rpx;
+  color: #999;
+  margin-bottom: 40rpx;
+}
+
+.retry-btn {
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 32rpx;
+  padding: 20rpx 40rpx;
+  font-size: 28rpx;
+}
+
 .bottom-actions {
   position: fixed;
   bottom: 0;
@@ -543,49 +1247,76 @@ export default {
   padding: 20rpx 30rpx;
   display: flex;
   gap: 20rpx;
-  border-top: 1px solid #eee;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.1);
+  border-top: 1px solid #f0f0f0;
+  box-shadow: 0 -2rpx 8rpx rgba(0, 0, 0, 0.1);
+  z-index: 100;
 }
 
-.favorite-btn {
+.favorite-btn, .contact-btn {
   flex: 1;
-  background: #f8f8f8;
-  color: #666;
   border: none;
-  border-radius: 50rpx;
+  border-radius: 16rpx;
   padding: 24rpx;
   font-size: 28rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10rpx;
+  gap: 12rpx;
+  transition: all 0.3s ease;
+}
+
+.favorite-btn {
+  background: #f8f8f8;
+  color: #666;
+}
+
+.favorite-btn:active {
+  background: #e8e8e8;
 }
 
 .contact-btn {
-  flex: 2;
-  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
   color: white;
-  border: none;
-  border-radius: 50rpx;
-  padding: 24rpx;
-  font-size: 28rpx;
+}
+
+.contact-btn:active {
+  background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+  transform: translateY(-1px);
+}
+
+.btn-text {
   font-weight: 500;
 }
 
-/* 响应式调整 */
+/* 响应式设计 */
 @media (max-width: 480px) {
+  .container {
+    padding: 20rpx;
+  }
+  
   .supervisor-header {
-    padding: 40rpx 24rpx;
+    flex-direction: column;
+    text-align: center;
+    gap: 20rpx;
   }
   
-  .supervisor-avatar {
-    width: 120rpx;
-    height: 120rpx;
-    font-size: 48rpx;
+  .supervisor-tags {
+    justify-content: center;
   }
   
-  .service-list {
-    grid-template-columns: 1fr;
+  .info-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8rpx;
+  }
+  
+  .info-value {
+    text-align: left;
+    max-width: 100%;
+  }
+  
+  .bottom-actions {
+    padding: 20rpx;
   }
 }
 </style>
