@@ -88,11 +88,6 @@
       "navigationStyle": "custom"
     }
   },{
-    "path": "pages/test/imageTest",
-    "style": {
-      "navigationBarTitleText": "图片加载测试"
-    }
-  },{
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
@@ -373,6 +368,13 @@
   	"style" : 
   	{
   		"navigationBarTitleText" : "监理上传每个监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/orderstage-detail",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单每个监理订单阶段的详情页面"
   	}
   }
   ],

@@ -223,7 +223,7 @@ export default {
       return false
     },
 
-    // 确认所有阶段
+    // ✅ 修改：使用 confirmOrderStage 接口确认每个阶段
     async confirmAllStages() {
       uni.showModal({
         title: '确认操作',
@@ -232,18 +232,19 @@ export default {
           if (res.confirm) {
             this.loading = true
             try {
-              const { orderStageService } = require('@/api/orderStage.js')
+              // 👇 仅导入 confirmOrderStage 方法
+              const { confirmOrderStage } = require('@/api/orderStage.js')
 
-              const updateRequests = this.stages
-                .filter(s => s.status === 0 && s.orderStageId)
-                .map(s => ({
-                  orderStageId: s.orderStageId,
-                  status: 1
-                }))
+              const unconfirmedStages = this.stages.filter(s => s.status === 0 && s.orderStageId)
 
-              // 批量更新阶段状态
+              if (unconfirmedStages.length === 0) {
+                uni.showToast({ title: '没有待确认的阶段', icon: 'none' })
+                return
+              }
+
+              // 并发调用 /orderStage/confirm 接口
               await Promise.all(
-                updateRequests.map(payload => orderStageService.update(payload))
+                unconfirmedStages.map(stage => confirmOrderStage(stage.orderStageId))
               )
 
               // 更新本地状态
@@ -256,12 +257,11 @@ export default {
               })
 
               uni.showToast({
-                title: `成功确认 ${updateRequests.length} 个阶段`,
+                title: `成功确认 ${unconfirmedStages.length} 个阶段`,
                 icon: 'success',
                 duration: 2000
               })
 
-              // 成功后返回上一页
               setTimeout(() => {
                 uni.navigateBack()
               }, 1500)

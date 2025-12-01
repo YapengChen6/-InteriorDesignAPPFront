@@ -17,13 +17,14 @@
       <view class="upload-info">
         <view class="info-header">
           <text class="iconfont icon-info">ℹ️</text>
-          <text class="info-title">上传说明</text>
+          <text class="info-title">施工阶段说明</text>
         </view>
         <view class="info-content">
-          <text class="info-item">• 为每个施工阶段上传详细的施工记录</text>
-          <text class="info-item">• 每个阶段可上传多张图片和文字说明</text>
-          <text class="info-item">• 图片将按上传顺序显示</text>
-          <text class="info-item">• 完成所有记录后点击"提交所有记录"</text>
+          <text class="info-item">• 展示项目所有施工阶段状态</text>
+          <text class="info-item">• 阶段状态会根据施工进度更新</text>
+          <text class="info-item">• 当前可操作的阶段会显示操作按钮</text>
+          <text class="info-item">• 点击阶段可查看详细信息</text>
+          <text class="info-item">• 点击查看日志可查看历史施工记录</text>
         </view>
       </view>
 
@@ -31,119 +32,214 @@
       <view class="stages-card">
         <view class="card-header">
           <text class="iconfont icon-list">📋</text>
-          <text class="header-title">施工阶段记录</text>
+          <text class="header-title">施工阶段列表</text>
         </view>
 
         <view class="card-body">
           <view class="stages-container">
-            <view 
-              v-for="(stage, stageIndex) in stages" 
-              :key="stage.orderStageId" 
-              class="stage-section"
-            >
+            <view v-for="stage in sortedStages" :key="stage.orderStageId" class="stage-section">
+              
               <!-- 阶段标题 -->
-              <view class="stage-header" @tap="toggleStage(stageIndex)">
+              <view class="stage-header">
                 <view class="stage-title">
                   <view class="stage-number">{{ stage.sequence }}</view>
-                  <text class="stage-name">{{ stage.name }}</text>
+                  <view class="stage-info">
+                    <text class="stage-name">{{ stage.name }}</text>
+                    <view class="stage-status" :class="getStatusClass(stage.status)">
+                      {{ getStatusText(stage.status) }}
+                    </view>
+                  </view>
                 </view>
-                <view class="stage-arrow">
-                  <text class="iconfont" :class="arrowClassMap[stage.expanded ? 'up' : 'down']">
-                    {{ stage.expanded ? '↑' : '↓' }}
-                  </text>
+                
+                <!-- 操作按钮区域 -->
+                <view class="stage-actions-right">
+                  <!-- 开始按钮 -->
+                  <button 
+                    v-if="isEligibleStartStage(stage)" 
+                    class="btn-start btn-start-confirmed" 
+                    @tap.stop="startStage(stage)"
+                  >
+                    <text class="iconfont icon-play">▶</text>
+                    <text class="btn-text">开始施工</text>
+                  </button>
+                  
+                  <!-- 上传日志按钮 -->
+                  <button 
+                    v-else-if="stage.status === 2" 
+                    class="btn-action btn-progress"
+                    @tap.stop="goToStageDetail(stage)"
+                  >
+                    <text class="iconfont">📝</text>
+                    <text class="btn-text">上传日志</text>
+                  </button>
+                  
+                  <!-- 已完成的阶段 -->
+                  <view v-else-if="stage.status === 4" class="completed-badge">
+                    <text class="iconfont icon-completed">✓</text>
+                    <text class="badge-text">已完成</text>
+                  </view>
+                  
+                  <!-- 其他状态占位 -->
+                  <view v-else class="status-placeholder"></view>
+                  
+                  <!-- 新增：阶段完成按钮（status=2时显示） -->
+                  <button 
+                    v-if="stage.status === 2" 
+                    class="btn-stage-complete"
+                    @tap.stop="markStageAsReadyForInspection(stage)"
+                  >
+                    <text class="iconfont icon-flag">🚩</text>
+                    <text class="btn-text">阶段完成</text>
+                  </button>
+                  
+                  <!-- 新增：已完成按钮（status=3或4时显示） -->
+                  <button 
+                    v-else-if="stage.status === 3 || stage.status === 4" 
+                    class="btn-stage-finished"
+                    disabled
+                  >
+                    <text class="iconfont icon-check-circle">✓</text>
+                    <text class="btn-text">已完成</text>
+                  </button>
                 </view>
               </view>
 
-              <!-- 阶段内容 - 可折叠 -->
+              <!-- 查看日志按钮 -->
+              <view 
+                v-if="stage.status >= 2" 
+                class="view-log-btn"
+                @tap="viewStageLogs(stage)"
+              >
+                <text class="iconfont icon-history">📜</text>
+                <text class="btn-text">查看日志</text>
+              </view>
+
+              <!-- 阶段详情 -->
               <view class="stage-content" v-if="stage.expanded">
-                <!-- 图片上传区域 -->
-                <view class="upload-section">
-                  <view class="section-title">
-                    <text class="iconfont icon-image">🖼️</text>
-                    <text class="title-text">施工图片</text>
+                <view class="stage-details">
+                  <view class="detail-item">
+                    <text class="detail-label">阶段描述：</text>
+                    <text class="detail-value">{{ stage.description || '暂无描述' }}</text>
                   </view>
-                  
-                  <view class="images-container">
-                    <!-- 已上传的图片 -->
-                    <view 
-                      v-for="(image, imgIndex) in stage.images" 
-                      :key="imgIndex"
-                      class="image-item"
-                    >
-                      <image 
-                        :src="image.url" 
-                        class="uploaded-image"
-                        mode="aspectFill"
-                        @tap="previewImage(stageIndex, imgIndex)"
-                      />
-                      <view class="image-actions">
-                        <view class="action-btn" @tap="removeImage(stageIndex, imgIndex)">
-                          <text class="iconfont icon-delete">🗑️</text>
-                        </view>
-                      </view>
-                    </view>
-                    
-                    <!-- 添加图片按钮 -->
-                    <view class="add-image-btn" @tap="chooseImage(stageIndex)">
-                      <view class="add-icon">
-                        <text class="iconfont icon-add">+</text>
-                      </view>
-                      <text class="add-text">添加图片</text>
-                      <text class="image-count" v-if="stage.images.length > 0">
-                        {{ stage.images.length }}/9
-                      </text>
-                    </view>
+                  <view class="detail-item">
+                    <text class="detail-label">创建时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.createTime) }}</text>
+                  </view>
+                  <view class="detail-item">
+                    <text class="detail-label">预计开始时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.planStartTime) || '未设置' }}</text>
+                  </view>
+                  <view class="detail-item">
+                    <text class="detail-label">预计完成时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.planEndTime) || '未设置' }}</text>
+                  </view>
+                  <view v-if="stage.status >= 2" class="detail-item">
+                    <text class="detail-label">实际开始时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.actualStartTime) || '未开始' }}</text>
+                  </view>
+                  <view v-if="stage.status === 4" class="detail-item">
+                    <text class="detail-label">实际完成时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.actualFinishTime) || '未完成' }}</text>
                   </view>
                 </view>
-
-                <!-- 文字说明区域 -->
-                <view class="text-section">
-                  <view class="section-title">
-                    <text class="iconfont icon-text">📝</text>
-                    <text class="title-text">施工说明</text>
+                
+                <!-- 历史施工记录预览 - 始终显示前3条记录 -->
+                <view v-if="stage.status >= 2" class="stage-history">
+                  <view class="history-title">
+                    <text class="iconfont icon-history">📜</text>
+                    <text class="title-text">最近施工记录</text>
+                    <text class="view-all" @tap="viewStageLogs(stage)">查看全部</text>
                   </view>
                   
-                  <textarea 
-                    v-model="stage.description"
-                    class="description-textarea"
-                    placeholder="请输入该阶段的施工说明、注意事项、完成情况等..."
-                    placeholder-class="placeholder"
-                    maxlength="1000"
-                    auto-height
-                  />
-                  <view class="char-count">{{ stage.description.length }}/1000</view>
+                  <!-- 如果有施工记录，显示前3条 -->
+                  <view v-if="stage.recentLogs && stage.recentLogs.length > 0" class="history-list">
+                    <view v-for="record in stage.recentLogs.slice(0, 3)" :key="record.orderTaskId" class="history-item">
+                      <view class="record-header">
+                        <text class="record-time">{{ formatDate(record.createTime) }}</text>
+                      </view>
+                      <text class="record-content">{{ record.description || '无描述' }}</text>
+                      <view v-if="record.mediaList && record.mediaList.length > 0" class="record-images">
+                        <text class="image-count">{{ record.mediaList.length }}张图片</text>
+                      </view>
+                    </view>
+                  </view>
+                  
+                  <!-- 如果没有施工记录 -->
+                  <view v-else class="empty-history">
+                    <text class="iconfont icon-empty">📝</text>
+                    <text class="empty-text">暂无施工记录</text>
+                    <text class="add-log-tip" v-if="stage.status === 2">点击"上传日志"按钮添加施工记录</text>
+                  </view>
                 </view>
+              </view>
+              
+              <!-- 折叠/展开按钮 -->
+              <view class="stage-toggle" @tap="toggleStage(stage)">
+                <text class="toggle-text">{{ stage.expanded ? '收起' : '展开' }}详情</text>
+                <text class="iconfont">{{ stage.expanded ? '↑' : '↓' }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
 
-                <!-- 当前阶段提交按钮 -->
-                <view class="stage-actions">
-                  <button 
-                    class="btn-stage-submit" 
-                    @tap="submitStage(stageIndex)"
-                    :disabled="stage.submitting"
-                  >
-                    <text class="iconfont icon-check">✓</text>
-                    <text class="btn-text">
-                      {{ stage.submitting ? '提交中...' : '提交本阶段记录' }}
-                    </text>
-                  </button>
+    <!-- 日志详情模态框 -->
+    <view v-if="showLogModal" class="log-modal" @tap="closeLogModal">
+      <view class="modal-content" @tap.stop>
+        <view class="modal-header">
+          <text class="modal-title">
+            <text class="iconfont icon-doc">📋</text>
+            {{ currentStageName }} - 施工日志
+          </text>
+          <text class="iconfont icon-close" @tap="closeLogModal">×</text>
+        </view>
+        
+        <scroll-view scroll-y class="modal-body">
+          <view v-if="stageLogs.length > 0" class="logs-list">
+            <view v-for="log in stageLogs" :key="log.orderTaskId" class="log-item">
+              <view class="log-header">
+                <view class="log-info">
+                  <text class="log-time">{{ formatDate(log.createTime) }}</text>
+                </view>
+                <text class="log-type">施工日志</text>
+              </view>
+              
+              <view class="log-content">
+                <text class="log-desc">{{ log.description || '无描述' }}</text>
+              </view>
+              
+              <view v-if="log.mediaList && log.mediaList.length > 0" class="log-images">
+                <view class="images-title">
+                  <text class="iconfont icon-image">🖼️</text>
+                  <text class="title-text">现场照片 ({{ log.mediaList.length }}张)</text>
+                </view>
+                <view class="images-grid">
+                  <view v-for="(media, imgIndex) in log.mediaList.slice(0, 6)" :key="media.mediaId" class="image-item" @tap="previewImage(log.mediaList, imgIndex)">
+                    <image :src="media.fileUrl" class="preview-image" mode="aspectFill" lazy-load />
+                    <view v-if="imgIndex === 5 && log.mediaList.length > 6" class="more-images">
+                      <text>+{{ log.mediaList.length - 6 }}</text>
+                    </view>
+                  </view>
                 </view>
               </view>
             </view>
           </view>
-
-          <!-- 全局操作按钮 -->
-          <view class="global-actions">
-            <button 
-              class="btn-submit-all" 
-              @tap="submitAllStages"
-              :disabled="loading || allSubmitted"
-            >
-              <text class="iconfont icon-upload">📤</text>
-              <text class="btn-text">
-                {{ loading ? '提交中...' : allSubmitted ? '全部已提交' : '提交所有记录' }}
-              </text>
-            </button>
+          
+          <view v-else class="empty-logs">
+            <text class="iconfont icon-empty">📝</text>
+            <text class="empty-text">暂无施工日志记录</text>
           </view>
+        </scroll-view>
+        
+        <view class="modal-footer">
+          <button class="btn-upload-log" v-if="currentStage && currentStage.status === 2" @tap="goToLogEdit(currentStage)">
+            <text class="iconfont icon-add">+</text>
+            <text class="btn-text">上传新日志</text>
+          </button>
+          <button class="btn-close" @tap="closeLogModal">
+            <text class="btn-text">关闭</text>
+          </button>
         </view>
       </view>
     </view>
@@ -163,25 +259,38 @@ export default {
       userId: '',
       stages: [],
       loading: false,
-      // 箭头类名映射
-      arrowClassMap: {
-        'up': 'icon-up',
-        'down': 'icon-down'
+      showLogModal: false,
+      currentStage: null,
+      stageLogs: [],
+      statusMap: {
+        0: '待确认',
+        1: '已确认',
+        2: '进行中',
+        3: '待验收',
+        4: '已完成',
+        5: '已取消'
       }
+    }
+  },
+
+  computed: {
+    sortedStages() {
+      return [...this.stages].sort((a, b) => a.sequence - b.sequence)
+    },
+    currentStageName() {
+      return this.currentStage ? this.currentStage.name : ''
     }
   },
 
   onLoad(options) {
     this.orderId = options.orderId || ''
     this.userId = options.userId || ''
-    console.log('阶段施工记录页面加载，订单ID:', this.orderId)
-    this.loadStages()
-  },
-
-  computed: {
-    allSubmitted() {
-      return this.stages.every(stage => stage.submitted)
+    if (!this.orderId) {
+      uni.showToast({ title: '缺少订单ID', icon: 'none' })
+      setTimeout(() => this.goBack(), 1500)
+      return
     }
+    this.loadStages()
   },
 
   methods: {
@@ -192,24 +301,50 @@ export default {
         const response = await orderStageService.list({ orderId: this.orderId })
 
         const rawData = response.data || []
+        this.stages = await Promise.all(
+          rawData.map(async (item) => {
+            const stageData = {
+              ...item,
+              sequence: Number(item.sequence) || 0,
+              status: Number(item.status) || 0,
+              name: item.name || '',
+              description: item.description || '',
+              expanded: false,
+              recentLogs: []
+            }
 
-        this.stages = rawData.map(item => ({
-          ...item,
-          sequence: Number(item.sequence) || 0,
-          status: Number(item.status) || 0,
-          name: item.name || '',
-          description: '', // 清空原有描述，用于输入新的施工说明
-          images: [], // 图片列表
-          expanded: false, // 折叠状态
-          submitting: false, // 提交状态
-          submitted: false // 是否已提交
-        })).sort((a, b) => a.sequence - b.sequence)
+            // 对于已开始、进行中、待验收、已完成的阶段，加载任务列表
+            if (stageData.status >= 2) {
+              try {
+                const { getOrderTaskList } = require('@/api/orderTask.js')
+                // 关键修改：使用 stageId 参数（注意是小写）
+                const taskResponse = await getOrderTaskList({
+                  stageId: stageData.orderStageId, // 使用 stageId 而不是 orderStageId
+                  pageNum: 1,
+                  pageSize: 10
+                })
+                
+                console.log(`阶段 ${stageData.name} (ID: ${stageData.orderStageId}) 的日志查询结果:`, taskResponse)
+                
+                if (taskResponse && taskResponse.data && taskResponse.data.length > 0) {
+                  // 根据新的数据结构转换，只取最新的3条记录
+                  stageData.recentLogs = taskResponse.data
+                    .map(task => ({
+                      ...task,
+                      id: task.orderTaskId,
+                      imageUrls: (task.mediaList || []).map(media => media.fileUrl)
+                    }))
+                    .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
+                    .slice(0, 3) // 只取最新的3条记录
+                }
+              } catch (error) {
+                console.error(`加载阶段${stageData.name}的任务列表失败:`, error)
+              }
+            }
 
-        // 默认展开第一个阶段
-        if (this.stages.length > 0) {
-          this.stages[0].expanded = true
-        }
-
+            return stageData
+          })
+        )
       } catch (error) {
         console.error('加载阶段失败:', error)
         uni.showToast({
@@ -222,179 +357,200 @@ export default {
       }
     },
 
-    // 切换阶段展开/折叠
-    toggleStage(index) {
-      this.stages[index].expanded = !this.stages[index].expanded
+    isEligibleStartStage(stage) {
+      if (stage.status !== 1) return false
+      const confirmedStages = this.sortedStages.filter(s => s.status === 1)
+      if (confirmedStages.length === 0) return false
+      const minSequence = Math.min(...confirmedStages.map(s => s.sequence))
+      return stage.sequence === minSequence
     },
 
-    // 选择图片
-    async chooseImage(stageIndex) {
-      const stage = this.stages[stageIndex]
-      if (stage.images.length >= 9) {
-        uni.showToast({
-          title: '最多只能上传9张图片',
-          icon: 'none',
-          duration: 2000
-        })
-        return
-      }
-
-      try {
-        const res = await uni.chooseImage({
-          count: 9 - stage.images.length,
-          sizeType: ['compressed'],
-          sourceType: ['album', 'camera']
-        })
-
-        // 模拟上传过程
-        const tempImages = res.tempFilePaths.map(url => ({
-          url,
-          uploading: true
-        }))
-
-        stage.images.push(...tempImages)
-
-        // 模拟上传完成
-        setTimeout(() => {
-          tempImages.forEach(img => {
-            img.uploading = false
-          })
-        }, 1000)
-
-      } catch (error) {
-        console.error('选择图片失败:', error)
+    toggleStage(stage) {
+      const index = this.stages.findIndex(s => s.orderStageId === stage.orderStageId)
+      if (index !== -1) {
+        this.stages[index].expanded = !this.stages[index].expanded
       }
     },
 
-    // 预览图片
-    previewImage(stageIndex, imgIndex) {
-      const stage = this.stages[stageIndex]
-      const urls = stage.images.map(img => img.url)
-      uni.previewImage({
-        current: urls[imgIndex],
-        urls: urls
-      })
-    },
-
-    // 删除图片
-    removeImage(stageIndex, imgIndex) {
+    async startStage(stage) {
       uni.showModal({
-        title: '确认删除',
-        content: '确定要删除这张图片吗？',
-        success: (res) => {
-          if (res.confirm) {
-            this.stages[stageIndex].images.splice(imgIndex, 1)
-          }
-        }
-      })
-    },
-
-    // 提交单个阶段
-    async submitStage(stageIndex) {
-      const stage = this.stages[stageIndex]
-      
-      if (stage.images.length === 0 && !stage.description.trim()) {
-        uni.showToast({
-          title: '请至少上传图片或填写说明',
-          icon: 'none',
-          duration: 2000
-        })
-        return
-      }
-
-      stage.submitting = true
-      try {
-        // 这里调用实际的API接口
-        // const { orderStageRecordService } = require('@/api/orderStageRecord.js')
-        // await orderStageRecordService.save({
-        //   orderStageId: stage.orderStageId,
-        //   description: stage.description,
-        //   images: stage.images.map(img => img.url) // 实际应该是上传后的URL
-        // })
-
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
-        stage.submitted = true
-        uni.showToast({
-          title: '阶段记录提交成功',
-          icon: 'success',
-          duration: 2000
-        })
-
-      } catch (error) {
-        console.error('提交阶段记录失败:', error)
-        uni.showToast({
-          title: error?.msg || '提交失败，请重试',
-          icon: 'none',
-          duration: 2000
-        })
-      } finally {
-        stage.submitting = false
-      }
-    },
-
-    // 提交所有阶段
-    async submitAllStages() {
-      if (this.allSubmitted) {
-        uni.showToast({
-          title: '所有阶段已提交',
-          icon: 'none',
-          duration: 2000
-        })
-        return
-      }
-
-      const unsubmittedStages = this.stages.filter(stage => !stage.submitted)
-      let hasEmptyStage = false
-
-      // 检查未提交的阶段
-      for (const stage of unsubmittedStages) {
-        if (stage.images.length === 0 && !stage.description.trim()) {
-          hasEmptyStage = true
-          break
-        }
-      }
-
-      if (hasEmptyStage) {
-        uni.showToast({
-          title: '请为所有阶段填写内容',
-          icon: 'none',
-          duration: 2000
-        })
-        return
-      }
-
-      uni.showModal({
-        title: '确认提交',
-        content: `确定要提交所有${unsubmittedStages.length}个阶段的记录吗？`,
+        title: '确认开始',
+        content: `确定要开始"${stage.name}"阶段的施工吗？`,
         success: async (res) => {
           if (res.confirm) {
             this.loading = true
             try {
-              // 批量提交所有未提交的阶段
-              for (const stage of unsubmittedStages) {
-                await this.submitStage(this.stages.findIndex(s => s.orderStageId === stage.orderStageId))
-              }
-
-              uni.showToast({
-                title: '所有记录提交成功',
-                icon: 'success',
-                duration: 2000
-              })
-
-              setTimeout(() => {
-                uni.navigateBack()
-              }, 1500)
-
+              const { startOrderStage } = require('@/api/orderStage.js')
+              await startOrderStage(stage.orderStageId)
+              uni.showToast({ title: '阶段已开始', icon: 'success' })
+              this.loadStages()
             } catch (error) {
-              console.error('批量提交失败:', error)
+              console.error('开始阶段失败:', error)
+              uni.showToast({
+                title: error?.msg || '操作失败，请重试',
+                icon: 'none'
+              })
             } finally {
               this.loading = false
             }
           }
         }
       })
+    },
+
+    async goToStageDetail(stage) {
+      this.loading = true
+      try {
+        const { saveNull } = require('@/api/orderTask.js')
+        const res = await saveNull({
+          userId: this.userId,
+          orderStageId: stage.orderStageId
+        })
+
+        const orderTaskId = res.data
+        if (!orderTaskId || orderTaskId === '0') {
+          throw new Error('服务端未返回有效的日志ID')
+        }
+
+        uni.navigateTo({
+          url: `/pages/order-hall/orderstage-detail?userId=${this.userId}&orderStageId=${stage.orderStageId}&orderTaskId=${orderTaskId}`
+        })
+      } catch (error) {
+        console.error('创建日志失败:', error)
+        uni.showToast({
+          title: error.message || '创建日志失败，请重试',
+          icon: 'none'
+        })
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // 新增：标记阶段为待验收（status 2 -> 3）
+    async markStageAsReadyForInspection(stage) {
+      uni.showModal({
+        title: '阶段完成',
+        content: `确定要将"${stage.name}"阶段标记为已完成并等待验收吗？`,
+        success: async (res) => {
+          if (res.confirm) {
+            this.loading = true
+            try {
+              // 使用 updateOrderStage 接口更新状态
+              const { updateOrderStage } = require('@/api/orderStage.js')
+              // 只传递后端支持的字段
+              await updateOrderStage({
+                orderStageId: stage.orderStageId,
+                status: 3 // 更新为待验收状态
+                // 注意：不要传递 actualFinishTime，后端不支持此字段
+              })
+              uni.showToast({ title: '阶段已标记为待验收', icon: 'success' })
+              this.loadStages() // 重新加载阶段数据
+            } catch (error) {
+              console.error('标记阶段为待验收失败:', error)
+              uni.showToast({
+                title: error?.msg || '操作失败，请重试',
+                icon: 'none'
+              })
+            } finally {
+              this.loading = false
+            }
+          }
+        }
+      })
+    },
+
+    async viewStageLogs(stage) {
+      console.log('查看阶段日志，阶段ID:', stage.orderStageId, '名称:', stage.name) // 调试日志
+      
+      this.currentStage = stage
+      this.loading = true
+      
+      try {
+        const { getOrderTaskList } = require('@/api/orderTask.js')
+        // 关键修改：使用 stageId 参数（注意是小写）
+        const response = await getOrderTaskList({
+          stageId: stage.orderStageId, // 使用 stageId 而不是 orderStageId
+          pageNum: 1,
+          pageSize: 50
+        })
+        
+        console.log('API返回的日志数据:', response.data) // 调试日志
+        
+        if (response && response.data && response.data.length > 0) {
+          // 根据新的数据结构处理
+          this.stageLogs = response.data
+            .map(task => ({
+              ...task,
+              type: '施工日志',
+              imageUrls: (task.mediaList || []).map(media => media.fileUrl)
+            }))
+            .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
+          
+          console.log('处理后显示的日志:', this.stageLogs) // 调试日志
+        } else {
+          this.stageLogs = []
+          console.log('该阶段没有找到日志') // 调试日志
+        }
+        
+        this.showLogModal = true
+      } catch (error) {
+        console.error('加载阶段日志失败:', error)
+        uni.showToast({
+          title: '加载日志失败，请重试',
+          icon: 'none'
+        })
+      } finally {
+        this.loading = false
+      }
+    },
+
+    closeLogModal() {
+      this.showLogModal = false
+      this.currentStage = null
+      this.stageLogs = []
+    },
+
+    goToLogEdit(stage) {
+      this.closeLogModal()
+      this.goToStageDetail(stage)
+    },
+
+    // 预览图片 - 修改为支持mediaList数据结构
+    previewImage(mediaList, index) {
+      if (mediaList && mediaList.length > 0) {
+        // 从mediaList中提取fileUrl数组
+        const imageUrls = mediaList.map(media => media.fileUrl)
+        uni.previewImage({
+          current: Math.min(index, imageUrls.length - 1),
+          urls: imageUrls
+        })
+      }
+    },
+
+    getStatusText(status) {
+      return this.statusMap[status] || '未知状态'
+    },
+
+    getStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-confirmed',
+        2: 'status-progress',
+        3: 'status-inspect',
+        4: 'status-completed',
+        5: 'status-cancelled'
+      }
+      return classMap[status] || 'status-unknown'
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return ''
+      try {
+        const date = new Date(dateString)
+        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+      } catch (e) {
+        return dateString
+      }
     },
 
     goBack() {
@@ -405,6 +561,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+/* 样式保持不变，与之前相同 */
 .container {
   min-height: 100vh;
   background-color: #f0f2f5;
@@ -479,10 +636,10 @@ export default {
   align-items: center;
   padding: 30rpx;
   background: white;
-  cursor: pointer;
   .stage-title {
     display: flex;
     align-items: center;
+    flex: 1;
     .stage-number {
       background: #2c6aa0;
       color: white;
@@ -496,180 +653,534 @@ export default {
       margin-right: 20rpx;
       font-weight: bold;
     }
-    .stage-name { 
-      font-weight: 600; 
-      color: #2c6aa0; 
-      font-size: 32rpx;
+    .stage-info {
+      display: flex;
+      flex-direction: column;
+      gap: 10rpx;
+      .stage-name { 
+        font-weight: 600; 
+        color: #2c6aa0; 
+        font-size: 32rpx;
+      }
+      .stage-status {
+        font-size: 24rpx;
+        padding: 6rpx 12rpx;
+        border-radius: 20rpx;
+        display: inline-block;
+        width: fit-content;
+        
+        &.status-pending { background: #ffebee; color: #f44336; }
+        &.status-confirmed { background: #e8f5e9; color: #4caf50; }
+        &.status-progress { background: #e3f2fd; color: #2196f3; }
+        &.status-inspect { background: #fff3e0; color: #ff9800; }
+        &.status-completed { background: #e8f5e9; color: #4caf50; }
+        &.status-cancelled { background: #f5f5f5; color: #9e9e9e; }
+      }
     }
   }
-  .stage-arrow .iconfont {
+  
+  .stage-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    
+    .btn-start {
+      min-width: 160rpx;
+      height: 60rpx;
+      border: none;
+      border-radius: 30rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10rpx;
+      font-size: 26rpx;
+      font-weight: 600;
+      padding: 0 24rpx;
+      background: linear-gradient(135deg, #4caf50, #2e7d32);
+      color: white;
+      
+      .iconfont { font-size: 24rpx; }
+    }
+    
+    .btn-action {
+      min-width: 160rpx;
+      height: 60rpx;
+      border: none;
+      border-radius: 30rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10rpx;
+      font-size: 26rpx;
+      font-weight: 600;
+      padding: 0 24rpx;
+      
+      &.btn-progress {
+        background: linear-gradient(135deg, #2196f3, #1976d2);
+        color: white;
+      }
+    }
+    
+    .completed-badge {
+      min-width: 120rpx;
+      height: 60rpx;
+      border-radius: 30rpx;
+      background: #e8f5e9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8rpx;
+      padding: 0 20rpx;
+      
+      .iconfont {
+        color: #4caf50;
+        font-size: 24rpx;
+      }
+      
+      .badge-text {
+        color: #4caf50;
+        font-size: 24rpx;
+        font-weight: 500;
+      }
+    }
+    
+    /* 新增：阶段完成按钮样式 */
+    .btn-stage-complete {
+      min-width: 140rpx;
+      height: 60rpx;
+      border: none;
+      border-radius: 30rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8rpx;
+      font-size: 24rpx;
+      font-weight: 500;
+      padding: 0 20rpx;
+      background: linear-gradient(135deg, #ff9800, #f57c00);
+      color: white;
+      
+      .iconfont {
+        font-size: 22rpx;
+      }
+    }
+    
+    /* 新增：已完成按钮样式 */
+    .btn-stage-finished {
+      min-width: 140rpx;
+      height: 60rpx;
+      border: none;
+      border-radius: 30rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8rpx;
+      font-size: 24rpx;
+      font-weight: 500;
+      padding: 0 20rpx;
+      background: #e8f5e9;
+      color: #4caf50;
+      
+      .iconfont {
+        font-size: 22rpx;
+      }
+    }
+    
+    .status-placeholder {
+      width: 120rpx;
+      height: 60rpx;
+    }
+  }
+}
+
+.view-log-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15rpx 30rpx;
+  background: #f0f7ff;
+  border-top: 1rpx solid #e1e4e8;
+  border-bottom: 1rpx solid #e1e4e8;
+  cursor: pointer;
+  
+  .iconfont {
+    color: #2c6aa0;
+    margin-right: 10rpx;
+    font-size: 26rpx;
+  }
+  
+  .btn-text {
+    color: #2c6aa0;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+  
+  &:active {
+    opacity: 0.7;
+    background: #e1ecff;
+  }
+}
+
+.stage-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx;
+  background: #f8f9fa;
+  border-top: 2rpx solid #e1e4e8;
+  cursor: pointer;
+  
+  .toggle-text {
     color: #666;
-    font-size: 28rpx;
-    transition: transform 0.3s;
+    font-size: 26rpx;
+    margin-right: 10rpx;
+  }
+  
+  .iconfont {
+    color: #666;
+    font-size: 24rpx;
   }
 }
 
 .stage-content {
-  padding: 0 30rpx 30rpx;
-}
-
-.upload-section, .text-section {
-  margin-bottom: 40rpx;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  margin-bottom: 20rpx;
-  .iconfont { 
-    color: #2c6aa0; 
-    margin-right: 15rpx; 
-    font-size: 32rpx;
+  padding: 30rpx;
+  background: #f8f9fa;
+  
+  .stage-details {
+    background: white;
+    border-radius: 12rpx;
+    padding: 24rpx;
+    margin-bottom: 30rpx;
+    
+    .detail-item {
+      display: flex;
+      margin-bottom: 16rpx;
+      font-size: 28rpx;
+      
+      .detail-label {
+        color: #666;
+        min-width: 180rpx;
+      }
+      
+      .detail-value {
+        color: #333;
+        flex: 1;
+        word-break: break-word;
+      }
+    }
   }
-  .title-text {
-    color: #34495e;
-    font-size: 28rpx;
-    font-weight: 600;
-  }
-}
-
-.images-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20rpx;
-}
-
-.image-item {
-  position: relative;
-  width: 200rpx;
-  height: 200rpx;
-  border-radius: 12rpx;
-  overflow: hidden;
-  .uploaded-image {
-    width: 100%;
-    height: 100%;
-  }
-  .image-actions {
-    position: absolute;
-    top: 8rpx;
-    right: 8rpx;
-    .action-btn {
-      background: rgba(0, 0, 0, 0.6);
-      border-radius: 50%;
-      width: 50rpx;
-      height: 50rpx;
+  
+  .stage-history {
+    background: white;
+    border-radius: 12rpx;
+    padding: 24rpx;
+    
+    .history-title {
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: space-between;
+      margin-bottom: 20rpx;
+      
       .iconfont {
-        color: white;
+        color: #2c6aa0;
+        margin-right: 15rpx;
+        font-size: 28rpx;
+      }
+      
+      .title-text {
+        color: #34495e;
+        font-size: 28rpx;
+        font-weight: 600;
+        flex: 1;
+      }
+      
+      .view-all {
+        color: #2c6aa0;
+        font-size: 24rpx;
+        cursor: pointer;
+        
+        &:active {
+          opacity: 0.7;
+        }
+      }
+    }
+    
+    .history-list {
+      .history-item {
+        padding: 20rpx 0;
+        border-bottom: 1rpx solid #eee;
+        &:last-child { border-bottom: none; }
+        
+        .record-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8rpx;
+          
+          .record-time { 
+            color: #999; 
+            font-size: 24rpx; 
+          }
+        }
+        
+        .record-content { 
+          color: #333; 
+          font-size: 26rpx; 
+          line-height: 1.5; 
+          margin-bottom: 8rpx;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+        
+        .record-images {
+          .image-count {
+            color: #666;
+            font-size: 22rpx;
+            background: #f5f5f5;
+            padding: 4rpx 12rpx;
+            border-radius: 12rpx;
+          }
+        }
+      }
+    }
+    
+    .empty-history {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60rpx 0;
+      text-align: center;
+      
+      .iconfont { 
+        font-size: 80rpx; 
+        color: #ddd; 
+        margin-bottom: 20rpx; 
+      }
+      .empty-text { 
+        color: #999; 
+        font-size: 28rpx; 
+        margin-bottom: 10rpx;
+      }
+      .add-log-tip {
+        color: #2c6aa0;
         font-size: 24rpx;
       }
     }
   }
 }
 
-.add-image-btn {
-  width: 200rpx;
-  height: 200rpx;
-  border: 2rpx dashed #ddd;
-  border-radius: 12rpx;
+.log-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #fafafa;
-  .add-icon {
-    width: 80rpx;
-    height: 80rpx;
-    background: #2c6aa0;
-    border-radius: 50%;
+  z-index: 1000;
+  padding: 30rpx;
+  
+  .modal-content {
+    background: white;
+    border-radius: 20rpx;
+    width: 100%;
+    max-height: 80vh;
     display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    margin-bottom: 15rpx;
-    .iconfont {
-      color: white;
+    padding: 30rpx;
+    background: #2c6aa0;
+    color: white;
+    
+    .modal-title {
+      font-size: 30rpx;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      
+      .iconfont {
+        margin-right: 10rpx;
+        font-size: 30rpx;
+      }
+    }
+    
+    .icon-close {
       font-size: 36rpx;
-      font-weight: bold;
+      cursor: pointer;
+      padding: 10rpx;
+      
+      &:active {
+        opacity: 0.7;
+      }
     }
   }
-  .add-text {
-    color: #666;
-    font-size: 24rpx;
-    margin-bottom: 8rpx;
+  
+  .modal-body {
+    flex: 1;
+    padding: 30rpx;
   }
-  .image-count {
-    color: #999;
-    font-size: 20rpx;
-  }
-}
-
-.description-textarea {
-  width: 100%;
-  min-height: 200rpx;
-  padding: 24rpx;
-  border: 2rpx solid #ddd;
-  border-radius: 10rpx;
-  font-size: 28rpx;
-  background: white;
-  box-sizing: border-box;
-}
-
-.char-count {
-  text-align: right;
-  color: #999;
-  font-size: 24rpx;
-  margin-top: 10rpx;
-}
-
-.placeholder {
-  color: #999;
-}
-
-.stage-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 30rpx;
-  .btn-stage-submit {
-    background: #27ae60;
-    color: white;
-    border: none;
-    border-radius: 8rpx;
-    padding: 20rpx 40rpx;
-    display: flex;
-    align-items: center;
-    gap: 15rpx;
-    font-size: 26rpx;
-    font-weight: 600;
-    &:disabled {
-      background: #ccc;
-      opacity: 0.6;
+  
+  .logs-list {
+    .log-item {
+      background: #f8f9fa;
+      border-radius: 12rpx;
+      padding: 24rpx;
+      margin-bottom: 20rpx;
+      
+      .log-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15rpx;
+        
+        .log-info {
+          flex: 1;
+          
+          .log-time {
+            color: #666;
+            font-size: 24rpx;
+            margin-bottom: 4rpx;
+          }
+        }
+        
+        .log-type {
+          background: #2c6aa0;
+          color: white;
+          padding: 4rpx 12rpx;
+          border-radius: 12rpx;
+          font-size: 22rpx;
+        }
+      }
+      
+      .log-content {
+        .log-desc {
+          color: #333;
+          font-size: 26rpx;
+          line-height: 1.6;
+        }
+      }
+      
+      .log-images {
+        margin-top: 15rpx;
+        
+        .images-title {
+          display: flex;
+          align-items: center;
+          margin-bottom: 15rpx;
+          
+          .iconfont {
+            color: #2c6aa0;
+            margin-right: 10rpx;
+            font-size: 24rpx;
+          }
+          
+          .title-text {
+            color: #666;
+            font-size: 24rpx;
+          }
+        }
+        
+        .images-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10rpx;
+          
+          .image-item {
+            position: relative;
+            width: 100%;
+            padding-top: 100%;
+            border-radius: 8rpx;
+            overflow: hidden;
+            
+            .preview-image {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+            }
+            
+            .more-images {
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background: rgba(0, 0, 0, 0.5);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 20rpx;
+              font-weight: bold;
+            }
+          }
+        }
+      }
     }
-    .iconfont { font-size: 26rpx; }
   }
-}
-
-.global-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 60rpx;
-  .btn-submit-all {
-    background: #2c6aa0;
-    color: white;
-    border: none;
-    border-radius: 12rpx;
-    padding: 28rpx 60rpx;
+  
+  .empty-logs {
     display: flex;
+    flex-direction: column;
     align-items: center;
+    padding: 100rpx 30rpx;
+    text-align: center;
+    
+    .iconfont {
+      font-size: 100rpx;
+      color: #ddd;
+      margin-bottom: 30rpx;
+    }
+    
+    .empty-text {
+      color: #999;
+      font-size: 30rpx;
+    }
+  }
+  
+  .modal-footer {
+    display: flex;
     gap: 20rpx;
-    font-size: 32rpx;
-    font-weight: 600;
-    &:disabled {
-      background: #ccc;
-      opacity: 0.6;
+    padding: 30rpx;
+    border-top: 1rpx solid #e1e4e8;
+    
+    button {
+      flex: 1;
+      height: 80rpx;
+      border: none;
+      border-radius: 12rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10rpx;
+      font-size: 28rpx;
+      font-weight: 500;
+      
+      &.btn-upload-log {
+        background: #2c6aa0;
+        color: white;
+        
+        .iconfont {
+          font-size: 26rpx;
+        }
+      }
+      
+      &.btn-close {
+        background: #f5f5f5;
+        color: #666;
+      }
     }
-    .iconfont { font-size: 32rpx; }
   }
 }
 
@@ -688,19 +1199,5 @@ export default {
     color: white;
     font-size: 32rpx;
   }
-}
-
-/* 箭头图标样式 */
-.icon-up,
-.icon-down {
-  transition: transform 0.3s;
-}
-
-.icon-up {
-  transform: rotate(0deg);
-}
-
-.icon-down {
-  transform: rotate(180deg);
 }
 </style>

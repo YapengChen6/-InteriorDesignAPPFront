@@ -190,24 +190,33 @@
 								
 								<!-- 监理订单：新增施工阶段逻辑 -->
 								<template v-else-if="String(order.type) === '2'">
+									<!-- 新增：所有阶段status=4时显示"待付款"按钮 -->
+									<template v-if="order.allStagesCompleted">
+										<button class="btn primary" @click="paySupervisorOrder(order.orderId)">
+											待付款
+										</button>
+									</template>
+									
 									<!-- 没有施工阶段或有待确认的施工阶段 -->
-									<button v-if="!order.hasStages || order.hasUnconfirmedStages" 
-											class="btn primary" 
-											@click="confirmConstructionStages(order.orderId)">
-										确认施工阶段
-									</button>
+									<template v-else-if="!order.hasStages || order.hasUnconfirmedStages">
+										<button class="btn primary" @click="confirmConstructionStages(order.orderId)">
+											确认施工阶段
+										</button>
+									</template>
 									
 									<!-- 有已确认的施工阶段 -->
-									<button v-else-if="order.hasStages && !order.hasUnconfirmedStages" 
-											class="btn primary" 
-											@click="goToConstructionStage(order.orderId)">
-										施工阶段
-									</button>
+									<template v-else-if="order.hasStages && !order.hasUnconfirmedStages">
+										<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+											施工阶段
+										</button>
+									</template>
 									
 									<!-- 默认按钮（备用） -->
-									<button v-else class="btn primary" @click="goToConstructionStage(order.orderId)">
-										施工阶段
-									</button>
+									<template v-else>
+										<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+											施工阶段
+										</button>
+									</template>
 								</template>
 							</template>
 						</template>
@@ -414,12 +423,23 @@
 					
 					console.log('📝 施工阶段列表:', stages);
 					
+					// 检查是否有施工阶段
+					const hasStages = stages.length > 0;
+					
+					// 检查是否有待确认的阶段（status = 0）
+					const hasUnconfirmedStages = stages.some(stage => Number(stage.status) === 0);
+					
+					// 新增：检查是否所有阶段都已完成（status = 4）
+					const allStagesCompleted = hasStages && stages.every(stage => Number(stage.status) === 4);
+					
 					// 返回施工阶段状态信息
 					return {
-						hasStages: stages.length > 0,
-						hasUnconfirmedStages: stages.some(stage => Number(stage.status) === 0),
+						hasStages,
+						hasUnconfirmedStages,
+						allStagesCompleted,
 						totalStages: stages.length,
-						unconfirmedCount: stages.filter(stage => Number(stage.status) === 0).length
+						unconfirmedCount: stages.filter(stage => Number(stage.status) === 0).length,
+						completedCount: stages.filter(stage => Number(stage.status) === 4).length
 					};
 					
 				} catch (error) {
@@ -427,8 +447,10 @@
 					return {
 						hasStages: false,
 						hasUnconfirmedStages: false,
+						allStagesCompleted: false,
 						totalStages: 0,
-						unconfirmedCount: 0
+						unconfirmedCount: 0,
+						completedCount: 0
 					};
 				}
 			},
@@ -445,6 +467,59 @@
 				} catch (error) {
 					console.error('❌ 跳转施工阶段确认页面失败:', error);
 					this.handleApiError(error, '跳转失败');
+				}
+			},
+
+			// 监理订单待付款按钮点击事件
+			async paySupervisorOrder(orderId) {
+				try {
+					console.log('💰 监理订单待付款，订单ID:', orderId);
+					
+					uni.showModal({
+						title: '确认付款',
+						content: '所有施工阶段已完成，确定要支付这个订单吗？付款后订单将标记为已完成。',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '付款中...' });
+								
+								try {
+									console.log('📤 调用 completeOrder API，订单ID:', orderId);
+									
+									const result = await orderService.completeOrder(orderId);
+									
+									console.log('📡 completeOrder API 响应:', result);
+									
+									uni.hideLoading();
+									
+									if (result === true || (result && result.code === 200)) {
+										uni.showToast({
+											title: '付款成功，订单已完成',
+											icon: 'success',
+											duration: 2000
+										});
+										
+										// 刷新订单列表
+										setTimeout(() => {
+											this.pagination.pageNum = 1;
+											this.loadOrderList();
+										}, 1500);
+										
+									} else {
+										console.error('❌ completeOrder 返回错误:', result);
+										throw new Error(result?.msg || '付款失败');
+									}
+								} catch (error) {
+									uni.hideLoading();
+									console.error('❌ 付款失败:', error);
+									this.handleApiError(error, '付款失败');
+								}
+							}
+						}
+					});
+					
+				} catch (error) {
+					console.error('❌ 监理订单付款操作失败:', error);
+					this.handleApiError(error, '付款操作失败');
 				}
 			},
 
@@ -615,7 +690,9 @@
 							constructionDrawingStatus: null,
 							// 新增施工阶段状态字段
 							hasStages: false,
-							hasUnconfirmedStages: false
+							hasUnconfirmedStages: false,
+							// 新增：所有阶段是否完成字段
+							allStagesCompleted: false
 						}
 						
 						// 只有设计师订单才需要检查设计方案状态
@@ -636,12 +713,16 @@
 							const stagesStatus = await this.checkConstructionStagesStatus(order.orderId);
 							orderWithDetails.hasStages = stagesStatus.hasStages;
 							orderWithDetails.hasUnconfirmedStages = stagesStatus.hasUnconfirmedStages;
+							// 新增：设置所有阶段是否完成
+							orderWithDetails.allStagesCompleted = stagesStatus.allStagesCompleted;
 							
 							console.log(`🏗️ 监理订单 ${order.orderId} 施工阶段状态:`, {
 								是否有阶段: stagesStatus.hasStages,
 								有待确认阶段: stagesStatus.hasUnconfirmedStages,
+								所有阶段已完成: stagesStatus.allStagesCompleted,
 								总阶段数: stagesStatus.totalStages,
-								待确认数: stagesStatus.unconfirmedCount
+								待确认数: stagesStatus.unconfirmedCount,
+								已完成数: stagesStatus.completedCount
 							});
 						}
 						
@@ -801,7 +882,7 @@
 				}
 			},
 
-			// 立即付款
+			// 立即付款（设计师订单）
 			async payOrder(orderId) {
 				try {
 					console.log('💰 立即付款，订单ID:', orderId);
@@ -941,7 +1022,7 @@
 									
 									if (result && (result.code === 200 || result.success)) {
 										uni.showToast({
-												title: '合同已确认',
+											title: '合同已确认',
 											icon: 'success'
 										});
 										
@@ -1041,7 +1122,7 @@
 					console.error('❌ 获取设计师信息失败:', error)
 					return {
 						name: '设计师',
-							phone: '暂无联系方式',
+						phone: '暂无联系方式',
 						avatar: '/static/images/default-avatar.png',
 						role: '设计师'
 					}

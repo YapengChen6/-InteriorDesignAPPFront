@@ -4,132 +4,213 @@
     <view class="custom-navbar">
       <view class="navbar-content">
         <view class="navbar-left" @tap="goBack">
-          <text class="iconfont icon-arrow-left"></text>
+          <text class="iconfont icon-arrow-left">←</text>
         </view>
-        <view class="navbar-title">施工阶段列表</view>
+        <view class="navbar-title">阶段施工记录</view>
         <view class="navbar-right"></view>
       </view>
     </view>
 
     <!-- 页面内容 -->
     <view class="content">
-      <!-- 上传说明 -->
+      <!-- 说明区域 -->
       <view class="upload-info">
         <view class="info-header">
-          <text class="iconfont icon-info"></text>
-          <text class="info-title">阶段说明</text>
+          <text class="iconfont icon-info">ℹ️</text>
+          <text class="info-title">施工阶段说明</text>
         </view>
         <view class="info-content">
-          <text class="info-item">• 以下是该订单的所有施工阶段</text>
-          <text class="info-item">• 阶段按顺序排列，不可编辑</text>
-          <text class="info-item">• 点击"确认所有阶段"按钮将所有阶段状态设为已确认</text>
+          <text class="info-item">• 展示项目所有施工阶段状态</text>
+          <text class="info-item">• 阶段状态会根据施工进度更新</text>
+          <text class="info-item">• 当前可操作的阶段会显示操作按钮</text>
+          <text class="info-item">• 点击阶段可查看详细信息</text>
+          <text class="info-item">• 点击查看日志可查看历史施工记录</text>
         </view>
       </view>
 
       <!-- 施工阶段列表 -->
       <view class="stages-card">
         <view class="card-header">
-          <text class="iconfont icon-list"></text>
+          <text class="iconfont icon-list">📋</text>
           <text class="header-title">施工阶段列表</text>
         </view>
-        
+
         <view class="card-body">
           <view class="stages-container">
-            <view 
-              v-for="(stage, index) in stages" 
-              :key="index" 
-              class="stage-item"
-            >
+            <view v-for="stage in sortedStages" :key="stage.orderStageId" class="stage-section">
+              
+              <!-- 阶段标题 -->
               <view class="stage-header">
                 <view class="stage-title">
                   <view class="stage-number">{{ stage.sequence }}</view>
-                  <text class="stage-text">阶段 {{ stage.sequence }}</text>
-                </view>
-                <!-- 只有在 status=0 时才显示删除按钮 -->
-                <view 
-                  class="remove-stage" 
-                  @tap="removeStage(index, stage.orderStageId)"
-                  v-if="stage.status === 0"
-                >
-                  <text class="remove-icon">×</text>
-                </view>
-              </view>
-
-              <!-- 阶段名称 -->
-              <view class="form-group">
-                <text class="form-label">阶段名称</text>
-                <view class="form-input readonly">{{ stage.name || '-' }}</view>
-              </view>
-
-              <!-- 阶段描述 -->
-              <view class="form-group">
-                <text class="form-label">阶段描述</text>
-                <view class="form-textarea readonly">{{ stage.description || '-' }}</view>
-              </view>
-
-              <!-- 计划时间 -->
-              <view class="form-row">
-                <view class="form-group">
-                  <text class="form-label">计划开始时间</text>
-                  <view class="date-picker readonly">{{ stage.planStartTime || '-' }}</view>
+                  <view class="stage-info">
+                    <text class="stage-name">{{ stage.name }}</text>
+                    <view class="stage-status" :class="getStatusClass(stage.status)">
+                      {{ getStatusText(stage.status) }}
+                    </view>
+                  </view>
                 </view>
                 
-                <view class="form-group">
-                  <text class="form-label">计划结束时间</text>
-                  <view class="date-picker readonly">{{ stage.planEndTime || '-' }}</view>
+                <!-- 操作按钮区域 - 只保留待验收阶段的确认按钮 -->
+                <view class="stage-actions-right">
+                  <!-- 待验收阶段的确认按钮 -->
+                  <button 
+                    v-if="stage.status === 3" 
+                    class="btn-inspect"
+                    @tap.stop="completeStage(stage)"
+                  >
+                    <text class="iconfont icon-check">✓</text>
+                    <text class="btn-text">确认验收</text>
+                  </button>
+                  
+                  <!-- 已完成的阶段 -->
+                  <view v-else-if="stage.status === 4" class="completed-badge">
+                    <text class="iconfont icon-completed">✓</text>
+                    <text class="badge-text">已验收</text>
+                  </view>
+                  
+                  <!-- 其他状态占位 -->
+                  <view v-else class="status-placeholder"></view>
                 </view>
               </view>
 
-              <!-- 阶段状态 -->
-              <view class="form-group">
-                <text class="form-label">阶段状态</text>
-                <view 
-                  class="status-badge" 
-                  :class="statusClassMap[stage.status] || 'status-unknown'"
-                >
-                  {{ statusTextMap[stage.status] || '未知' }}
+              <!-- 查看日志按钮 -->
+              <view 
+                v-if="stage.status >= 2" 
+                class="view-log-btn"
+                @tap="viewStageLogs(stage)"
+              >
+                <text class="iconfont icon-history">📜</text>
+                <text class="btn-text">查看日志</text>
+              </view>
+
+              <!-- 阶段详情 -->
+              <view class="stage-content" v-if="stage.expanded">
+                <view class="stage-details">
+                  <view class="detail-item">
+                    <text class="detail-label">阶段描述：</text>
+                    <text class="detail-value">{{ stage.description || '暂无描述' }}</text>
+                  </view>
+                  <view class="detail-item">
+                    <text class="detail-label">创建时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.createTime) }}</text>
+                  </view>
+                  <view class="detail-item">
+                    <text class="detail-label">预计开始时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.planStartTime) || '未设置' }}</text>
+                  </view>
+                  <view class="detail-item">
+                    <text class="detail-label">预计完成时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.planEndTime) || '未设置' }}</text>
+                  </view>
+                  <view v-if="stage.status >= 2" class="detail-item">
+                    <text class="detail-label">实际开始时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.actualStartTime) || '未开始' }}</text>
+                  </view>
+                  <view v-if="stage.status === 4" class="detail-item">
+                    <text class="detail-label">实际完成时间：</text>
+                    <text class="detail-value">{{ formatDate(stage.actualFinishTime) || '未完成' }}</text>
+                  </view>
+                </view>
+                
+                <!-- 历史施工记录预览 - 始终显示前3条记录 -->
+                <view v-if="stage.status >= 2" class="stage-history">
+                  <view class="history-title">
+                    <text class="iconfont icon-history">📜</text>
+                    <text class="title-text">最近施工记录</text>
+                    <text class="view-all" @tap="viewStageLogs(stage)">查看全部</text>
+                  </view>
+                  
+                  <!-- 如果有施工记录，显示前3条 -->
+                  <view v-if="stage.recentLogs && stage.recentLogs.length > 0" class="history-list">
+                    <view v-for="record in stage.recentLogs.slice(0, 3)" :key="record.orderTaskId" class="history-item">
+                      <view class="record-header">
+                        <text class="record-time">{{ formatDate(record.createTime) }}</text>
+                      </view>
+                      <text class="record-content">{{ record.description || '无描述' }}</text>
+                      <view v-if="record.mediaList && record.mediaList.length > 0" class="record-images">
+                        <text class="image-count">{{ record.mediaList.length }}张图片</text>
+                      </view>
+                    </view>
+                  </view>
+                  
+                  <!-- 如果没有施工记录 -->
+                  <view v-else class="empty-history">
+                    <text class="iconfont icon-empty">📝</text>
+                    <text class="empty-text">暂无施工记录</text>
+                  </view>
                 </view>
               </view>
-
-              <!-- 时间冲突提示 -->
-              <view class="time-conflict-tip" v-if="hasTimeConflict(index)">
-                <text class="iconfont icon-warning"></text>
-                <text class="conflict-text">该阶段时间与前后阶段可能存在冲突</text>
+              
+              <!-- 折叠/展开按钮 -->
+              <view class="stage-toggle" @tap="toggleStage(stage)">
+                <text class="toggle-text">{{ stage.expanded ? '收起' : '展开' }}详情</text>
+                <text class="iconfont">{{ stage.expanded ? '↑' : '↓' }}</text>
               </view>
-            </view>
-          </view>
-
-          <!-- 添加阶段按钮（仅在未确认时显示） -->
-          <view class="add-stage-btn" @tap="addStage" v-if="allStagesUnconfirmed">
-            <text class="iconfont icon-plus"></text>
-            <text class="btn-text">添加阶段</text>
-          </view>
-
-          <!-- 操作按钮 -->
-          <view class="actions">
-            <!-- 确认按钮（仅在有未确认阶段时显示） -->
-            <button 
-              class="btn btn-confirm" 
-              @tap="confirmAllStages" 
-              :disabled="loading || !hasUnconfirmedStages"
-              v-if="hasUnconfirmedStages"
-            >
-              <text class="iconfont icon-check"></text>
-              <text class="btn-text">{{ loading ? '确认中...' : '确认所有阶段' }}</text>
-            </button>
-            
-            <!-- 已确认提示 -->
-            <view class="all-confirmed-tip" v-else>
-              <text class="iconfont icon-success"></text>
-              <text class="tip-text">所有阶段已确认</text>
             </view>
           </view>
         </view>
       </view>
     </view>
 
-    <!-- 加载提示 -->
-    <view class="loading" v-if="loading">
+    <!-- 日志详情模态框 -->
+    <view v-if="showLogModal" class="log-modal" @tap="closeLogModal">
+      <view class="modal-content" @tap.stop>
+        <view class="modal-header">
+          <text class="modal-title">
+            <text class="iconfont icon-doc">📋</text>
+            {{ currentStageName }} - 施工日志
+          </text>
+          <text class="iconfont icon-close" @tap="closeLogModal">×</text>
+        </view>
+        
+        <scroll-view scroll-y class="modal-body">
+          <view v-if="stageLogs.length > 0" class="logs-list">
+            <view v-for="log in stageLogs" :key="log.orderTaskId" class="log-item">
+              <view class="log-header">
+                <view class="log-info">
+                  <text class="log-time">{{ formatDate(log.createTime) }}</text>
+                </view>
+                <text class="log-type">施工日志</text>
+              </view>
+              
+              <view class="log-content">
+                <text class="log-desc">{{ log.description || '无描述' }}</text>
+              </view>
+              
+              <view v-if="log.mediaList && log.mediaList.length > 0" class="log-images">
+                <view class="images-title">
+                  <text class="iconfont icon-image">🖼️</text>
+                  <text class="title-text">现场照片 ({{ log.mediaList.length }}张)</text>
+                </view>
+                <view class="images-grid">
+                  <view v-for="(media, imgIndex) in log.mediaList.slice(0, 6)" :key="media.mediaId" class="image-item" @tap="previewImage(log.mediaList, imgIndex)">
+                    <image :src="media.fileUrl" class="preview-image" mode="aspectFill" lazy-load />
+                    <view v-if="imgIndex === 5 && log.mediaList.length > 6" class="more-images">
+                      <text>+{{ log.mediaList.length - 6 }}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+          
+          <view v-else class="empty-logs">
+            <text class="iconfont icon-empty">📝</text>
+            <text class="empty-text">暂无施工日志记录</text>
+          </view>
+        </scroll-view>
+        
+        <view class="modal-footer">
+          <button class="btn-close" @tap="closeLogModal">
+            <text class="btn-text">关闭</text>
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 加载遮罩 -->
+    <view v-if="loading" class="loading-mask">
       <text class="loading-text">加载中...</text>
     </view>
   </view>
@@ -143,17 +224,10 @@ export default {
       userId: '',
       stages: [],
       loading: false,
-      // 状态样式映射
-      statusClassMap: {
-        0: 'status-pending',
-        1: 'status-confirmed',
-        2: 'status-progress',
-        3: 'status-waiting',
-        4: 'status-completed',
-        5: 'status-cancelled'
-      },
-      // 状态文本映射
-      statusTextMap: {
+      showLogModal: false,
+      currentStage: null,
+      stageLogs: [],
+      statusMap: {
         0: '待确认',
         1: '已确认',
         2: '进行中',
@@ -164,37 +238,80 @@ export default {
     }
   },
 
-  onLoad(options) {
-    this.orderId = options.orderId || ''
-    this.userId = options.userId || ''
-    console.log('施工阶段列表页面加载，订单ID:', this.orderId, '用户ID:', this.userId)
-    this.loadStages()
-  },
-
   computed: {
-    // 是否所有阶段都未确认（status === 0）
-    allStagesUnconfirmed() {
-      return this.stages.every(stage => stage.status === 0)
+    sortedStages() {
+      return [...this.stages].sort((a, b) => a.sequence - b.sequence)
     },
-    
-    // 是否存在未确认的阶段
-    hasUnconfirmedStages() {
-      return this.stages.some(stage => stage.status === 0)
+    currentStageName() {
+      return this.currentStage ? this.currentStage.name : ''
     }
   },
 
+  onLoad(options) {
+    this.orderId = options.orderId || ''
+    this.userId = options.userId || ''
+    if (!this.orderId) {
+      uni.showToast({ title: '缺少订单ID', icon: 'none' })
+      setTimeout(() => this.goBack(), 1500)
+      return
+    }
+    this.loadStages()
+  },
+
   methods: {
-    // 加载阶段列表
     async loadStages() {
       this.loading = true
       try {
         const { orderStageService } = require('@/api/orderStage.js')
-        const stages = await orderStageService.list({ orderId: this.orderId })
-        this.stages = stages.sort((a, b) => a.sequence - b.sequence) // 按顺序排序
+        const response = await orderStageService.list({ orderId: this.orderId })
+
+        const rawData = response.data || []
+        this.stages = await Promise.all(
+          rawData.map(async (item) => {
+            const stageData = {
+              ...item,
+              sequence: Number(item.sequence) || 0,
+              status: Number(item.status) || 0,
+              name: item.name || '',
+              description: item.description || '',
+              expanded: false,
+              recentLogs: []
+            }
+
+            // 对于已开始、进行中、待验收、已完成的阶段，加载任务列表
+            if (stageData.status >= 2) {
+              try {
+                const { getOrderTaskList } = require('@/api/orderTask.js')
+                // 使用 stageId 参数
+                const taskResponse = await getOrderTaskList({
+                  stageId: stageData.orderStageId, // 修改为 stageId
+                  pageNum: 1,
+                  pageSize: 10
+                })
+                
+                if (taskResponse && taskResponse.data && taskResponse.data.length > 0) {
+                  // 根据新的数据结构转换，只取最新的3条记录
+                  stageData.recentLogs = taskResponse.data
+                    .map(task => ({
+                      ...task,
+                      id: task.orderTaskId,
+                      imageUrls: (task.mediaList || []).map(media => media.fileUrl)
+                    }))
+                    .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
+                    .slice(0, 3) // 只取最新的3条记录
+                }
+              } catch (error) {
+                console.error(`加载阶段${stageData.name}的任务列表失败:`, error)
+              }
+            }
+
+            return stageData
+          })
+        )
       } catch (error) {
         console.error('加载阶段失败:', error)
         uni.showToast({
-          title: error?.msg || '加载阶段失败',
+          title: error?.msg || error.message || '加载失败',
           icon: 'none',
           duration: 2000
         })
@@ -203,140 +320,36 @@ export default {
       }
     },
 
-    // 检查时间冲突（只读展示）
-    hasTimeConflict(index) {
-      const current = this.stages[index]
-      if (!current?.planStartTime || !current?.planEndTime) return false
-
-      const currStart = new Date(current.planStartTime)
-      const currEnd = new Date(current.planEndTime)
-
-      // 与前一阶段冲突
-      if (index > 0) {
-        const prevEnd = this.stages[index - 1]?.planEndTime
-        if (prevEnd && currStart <= new Date(prevEnd)) return true
+    toggleStage(stage) {
+      const index = this.stages.findIndex(s => s.orderStageId === stage.orderStageId)
+      if (index !== -1) {
+        this.stages[index].expanded = !this.stages[index].expanded
       }
-
-      // 与后一阶段冲突
-      if (index < this.stages.length - 1) {
-        const nextStart = this.stages[index + 1]?.planStartTime
-        if (nextStart && currEnd >= new Date(nextStart)) return true
-      }
-
-      return false
     },
 
-    // 删除阶段
-    async removeStage(index, orderStageId) {
-      if (!orderStageId) {
-        // 如果是未保存的阶段，直接从本地数组移除
-        this.stages.splice(index, 1)
-        return
-      }
-
+    // 确认验收（status 3 -> 4）
+    async completeStage(stage) {
       uni.showModal({
-        title: '确认删除',
-        content: '确定要删除这个阶段吗？',
-        success: async (res) => {
-          if (res.confirm) {
-            try {
-              const { orderStageService } = require('@/api/orderStage.js')
-              await orderStageService.delete(orderStageId)
-              this.stages.splice(index, 1)
-              uni.showToast({
-                title: '删除成功',
-                icon: 'success',
-                duration: 1500
-              })
-            } catch (error) {
-              console.error('删除失败:', error)
-              uni.showToast({
-                title: error?.msg || '删除失败',
-                icon: 'none',
-                duration: 2000
-              })
-            }
-          }
-        }
-      })
-    },
-
-    // 添加阶段
-    addStage() {
-      const lastStage = this.stages[this.stages.length - 1]
-      let newStartTime = ''
-      let newEndTime = ''
-      
-      if (lastStage && lastStage.planEndTime) {
-        const lastEnd = new Date(lastStage.planEndTime)
-        const newStart = new Date(lastEnd)
-        newStart.setDate(newStart.getDate() + 1)
-        const newEnd = new Date(newStart)
-        newEnd.setDate(newEnd.getDate() + 7)
-        
-        newStartTime = this.formatDate(newStart)
-        newEndTime = this.formatDate(newEnd)
-      }
-
-      this.stages.push({
-        name: '',
-        description: '',
-        planStartTime: newStartTime,
-        planEndTime: newEndTime,
-        status: 0,
-        sequence: this.stages.length + 1
-      })
-    },
-
-    formatDate(date) {
-      const year = date.getFullYear()
-      const month = (date.getMonth() + 1).toString().padStart(2, '0')
-      const day = date.getDate().toString().padStart(2, '0')
-      return `${year}-${month}-${day}`
-    },
-
-    // 确认所有阶段（status = 1）
-    async confirmAllStages() {
-      if (!this.hasUnconfirmedStages) {
-        return
-      }
-
-      uni.showModal({
-        title: '确认操作',
-        content: '确定要将所有阶段设置为已确认状态吗？此操作不可撤销。',
+        title: '确认验收',
+        content: `确定要完成"${stage.name}"阶段的验收吗？`,
         success: async (res) => {
           if (res.confirm) {
             this.loading = true
             try {
-              const { orderStageService } = require('@/api/orderStage.js')
-              
-              // 批量更新所有未确认的阶段
-              const unconfirmedStages = this.stages.filter(stage => stage.status === 0)
-              
-              for (const stage of unconfirmedStages) {
-                const updatedStage = { ...stage, status: 1 }
-                await orderStageService.update(updatedStage)
-              }
-
-              // 更新本地状态
-              this.stages.forEach(stage => {
-                if (stage.status === 0) {
-                  stage.status = 1
-                }
+              // 使用 updateOrderStage 接口更新状态
+              const { updateOrderStage } = require('@/api/orderStage.js')
+              // 只传递后端支持的字段
+              await updateOrderStage({
+                orderStageId: stage.orderStageId,
+                status: 4 // 更新为已完成状态
               })
-
-              uni.showToast({
-                title: `成功确认 ${unconfirmedStages.length} 个阶段`,
-                icon: 'success',
-                duration: 2000
-              })
-
+              uni.showToast({ title: '阶段验收完成', icon: 'success' })
+              this.loadStages()
             } catch (error) {
-              console.error('确认阶段失败:', error)
+              console.error('完成阶段验收失败:', error)
               uni.showToast({
-                title: error?.msg || '确认失败，请重试',
-                icon: 'none',
-                duration: 3000
+                title: error?.msg || '操作失败，请重试',
+                icon: 'none'
               })
             } finally {
               this.loading = false
@@ -344,6 +357,88 @@ export default {
           }
         }
       })
+    },
+
+    async viewStageLogs(stage) {
+      this.currentStage = stage
+      this.loading = true
+      
+      try {
+        const { getOrderTaskList } = require('@/api/orderTask.js')
+        // 使用 stageId 参数
+        const response = await getOrderTaskList({
+          stageId: stage.orderStageId, // 修改为 stageId
+          pageNum: 1,
+          pageSize: 50
+        })
+        
+        if (response && response.data && response.data.length > 0) {
+          // 根据新的数据结构处理
+          this.stageLogs = response.data
+            .map(task => ({
+              ...task,
+              type: '施工日志',
+              imageUrls: (task.mediaList || []).map(media => media.fileUrl)
+            }))
+            .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
+        } else {
+          this.stageLogs = []
+        }
+        
+        this.showLogModal = true
+      } catch (error) {
+        console.error('加载阶段日志失败:', error)
+        uni.showToast({
+          title: '加载日志失败，请重试',
+          icon: 'none'
+        })
+      } finally {
+        this.loading = false
+      }
+    },
+
+    closeLogModal() {
+      this.showLogModal = false
+      this.currentStage = null
+      this.stageLogs = []
+    },
+
+    // 预览图片 - 修改为支持mediaList数据结构
+    previewImage(mediaList, index) {
+      if (mediaList && mediaList.length > 0) {
+        // 从mediaList中提取fileUrl数组
+        const imageUrls = mediaList.map(media => media.fileUrl)
+        uni.previewImage({
+          current: Math.min(index, imageUrls.length - 1),
+          urls: imageUrls
+        })
+      }
+    },
+
+    getStatusText(status) {
+      return this.statusMap[status] || '未知状态'
+    },
+
+    getStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-confirmed',
+        2: 'status-progress',
+        3: 'status-inspect',
+        4: 'status-completed',
+        5: 'status-cancelled'
+      }
+      return classMap[status] || 'status-unknown'
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return ''
+      try {
+        const date = new Date(dateString)
+        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+      } catch (e) {
+        return dateString
+      }
     },
 
     goBack() {
@@ -414,164 +509,498 @@ export default {
   .card-body { padding: 30rpx; }
 }
 
-.stage-item {
+.stage-section {
   background: #f8f9fa;
   border: 2rpx solid #e1e4e8;
   border-radius: 16rpx;
-  padding: 30rpx;
   margin-bottom: 30rpx;
-  .stage-header {
+  overflow: hidden;
+}
+
+.stage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx;
+  background: white;
+  .stage-title {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 30rpx;
-    .stage-title {
-      display: flex;
-      align-items: center;
-      .stage-number {
-        background: #2c6aa0;
-        color: white;
-        width: 60rpx;
-        height: 60rpx;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 28rpx;
-        margin-right: 20rpx;
-        font-weight: bold;
-      }
-      .stage-text { font-weight: 600; color: #2c6aa0; font-size: 32rpx; }
-    }
-    .remove-stage {
-      background: #e74c3c;
+    flex: 1;
+    .stage-number {
+      background: #2c6aa0;
       color: white;
-      border-radius: 50%;
       width: 60rpx;
       height: 60rpx;
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 40rpx;
+      font-size: 28rpx;
+      margin-right: 20rpx;
       font-weight: bold;
-      box-shadow: 0 4rpx 12rpx rgba(231,76,60,0.3);
-      .remove-icon { line-height: 1; margin-bottom: 4rpx; }
+    }
+    .stage-info {
+      display: flex;
+      flex-direction: column;
+      gap: 10rpx;
+      .stage-name { 
+        font-weight: 600; 
+        color: #2c6aa0; 
+        font-size: 32rpx;
+      }
+      .stage-status {
+        font-size: 24rpx;
+        padding: 6rpx 12rpx;
+        border-radius: 20rpx;
+        display: inline-block;
+        width: fit-content;
+        
+        &.status-pending { background: #ffebee; color: #f44336; }
+        &.status-confirmed { background: #e8f5e9; color: #4caf50; }
+        &.status-progress { background: #e3f2fd; color: #2196f3; }
+        &.status-inspect { background: #fff3e0; color: #ff9800; }
+        &.status-completed { background: #e8f5e9; color: #4caf50; }
+        &.status-cancelled { background: #f5f5f5; color: #9e9e9e; }
+      }
+    }
+  }
+  
+  .stage-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    
+    /* 确认验收按钮样式 */
+    .btn-inspect {
+      min-width: 160rpx;
+      height: 60rpx;
+      border: none;
+      border-radius: 30rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10rpx;
+      font-size: 26rpx;
+      font-weight: 600;
+      padding: 0 24rpx;
+      background: linear-gradient(135deg, #ff9800, #f57c00);
+      color: white;
+      
+      .iconfont {
+        font-size: 24rpx;
+      }
+    }
+    
+    .completed-badge {
+      min-width: 120rpx;
+      height: 60rpx;
+      border-radius: 30rpx;
+      background: #e8f5e9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8rpx;
+      padding: 0 20rpx;
+      
+      .iconfont {
+        color: #4caf50;
+        font-size: 24rpx;
+      }
+      
+      .badge-text {
+        color: #4caf50;
+        font-size: 24rpx;
+        font-weight: 500;
+      }
+    }
+    
+    .status-placeholder {
+      width: 120rpx;
+      height: 60rpx;
     }
   }
 }
 
-.form-group {
-  margin-bottom: 40rpx;
-  position: relative;
-  .form-label {
-    display: block;
-    margin-bottom: 20rpx;
-    font-weight: 600;
-    color: #34495e;
-    font-size: 28rpx;
-  }
-  .form-input,
-  .form-textarea,
-  .date-picker {
-    width: 100%;
-    padding: 24rpx;
-    border: 2rpx solid #ddd;
-    border-radius: 10rpx;
-    font-size: 28rpx;
-    background: #f5f7fa;
-    box-sizing: border-box;
-    color: #333;
-  }
-  .form-textarea { min-height: 200rpx; }
-  .date-picker { color: #333; }
-  .readonly {
-    background: #f8f9fa;
-    border: 2rpx solid #e1e4e8;
-    cursor: not-allowed;
-    user-select: none;
-  }
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 8rpx 16rpx;
-  border-radius: 20rpx;
-  font-size: 24rpx;
-  font-weight: 600;
-  &.status-pending { background: #f39c12; color: white; }
-  &.status-confirmed { background: #27ae60; color: white; }
-  &.status-progress { background: #3498db; color: white; }
-  &.status-waiting { background: #f1c40f; color: #333; }
-  &.status-completed { background: #2ecc71; color: white; }
-  &.status-cancelled { background: #e74c3c; color: white; }
-  &.status-unknown { background: #95a5a6; color: white; }
-}
-
-.form-row {
-  display: flex;
-  gap: 30rpx;
-  .form-group { flex: 1; margin-bottom: 0; }
-}
-
-.time-conflict-tip {
-  background: #fff3cd;
-  border: 1rpx solid #ffeaa7;
-  border-radius: 8rpx;
-  padding: 20rpx;
-  display: flex;
-  align-items: center;
-  gap: 15rpx;
-  margin-top: 20rpx;
-  .iconfont { color: #f39c12; font-size: 28rpx; }
-  .conflict-text { color: #856404; font-size: 24rpx; }
-}
-
-.add-stage-btn {
-  background: #27ae60;
-  color: white;
-  border-radius: 10rpx;
-  padding: 24rpx;
+.view-log-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 15rpx;
-  margin-top: 20rpx;
-  .iconfont { font-size: 28rpx; }
-  .btn-text { font-size: 28rpx; font-weight: 600; }
+  padding: 15rpx 30rpx;
+  background: #f0f7ff;
+  border-top: 1rpx solid #e1e4e8;
+  border-bottom: 1rpx solid #e1e4e8;
+  cursor: pointer;
+  
+  .iconfont {
+    color: #2c6aa0;
+    margin-right: 10rpx;
+    font-size: 26rpx;
+  }
+  
+  .btn-text {
+    color: #2c6aa0;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+  
+  &:active {
+    opacity: 0.7;
+    background: #e1ecff;
+  }
 }
 
-.actions {
+.stage-toggle {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 60rpx;
-  .btn {
+  align-items: center;
+  justify-content: center;
+  padding: 20rpx;
+  background: #f8f9fa;
+  border-top: 2rpx solid #e1e4e8;
+  cursor: pointer;
+  
+  .toggle-text {
+    color: #666;
+    font-size: 26rpx;
+    margin-right: 10rpx;
+  }
+  
+  .iconfont {
+    color: #666;
+    font-size: 24rpx;
+  }
+}
+
+.stage-content {
+  padding: 30rpx;
+  background: #f8f9fa;
+  
+  .stage-details {
+    background: white;
+    border-radius: 12rpx;
+    padding: 24rpx;
+    margin-bottom: 30rpx;
+    
+    .detail-item {
+      display: flex;
+      margin-bottom: 16rpx;
+      font-size: 28rpx;
+      
+      .detail-label {
+        color: #666;
+        min-width: 180rpx;
+      }
+      
+      .detail-value {
+        color: #333;
+        flex: 1;
+        word-break: break-word;
+      }
+    }
+  }
+  
+  .stage-history {
+    background: white;
+    border-radius: 12rpx;
+    padding: 24rpx;
+    
+    .history-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20rpx;
+      
+      .iconfont {
+        color: #2c6aa0;
+        margin-right: 15rpx;
+        font-size: 28rpx;
+      }
+      
+      .title-text {
+        color: #34495e;
+        font-size: 28rpx;
+        font-weight: 600;
+        flex: 1;
+      }
+      
+      .view-all {
+        color: #2c6aa0;
+        font-size: 24rpx;
+        cursor: pointer;
+        
+        &:active {
+          opacity: 0.7;
+        }
+      }
+    }
+    
+    .history-list {
+      .history-item {
+        padding: 20rpx 0;
+        border-bottom: 1rpx solid #eee;
+        &:last-child { border-bottom: none; }
+        
+        .record-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8rpx;
+          
+          .record-time { 
+            color: #999; 
+            font-size: 24rpx; 
+          }
+        }
+        
+        .record-content { 
+          color: #333; 
+          font-size: 26rpx; 
+          line-height: 1.5; 
+          margin-bottom: 8rpx;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+        
+        .record-images {
+          .image-count {
+            color: #666;
+            font-size: 22rpx;
+            background: #f5f5f5;
+            padding: 4rpx 12rpx;
+            border-radius: 12rpx;
+          }
+        }
+      }
+    }
+    
+    .empty-history {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60rpx 0;
+      text-align: center;
+      
+      .iconfont { 
+        font-size: 80rpx; 
+        color: #ddd; 
+        margin-bottom: 20rpx; 
+      }
+      .empty-text { 
+        color: #999; 
+        font-size: 28rpx; 
+        margin-bottom: 10rpx;
+      }
+    }
+  }
+}
+
+.log-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 30rpx;
+  
+  .modal-content {
+    background: white;
+    border-radius: 20rpx;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 30rpx;
     background: #2c6aa0;
     color: white;
-    border: none;
-    border-radius: 10rpx;
-    padding: 24rpx 48rpx;
-    display: flex;
-    align-items: center;
-    gap: 15rpx;
-    &:disabled { background: #ccc; opacity: 0.6; }
-    .iconfont { font-size: 28rpx; }
-    .btn-text { font-size: 28rpx; font-weight: 600; }
+    
+    .modal-title {
+      font-size: 30rpx;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      
+      .iconfont {
+        margin-right: 10rpx;
+        font-size: 30rpx;
+      }
+    }
+    
+    .icon-close {
+      font-size: 36rpx;
+      cursor: pointer;
+      padding: 10rpx;
+      
+      &:active {
+        opacity: 0.7;
+      }
+    }
   }
-  .btn-confirm {
-    background: #27ae60;
+  
+  .modal-body {
+    flex: 1;
+    padding: 30rpx;
   }
-  .all-confirmed-tip {
+  
+  .logs-list {
+    .log-item {
+      background: #f8f9fa;
+      border-radius: 12rpx;
+      padding: 24rpx;
+      margin-bottom: 20rpx;
+      
+      .log-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15rpx;
+        
+        .log-info {
+          flex: 1;
+          
+          .log-time {
+            color: #666;
+            font-size: 24rpx;
+            margin-bottom: 4rpx;
+          }
+        }
+        
+        .log-type {
+          background: #2c6aa0;
+          color: white;
+          padding: 4rpx 12rpx;
+          border-radius: 12rpx;
+          font-size: 22rpx;
+        }
+      }
+      
+      .log-content {
+        .log-desc {
+          color: #333;
+          font-size: 26rpx;
+          line-height: 1.6;
+        }
+      }
+      
+      .log-images {
+        margin-top: 15rpx;
+        
+        .images-title {
+          display: flex;
+          align-items: center;
+          margin-bottom: 15rpx;
+          
+          .iconfont {
+            color: #2c6aa0;
+            margin-right: 10rpx;
+            font-size: 24rpx;
+          }
+          
+          .title-text {
+            color: #666;
+            font-size: 24rpx;
+          }
+        }
+        
+        .images-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10rpx;
+          
+          .image-item {
+            position: relative;
+            width: 100%;
+            padding-top: 100%;
+            border-radius: 8rpx;
+            overflow: hidden;
+            
+            .preview-image {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+            }
+            
+            .more-images {
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background: rgba(0, 0, 0, 0.5);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 20rpx;
+              font-weight: bold;
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  .empty-logs {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 15rpx;
-    color: #27ae60;
-    font-weight: 600;
-    font-size: 28rpx;
-    .iconfont { font-size: 32rpx; }
+    padding: 100rpx 30rpx;
+    text-align: center;
+    
+    .iconfont {
+      font-size: 100rpx;
+      color: #ddd;
+      margin-bottom: 30rpx;
+    }
+    
+    .empty-text {
+      color: #999;
+      font-size: 30rpx;
+    }
+  }
+  
+  .modal-footer {
+    display: flex;
+    gap: 20rpx;
+    padding: 30rpx;
+    border-top: 1rpx solid #e1e4e8;
+    
+    button {
+      flex: 1;
+      height: 80rpx;
+      border: none;
+      border-radius: 12rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10rpx;
+      font-size: 28rpx;
+      font-weight: 500;
+      
+      &.btn-close {
+        background: #f5f5f5;
+        color: #666;
+      }
+    }
   }
 }
 
-.loading {
+.loading-mask {
   position: fixed;
   top: 0;
   left: 0;
@@ -582,6 +1011,9 @@ export default {
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  .loading-text { color: white; font-size: 32rpx; }
+  .loading-text {
+    color: white;
+    font-size: 32rpx;
+  }
 }
 </style>
