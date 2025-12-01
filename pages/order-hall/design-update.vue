@@ -12,7 +12,7 @@
     </view>
 
     <!-- 页面内容 -->
-    <scroll-view class="content" scroll-y>
+    <view class="content">
       <!-- 上传说明 -->
       <view class="upload-info">
         <view class="info-header">
@@ -36,7 +36,6 @@
         </view>
         
         <view class="card-body">
-          <!-- 阶段列表 -->
           <view class="stages-container">
             <view 
               v-for="(stage, index) in stages" 
@@ -60,14 +59,13 @@
               <!-- 阶段名称 -->
               <view class="form-group">
                 <text class="form-label">阶段名称 *</text>
-                <input 
-                  :value="stage.name"
-                  @input="onNameInput"
-                  :data-index="index"
-                  class="form-input" 
+                <textarea 
+                  v-model="stage.name"
+                  class="form-input short-textarea" 
                   placeholder="例如：水电验收"
                   placeholder-class="placeholder"
-                  type="text"
+                  maxlength="50"
+                  @blur="() => validateStageName(index)"
                 />
                 <view class="error-tip" v-if="stageErrors[index] && stageErrors[index].name">
                   {{ stageErrors[index].name }}
@@ -78,9 +76,7 @@
               <view class="form-group">
                 <text class="form-label">阶段描述</text>
                 <textarea 
-                  :value="stage.description"
-                  @input="onDescriptionInput"
-                  :data-index="index"
+                  v-model="stage.description"
                   class="form-textarea" 
                   placeholder="请输入阶段描述..."
                   placeholder-class="placeholder"
@@ -97,10 +93,10 @@
                   <picker 
                     mode="date" 
                     :value="stage.planStartTime"
-                    :start="getMinStartDate(index)"
-                    :end="getMaxEndDate()"
+                    :start="minStartDates[index]"
+                    :end="maxEndDate"
                     @change="onStartDateChange"
-                    :data-index="index"
+                    :data-index="index.toString()"
                   >
                     <view class="date-picker" :class="{ 'date-placeholder': !stage.planStartTime }">
                       {{ stage.planStartTime || '选择开始时间' }}
@@ -116,10 +112,10 @@
                   <picker 
                     mode="date" 
                     :value="stage.planEndTime"
-                    :start="getMinEndDate(index)"
-                    :end="getMaxEndDate()"
+                    :start="minEndDates[index]"
+                    :end="maxEndDate"
                     @change="onEndDateChange"
-                    :data-index="index"
+                    :data-index="index.toString()"
                   >
                     <view class="date-picker" :class="{ 'date-placeholder': !stage.planEndTime }">
                       {{ stage.planEndTime || '选择结束时间' }}
@@ -132,7 +128,7 @@
               </view>
 
               <!-- 时间冲突提示 -->
-              <view class="time-conflict-tip" v-if="hasTimeConflict(index)">
+              <view class="time-conflict-tip" v-if="timeConflicts[index]">
                 <text class="iconfont icon-warning"></text>
                 <text class="conflict-text">该阶段时间与前后阶段可能存在冲突</text>
               </view>
@@ -145,7 +141,7 @@
             <text class="btn-text">添加阶段</text>
           </view>
 
-          <!-- 操作按钮 -->
+          <!-- 提交按钮 -->
           <view class="actions">
             <button class="btn btn-primary" @tap="uploadStages" :disabled="loading">
               <text class="iconfont icon-upload"></text>
@@ -154,11 +150,6 @@
           </view>
         </view>
       </view>
-    </scroll-view>
-
-    <!-- 加载提示 -->
-    <view class="loading" v-if="loading">
-      <text class="loading-text">上传中...</text>
     </view>
   </view>
 </template>
@@ -170,82 +161,111 @@ export default {
       orderId: '',
       userId: '',
       stages: [
-        {
-          name: '',
-          description: '',
-          planStartTime: '',
-          planEndTime: ''
-        }
+        { name: '', description: '', planStartTime: '', planEndTime: '' }
       ],
-      stageErrors: [],
+      stageErrors: [{}],
+      timeConflicts: [false],
+      minStartDates: [],
+      minEndDates: [],
+      maxEndDate: '',
       loading: false
     }
   },
-  
+
   onLoad(options) {
     this.orderId = options.orderId || ''
     this.userId = options.userId || ''
     console.log('施工阶段页面加载，订单ID:', this.orderId, '用户ID:', this.userId)
     this.setDefaultDates()
+    this.calculateDateLimits()
   },
-  
+
+  watch: {
+    stages: {
+      handler() {
+        this.calculateDateLimits()
+        this.checkTimeConflicts()
+      },
+      deep: true
+    }
+  },
+
   methods: {
     setDefaultDates() {
       const today = new Date()
       const nextWeek = new Date(today)
       nextWeek.setDate(today.getDate() + 7)
       
-      this.$set(this.stages[0], 'planStartTime', this.formatDate(today))
-      this.$set(this.stages[0], 'planEndTime', this.formatDate(nextWeek))
+      this.stages[0].planStartTime = this.formatDate(today)
+      this.stages[0].planEndTime = this.formatDate(nextWeek)
+      
+      // 设置最大结束日期（2年后）
+      const maxDate = new Date()
+      maxDate.setFullYear(maxDate.getFullYear() + 2)
+      this.maxEndDate = this.formatDate(maxDate)
     },
-    
+
     formatDate(date) {
       const year = date.getFullYear()
       const month = (date.getMonth() + 1).toString().padStart(2, '0')
       const day = date.getDate().toString().padStart(2, '0')
       return `${year}-${month}-${day}`
     },
-    
-    // 阶段名称输入处理
-    onNameInput(e) {
-      const index = e.currentTarget.dataset.index
-      const value = e.detail.value
-      this.$set(this.stages[index], 'name', value)
-      this.clearFieldError(index, 'name')
-      this.validateStageName(index)
+
+    calculateDateLimits() {
+      this.minStartDates = this.stages.map((stage, index) => {
+        if (index === 0) return this.formatDate(new Date())
+        
+        const prevEnd = this.stages[index - 1]?.planEndTime
+        if (prevEnd) {
+          const nextDay = new Date(prevEnd)
+          nextDay.setDate(nextDay.getDate() + 1)
+          return this.formatDate(nextDay)
+        }
+        return this.formatDate(new Date())
+      })
+
+      this.minEndDates = this.stages.map((stage, index) => {
+        const start = stage?.planStartTime
+        if (start) {
+          const nextDay = new Date(start)
+          nextDay.setDate(nextDay.getDate() + 1)
+          return this.formatDate(nextDay)
+        }
+        return this.formatDate(new Date())
+      })
     },
-    
-    // 阶段描述输入处理
-    onDescriptionInput(e) {
-      const index = e.currentTarget.dataset.index
-      const value = e.detail.value
-      this.$set(this.stages[index], 'description', value)
+
+    checkTimeConflicts() {
+      this.timeConflicts = this.stages.map((stage, index) => {
+        return this.hasTimeConflict(index)
+      })
     },
-    
-    // 开始日期选择
+
     onStartDateChange(e) {
-      const index = e.currentTarget.dataset.index
-      const value = e.detail.value
-      this.$set(this.stages[index], 'planStartTime', value)
+      const index = parseInt(e.currentTarget.dataset.index)
+      this.stages[index].planStartTime = e.detail.value
       this.clearFieldError(index, 'planStartTime')
       this.validateStageDates(index)
+      this.calculateDateLimits()
+      this.checkTimeConflicts()
     },
-    
-    // 结束日期选择
+
     onEndDateChange(e) {
-      const index = e.currentTarget.dataset.index
-      const value = e.detail.value
-      this.$set(this.stages[index], 'planEndTime', value)
+      const index = parseInt(e.currentTarget.dataset.index)
+      this.stages[index].planEndTime = e.detail.value
       this.clearFieldError(index, 'planEndTime')
       this.validateStageDates(index)
+      this.calculateDateLimits()
+      this.checkTimeConflicts()
     },
-    
+
     clearFieldError(index, field) {
-      if (this.stageErrors[index] && this.stageErrors[index][field]) {
+      if (this.stageErrors[index]?.[field]) {
         this.$set(this.stageErrors[index], field, '')
       }
     },
-    
+
     validateStageName(index) {
       const name = this.stages[index].name.trim()
       if (!name) {
@@ -258,226 +278,158 @@ export default {
       }
       return true
     },
-    
+
     setFieldError(index, field, message) {
       if (!this.stageErrors[index]) {
         this.$set(this.stageErrors, index, {})
       }
       this.$set(this.stageErrors[index], field, message)
     },
-    
-    getMinStartDate(index) {
-      if (index === 0) {
-        return this.formatDate(new Date())
-      }
-      const prevStage = this.stages[index - 1]
-      if (prevStage && prevStage.planEndTime) {
-        const nextDay = new Date(prevStage.planEndTime)
-        nextDay.setDate(nextDay.getDate() + 1)
-        return this.formatDate(nextDay)
-      }
-      return this.formatDate(new Date())
-    },
-    
-    getMinEndDate(index) {
-      const currentStage = this.stages[index]
-      if (currentStage && currentStage.planStartTime) {
-        const nextDay = new Date(currentStage.planStartTime)
-        nextDay.setDate(nextDay.getDate() + 1)
-        return this.formatDate(nextDay)
-      }
-      return this.formatDate(new Date())
-    },
-    
-    getMaxEndDate() {
-      const maxDate = new Date()
-      maxDate.setFullYear(maxDate.getFullYear() + 2)
-      return this.formatDate(maxDate)
-    },
-    
+
     hasTimeConflict(index) {
-      const currentStage = this.stages[index]
-      if (!currentStage.planStartTime || !currentStage.planEndTime) {
-        return false
-      }
-      
-      const currentStart = new Date(currentStage.planStartTime)
-      const currentEnd = new Date(currentStage.planEndTime)
-      
+      const current = this.stages[index]
+      if (!current.planStartTime || !current.planEndTime) return false
+
+      const currStart = new Date(current.planStartTime)
+      const currEnd = new Date(current.planEndTime)
+
+      // 与前一阶段冲突
       if (index > 0) {
-        const prevStage = this.stages[index - 1]
-        if (prevStage.planEndTime) {
-          const prevEnd = new Date(prevStage.planEndTime)
-          if (currentStart <= prevEnd) {
-            return true
-          }
-        }
+        const prevEnd = this.stages[index - 1]?.planEndTime
+        if (prevEnd && currStart <= new Date(prevEnd)) return true
       }
-      
+
+      // 与后一阶段冲突
       if (index < this.stages.length - 1) {
-        const nextStage = this.stages[index + 1]
-        if (nextStage.planStartTime) {
-          const nextStart = new Date(nextStage.planStartTime)
-          if (currentEnd >= nextStart) {
-            return true
-          }
-        }
+        const nextStart = this.stages[index + 1]?.planStartTime
+        if (nextStart && currEnd >= new Date(nextStart)) return true
       }
-      
+
       return false
     },
-    
+
     addStage() {
-      const lastStage = this.stages[this.stages.length - 1]
-      let newStartTime = ''
-      let newEndTime = ''
-      
-      if (lastStage && lastStage.planEndTime) {
-        const lastEnd = new Date(lastStage.planEndTime)
-        const newStart = new Date(lastEnd)
-        newStart.setDate(newStart.getDate() + 1)
-        const newEnd = new Date(newStart)
-        newEnd.setDate(newEnd.getDate() + 7)
-        
-        newStartTime = this.formatDate(newStart)
-        newEndTime = this.formatDate(newEnd)
+      const last = this.stages[this.stages.length - 1]
+      let start = '', end = ''
+      if (last?.planEndTime) {
+        const s = new Date(last.planEndTime)
+        s.setDate(s.getDate() + 1)
+        const e = new Date(s)
+        e.setDate(e.getDate() + 7)
+        start = this.formatDate(s)
+        end = this.formatDate(e)
       }
-      
-      this.stages.push({
-        name: '',
-        description: '',
-        planStartTime: newStartTime,
-        planEndTime: newEndTime
-      })
-      
+      this.stages.push({ name: '', description: '', planStartTime: start, planEndTime: end })
       this.stageErrors.push({})
+      this.timeConflicts.push(false)
     },
-    
+
     removeStage(index) {
       if (this.stages.length > 1) {
         this.stages.splice(index, 1)
         this.stageErrors.splice(index, 1)
+        this.timeConflicts.splice(index, 1)
       }
     },
-    
+
     validateStageDates(index) {
-      const stage = this.stages[index]
-      let hasError = false
-      
-      if (!stage.planStartTime) {
+      const s = this.stages[index]
+      let valid = true
+
+      if (!s.planStartTime) {
         this.setFieldError(index, 'planStartTime', '请选择开始时间')
-        hasError = true
+        valid = false
       }
-      
-      if (!stage.planEndTime) {
+      if (!s.planEndTime) {
         this.setFieldError(index, 'planEndTime', '请选择结束时间')
-        hasError = true
+        valid = false
       }
-      
-      if (stage.planStartTime && stage.planEndTime) {
-        const startTime = new Date(stage.planStartTime)
-        const endTime = new Date(stage.planEndTime)
-        
-        if (endTime < startTime) {
+
+      if (s.planStartTime && s.planEndTime) {
+        const start = new Date(s.planStartTime)
+        const end = new Date(s.planEndTime)
+        if (end < start) {
           this.setFieldError(index, 'planEndTime', '结束时间不能早于开始时间')
-          hasError = true
-        }
-        
-        const timeDiff = endTime.getTime() - startTime.getTime()
-        const dayDiff = timeDiff / (1000 * 3600 * 24)
-        if (dayDiff < 1) {
-          this.setFieldError(index, 'planEndTime', '阶段持续时间至少1天')
-          hasError = true
+          valid = false
+        } else if ((end - start) / (1000 * 3600 * 24) < 1) {
+          this.setFieldError(index, 'planEndTime', '阶段至少持续1天')
+          valid = false
         }
       }
-      
-      return !hasError
+      return valid
     },
-    
+
+    validateAllStages() {
+      let isValid = true
+      let hasConflict = false
+      this.stageErrors = this.stages.map(() => ({}))
+
+      for (let i = 0; i < this.stages.length; i++) {
+        if (!this.validateStageName(i)) isValid = false
+        if (!this.validateStageDates(i)) isValid = false
+        if (this.timeConflicts[i]) {
+          hasConflict = true
+          isValid = false
+        }
+      }
+
+      if (hasConflict) {
+        uni.showToast({ title: '存在阶段时间冲突，请检查', icon: 'none', duration: 2000 })
+      }
+      return isValid
+    },
+
     async uploadStages() {
       if (!this.validateAllStages()) {
-        uni.showToast({
-          title: '请完善阶段信息',
-          icon: 'none',
-          duration: 2000
-        })
+        uni.showToast({ title: '请完善阶段信息', icon: 'none', duration: 2000 })
         return
       }
-      
+
+      const total = this.stages.length
       this.loading = true
-      
+
       try {
-        const submitData = {
-          orderId: this.orderId,
-          userId: this.userId,
-          stages: this.stages.map((stage, index) => ({
+        const { orderStageService } = require('@/api/orderStage.js')
+
+        for (let i = 0; i < total; i++) {
+          uni.showLoading({
+            title: `正在上传第 ${i + 1}/${total} 个阶段...`,
+            mask: true
+          })
+
+          const stage = this.stages[i]
+          const dto = {
             orderId: parseInt(this.orderId),
             name: stage.name.trim(),
-            description: stage.description.trim(),
-            sequence: index + 1,
-            planStartTime: stage.planStartTime + ' 00:00:00',
-            planEndTime: stage.planEndTime + ' 00:00:00',
+            description: stage.description.trim() || '',
+            sequence: i + 1,
             status: 0,
-            createdBy: parseInt(this.userId),
-            updatedBy: parseInt(this.userId)
-          }))
+            planStartTime: stage.planStartTime,
+            planEndTime: stage.planEndTime
+          }
+
+          await orderStageService.save(dto)
+          uni.hideLoading()
         }
-        
-        console.log('提交数据:', submitData)
-        
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        
+
         uni.showToast({
-          title: `成功上传 ${this.stages.length} 个施工阶段`,
+          title: `✅ 成功上传 ${total} 个施工阶段`,
           icon: 'success',
           duration: 2000
         })
-        
-        setTimeout(() => {
-          uni.navigateBack()
-        }, 1500)
-        
+
+        setTimeout(() => uni.navigateBack(), 1500)
+
       } catch (error) {
         console.error('上传失败:', error)
-        uni.showToast({
-          title: error.message || '上传失败，请重试',
-          icon: 'none',
-          duration: 2000
-        })
+        uni.hideLoading()
+        const msg = error?.msg || error?.message || '上传失败，请重试'
+        uni.showToast({ title: msg, icon: 'none', duration: 3000 })
       } finally {
         this.loading = false
       }
     },
-    
-    validateAllStages() {
-      let isValid = true
-      
-      this.stageErrors = this.stages.map(() => ({}))
-      
-      for (let i = 0; i < this.stages.length; i++) {
-        const stage = this.stages[i]
-        
-        if (!this.validateStageName(i)) {
-          isValid = false
-        }
-        
-        if (!this.validateStageDates(i)) {
-          isValid = false
-        }
-        
-        if (this.hasTimeConflict(i)) {
-          uni.showToast({
-            title: `阶段 ${i + 1} 与其他阶段时间冲突`,
-            icon: 'none',
-            duration: 2000
-          })
-          isValid = false
-        }
-      }
-      
-      return isValid
-    },
-    
+
     goBack() {
       uni.navigateBack()
     }
@@ -486,6 +438,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+/* 样式保持不变 */
 .container {
   min-height: 100vh;
   background-color: #f0f2f5;
@@ -495,34 +448,18 @@ export default {
   background: linear-gradient(135deg, #2c6aa0, #1a4a7a);
   color: white;
   padding: 20rpx 0;
-  
   .navbar-content {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 30rpx;
-    
-    .navbar-left {
-      .iconfont {
-        font-size: 36rpx;
-      }
-    }
-    
-    .navbar-title {
-      font-size: 36rpx;
-      font-weight: 600;
-    }
-    
-    .navbar-right {
-      width: 36rpx;
-    }
+    .navbar-left .iconfont { font-size: 36rpx; }
+    .navbar-title { font-size: 36rpx; font-weight: 600; }
+    .navbar-right { width: 36rpx; }
   }
 }
 
-.content {
-  height: calc(100vh - 120rpx);
-  padding: 30rpx;
-}
+.content { padding: 30rpx; }
 
 .upload-info {
   background: #e8f4fd;
@@ -530,35 +467,18 @@ export default {
   padding: 30rpx;
   margin-bottom: 30rpx;
   border-radius: 8rpx;
-  
   .info-header {
     display: flex;
     align-items: center;
     margin-bottom: 20rpx;
-    
-    .iconfont {
-      color: #2c6aa0;
-      margin-right: 15rpx;
-      font-size: 32rpx;
-    }
-    
-    .info-title {
-      color: #2c6aa0;
-      font-size: 32rpx;
-      font-weight: 600;
-    }
+    .iconfont { color: #2c6aa0; margin-right: 15rpx; font-size: 32rpx; }
+    .info-title { color: #2c6aa0; font-size: 32rpx; font-weight: 600; }
   }
-  
-  .info-content {
-    display: flex;
-    flex-direction: column;
-    
-    .info-item {
-      color: #666;
-      font-size: 28rpx;
-      line-height: 1.8;
-      margin-bottom: 10rpx;
-    }
+  .info-content .info-item {
+    color: #666;
+    font-size: 28rpx;
+    line-height: 1.8;
+    margin-bottom: 10rpx;
   }
 }
 
@@ -566,31 +486,17 @@ export default {
   background: white;
   border-radius: 20rpx;
   overflow: hidden;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.05);
-  
+  box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.05);
   .card-header {
     background-color: #f5f7fa;
     padding: 30rpx;
     border-bottom: 2rpx solid #e1e4e8;
     display: flex;
     align-items: center;
-    
-    .iconfont {
-      color: #2c6aa0;
-      margin-right: 15rpx;
-      font-size: 32rpx;
-    }
-    
-    .header-title {
-      color: #34495e;
-      font-size: 32rpx;
-      font-weight: 600;
-    }
+    .iconfont { color: #2c6aa0; margin-right: 15rpx; font-size: 32rpx; }
+    .header-title { color: #34495e; font-size: 32rpx; font-weight: 600; }
   }
-  
-  .card-body {
-    padding: 30rpx;
-  }
+  .card-body { padding: 30rpx; }
 }
 
 .stage-item {
@@ -599,18 +505,14 @@ export default {
   border-radius: 16rpx;
   padding: 30rpx;
   margin-bottom: 30rpx;
-  position: relative;
-  
   .stage-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 30rpx;
-    
     .stage-title {
       display: flex;
       align-items: center;
-      
       .stage-number {
         background: #2c6aa0;
         color: white;
@@ -624,14 +526,8 @@ export default {
         margin-right: 20rpx;
         font-weight: bold;
       }
-      
-      .stage-text {
-        font-weight: 600;
-        color: #2c6aa0;
-        font-size: 32rpx;
-      }
+      .stage-text { font-weight: 600; color: #2c6aa0; font-size: 32rpx; }
     }
-    
     .remove-stage {
       background: #e74c3c;
       color: white;
@@ -643,12 +539,8 @@ export default {
       justify-content: center;
       font-size: 40rpx;
       font-weight: bold;
-      box-shadow: 0 4rpx 12rpx rgba(231, 76, 60, 0.3);
-      
-      .remove-icon {
-        line-height: 1;
-        margin-bottom: 4rpx;
-      }
+      box-shadow: 0 4rpx 12rpx rgba(231,76,60,0.3);
+      .remove-icon { line-height: 1; margin-bottom: 4rpx; }
     }
   }
 }
@@ -656,7 +548,6 @@ export default {
 .form-group {
   margin-bottom: 40rpx;
   position: relative;
-  
   .form-label {
     display: block;
     margin-bottom: 20rpx;
@@ -664,7 +555,6 @@ export default {
     color: #34495e;
     font-size: 28rpx;
   }
-  
   .form-input,
   .form-textarea,
   .date-picker {
@@ -676,39 +566,27 @@ export default {
     background: white;
     box-sizing: border-box;
   }
-  
-  .form-input:focus,
-  .form-textarea:focus {
-    border-color: #2c6aa0;
-  }
-  
-  .form-textarea {
-    min-height: 200rpx;
-  }
-  
-  .date-picker {
-    color: #333;
-    border: 2rpx solid #ddd;
-  }
-  
-  .date-placeholder {
-    color: #999;
-  }
+  .form-textarea { min-height: 200rpx; }
+  .date-picker { color: #333; }
+  .date-placeholder { color: #999; }
+}
+
+.short-textarea {
+  min-height: 60rpx !important;
+  height: 60rpx !important;
+  padding: 12rpx 24rpx !important;
+  line-height: 1.3;
+  overflow: hidden;
+  resize: none;
 }
 
 .form-row {
   display: flex;
   gap: 30rpx;
-  
-  .form-group {
-    flex: 1;
-    margin-bottom: 0;
-  }
+  .form-group { flex: 1; margin-bottom: 0; }
 }
 
-.placeholder {
-  color: #999;
-}
+.placeholder { color: #999; }
 
 .error-tip {
   color: #e74c3c;
@@ -732,16 +610,8 @@ export default {
   align-items: center;
   gap: 15rpx;
   margin-top: 20rpx;
-  
-  .iconfont {
-    color: #f39c12;
-    font-size: 28rpx;
-  }
-  
-  .conflict-text {
-    color: #856404;
-    font-size: 24rpx;
-  }
+  .iconfont { color: #f39c12; font-size: 28rpx; }
+  .conflict-text { color: #856404; font-size: 24rpx; }
 }
 
 .add-stage-btn {
@@ -754,22 +624,14 @@ export default {
   justify-content: center;
   gap: 15rpx;
   margin-top: 20rpx;
-  
-  .iconfont {
-    font-size: 28rpx;
-  }
-  
-  .btn-text {
-    font-size: 28rpx;
-    font-weight: 600;
-  }
+  .iconfont { font-size: 28rpx; }
+  .btn-text { font-size: 28rpx; font-weight: 600; }
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
   margin-top: 60rpx;
-  
   .btn {
     background: #2c6aa0;
     color: white;
@@ -779,38 +641,9 @@ export default {
     display: flex;
     align-items: center;
     gap: 15rpx;
-    
-    &:disabled {
-      background: #ccc;
-      opacity: 0.6;
-    }
-    
-    .iconfont {
-      font-size: 28rpx;
-    }
-    
-    .btn-text {
-      font-size: 28rpx;
-      font-weight: 600;
-    }
-  }
-}
-
-.loading {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  
-  .loading-text {
-    color: white;
-    font-size: 32rpx;
+    &:disabled { background: #ccc; opacity: 0.6; }
+    .iconfont { font-size: 28rpx; }
+    .btn-text { font-size: 28rpx; font-weight: 600; }
   }
 }
 </style>

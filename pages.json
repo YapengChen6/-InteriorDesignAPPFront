@@ -344,7 +344,7 @@
   	"path" : "pages/order-hall/order-have",
   	"style" : 
   	{
-  		"navigationBarTitleText" : "监理订单施工阶段页面"
+  		"navigationBarTitleText" : "确认监理订单施工阶段页面"
   	}
   },
   {
@@ -352,6 +352,27 @@
   	"style" : 
   	{
   		"navigationBarTitleText" : "监理订单监理上传阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/orderstage-qr",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单阶段确认页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-gx",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "更新监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/designorder-work",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理上传每个监理订单阶段页面"
   	}
   }
   ],
