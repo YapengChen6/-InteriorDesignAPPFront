@@ -77,16 +77,25 @@ const request = config => {
         resolve(res.data)
       })
       .catch(error => {
-        let { message } = error
-        if (message === 'Network Error') {
-          message = '后端接口连接异常'
-        } else if (message.includes('timeout')) {
-          message = '系统接口请求超时'
-        } else if (message.includes('Request failed with status code')) {
-          message = '系统接口' + message.substr(message.length - 3) + '异常'
+        console.error('🔴 Request Error:', error)
+        let message = '网络请求失败'
+        
+        if (error && error.message) {
+          if (error.message === 'Network Error') {
+            message = '后端接口连接异常'
+          } else if (error.message.includes('timeout')) {
+            message = '系统接口请求超时'
+          } else if (error.message.includes('Request failed with status code')) {
+            message = '系统接口' + error.message.substr(error.message.length - 3) + '异常'
+          } else {
+            message = error.message
+          }
+        } else if (typeof error === 'string') {
+          message = error
         }
+        
         toast(message)
-        reject(error)
+        reject(new Error(message))
       })
   })
 }

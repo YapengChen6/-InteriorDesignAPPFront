@@ -71,14 +71,26 @@
       "navigationBarTitleText": "浏览文本"
     }
   },{
-    "path": "pages/message/index",
-    "style": {
-      "navigationBarTitleText": "消息"
-    }
-  },{
     "path": "pages/chat/chatMain",
     "style": {
       "navigationBarTitleText": "聊天"
+    }
+  },{
+    "path": "pages/chat/chatList",
+    "style": {
+      "navigationBarTitleText": "聊天列表",
+      "navigationStyle": "custom"
+    }
+  },{
+    "path": "pages/chat/chatDetail",
+    "style": {
+      "navigationBarTitleText": "聊天详情",
+      "navigationStyle": "custom"
+    }
+  },{
+    "path": "pages/test/imageTest",
+    "style": {
+      "navigationBarTitleText": "图片加载测试"
     }
   },{
     "path": "pages/mine/personal/index",
@@ -414,7 +426,7 @@
         "selectedIconPath": "static/images/tabbar/home_.png",
         "text": "首页"
       }, {
-        "pagePath": "pages/message/index",
+        "pagePath": "pages/chat/chatList",
         "iconPath": "/static/images/tabbar/message_.png",
         "selectedIconPath": "/static/images/tabbar/message.png",
         "text": "消息"

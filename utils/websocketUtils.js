@@ -4,6 +4,7 @@
  */
 
 import { getValidTimestamp } from './timeUtils.js'
+import { processAvatarUrl } from './avatarUtils.js'
 
 /**
  * WebSocket消息类型常量
@@ -195,7 +196,7 @@ export function processReceivedMessage(messageData, context) {
     ...messageData,
     isSender: isSender,
     senderName: senderName,
-    avatar: messageData.senderAvatar || '/static/images/default-avatar.png',
+    avatar: processAvatarUrl(messageData.senderAvatar, '/static/images/default-avatar.png'),
     createTime: validTime,
     sendTime: validTime
   }
