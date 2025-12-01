@@ -324,7 +324,7 @@ export default {
 		// 跳转到商城页面
 		goToShopPage() {
 			uni.navigateTo({
-				url: '/pages/shop/shop'
+				url: '/pages/shop/shop-list'
 			});
 		},
 		
@@ -1177,6 +1177,30 @@ export default {
 			
 			this.pageParams.pageNum++;
 			await this.loadPosts();
+		},
+		
+		// 监听帖子点赞更新事件
+		listenPostLikeUpdates() {
+			// 移除之前的监听，避免重复监听
+			uni.$off('postLikeUpdated');
+			
+			// 监听点赞更新事件
+			uni.$on('postLikeUpdated', (data) => {
+				console.log('📢 收到帖子点赞更新事件:', data);
+				if (data && data.postId) {
+					// 查找对应的帖子并更新点赞数
+					const postIndex = this.postList.findIndex(post => post.id == data.postId || post.thread_id == data.postId);
+					if (postIndex !== -1) {
+						this.postList[postIndex].likeCount = data.likeCount || 0;
+						console.log(`✅ 更新帖子 ${data.postId} 的点赞数为 ${data.likeCount}`);
+					}
+				}
+			});
+		},
+		
+		// 停止监听点赞更新事件
+		stopListeningPostLikeUpdates() {
+			uni.$off('postLikeUpdated');
 		}
 	},
 	
@@ -1186,6 +1210,8 @@ export default {
 		// 加载分类和帖子
 		this.loadCategoriesAndTypes();
 		this.loadPosts();
+		// 监听帖子点赞更新事件
+		this.listenPostLikeUpdates();
 	},
 	
 	onShow() {
@@ -1193,6 +1219,8 @@ export default {
 		this.getCachedLocation();
 		// 恢复轮播图自动播放
 		this.resetBannerTimer();
+		// 监听帖子点赞更新事件
+		this.listenPostLikeUpdates();
 	},
 	
 	onHide() {
@@ -1237,6 +1265,13 @@ export default {
 		if (this.bannerTimer) {
 			clearInterval(this.bannerTimer);
 		}
+		// 移除事件监听
+		this.stopListeningPostLikeUpdates();
+	},
+	
+	onUnload() {
+		// 页面卸载时移除事件监听
+		this.stopListeningPostLikeUpdates();
 	}
 }
 </script>

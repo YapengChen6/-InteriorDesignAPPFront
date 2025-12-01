@@ -41,6 +41,10 @@
 				<text class="stat-number">{{ userStats.like }}</text>
 				<text class="stat-label">点赞</text>
 			</view>
+			<view class="stat-card" @tap="handleStatClick('收藏')">
+				<text class="stat-number">{{ userStats.favorite }}</text>
+				<text class="stat-label">收藏</text>
+			</view>
 			<view class="stat-card" @tap="handleStatClick('发布')">
 				<text class="stat-number">{{ userStats.publish }}</text>
 				<text class="stat-label">发布</text>
@@ -241,6 +245,7 @@
 
 <script>
 	import { getUserProfile, updateUserProfile, getCurrentRole } from '@/api/users.js'
+	import { getFavorites } from '@/api/social.js'
 	import store from "@/store"
 	
 	export default {
@@ -254,6 +259,7 @@
 				userStats: {
 					follow: 6,
 					like: 13,
+					favorite: 0,
 					publish: 2
 				},
 				roleMap: {
@@ -287,12 +293,14 @@
 		},
 		onLoad() {
 			this.loadUserInfo();
+			this.loadUserStats();
 			this.listenAvatarUpdate();
 			this.listenRoleChange();
 		},
 		onShow() {
 			console.log('🔄 我的页面显示，刷新数据');
 			this.loadUserInfo();
+			this.loadUserStats();
 			this.checkRoleUpdate();
 		},
 		onUnload() {
@@ -343,6 +351,31 @@
 						title: '获取用户信息失败',
 						icon: 'none'
 					});
+				}
+			},
+			
+			// 加载用户统计信息（关注、点赞、收藏、发布）
+			async loadUserStats() {
+				try {
+					// 加载收藏数量
+					const favoriteRes = await getFavorites({ pageNum: 1, pageSize: 1 });
+					if (favoriteRes && favoriteRes.code === 200) {
+						// 获取收藏总数
+						if (favoriteRes.data && favoriteRes.data.total !== undefined) {
+							this.userStats.favorite = favoriteRes.data.total || 0;
+						} else if (favoriteRes.data && favoriteRes.data.rows) {
+							// 如果返回的是分页数据，需要通过多次请求获取总数，或者使用总数
+							this.userStats.favorite = favoriteRes.data.total || favoriteRes.data.rows.length || 0;
+						}
+						console.log('📊 收藏数量加载完成:', this.userStats.favorite);
+					}
+					
+					// TODO: 可以在这里添加加载关注、点赞、发布数量的逻辑
+					// 目前使用默认值
+					
+				} catch (error) {
+					console.error('加载用户统计信息失败:', error);
+					// 失败时使用默认值，不显示错误提示
 				}
 			},
 			
@@ -516,17 +549,21 @@
 				// 根据统计名称进行路由跳转
 				switch(statName) {
 					case '关注':
-						// 这里可以添加跳转到关注页面的逻辑
-						uni.showToast({
-							title: '跳转到关注页面',
-							icon: 'none'
+						// 跳转到关注页面
+						uni.navigateTo({
+							url: '/pages/mine/follows/follows'
 						});
 						break;
 					case '点赞':
-						// 这里可以添加跳转到点赞页面的逻辑
-						uni.showToast({
-							title: '跳转到点赞页面',
-							icon: 'none'
+						// 跳转到点赞页面
+						uni.navigateTo({
+							url: '/pages/mine/likes/likes'
+						});
+						break;
+					case '收藏':
+						// 跳转到收藏页面
+						uni.navigateTo({
+							url: '/pages/mine/favorites/favorites'
 						});
 						break;
 					case '发布':
@@ -573,7 +610,7 @@
 					// 商家功能
 					case '产品管理':
 						uni.navigateTo({
-							url: '/pages/merchant/product'
+							url: '/pages/shop/shop'
 						});
 						break;
 					case '商家页面':

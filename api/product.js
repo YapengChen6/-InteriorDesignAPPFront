@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { getToken } from '@/utils/auth'
 
 const baseURL = 'http://localhost:8081' // 根据您的后端地址调整
 
@@ -134,8 +135,22 @@ export function updateExistingProductCategoryPaths() {
  * 新增商品SPU
  */
 export function addProductSpu(data) {
+  const token = getToken()
+  
+  // 添加调试日志
+  console.log('🔧 addProductSpu - Token:', token ? token.substring(0, 20) + '...' : 'null')
+  console.log('🔧 addProductSpu - Request data:', JSON.stringify(data, null, 2))
+  
+  // 如果后端需要 token 作为请求参数，添加到 URL
+  // 注意：通常 token 通过 Authorization header 传递，但如果后端明确需要 token 参数，则添加
+  const url = token 
+    ? `/api/product-shelf/spu/add?token=${encodeURIComponent(token)}`
+    : '/api/product-shelf/spu/add'
+  
+  console.log('🔧 addProductSpu - Request URL:', url)
+  
   return request({
-    url: '/api/product-shelf/spu/add',
+    url: url,
     method: 'post',
     data: data,
     baseURL

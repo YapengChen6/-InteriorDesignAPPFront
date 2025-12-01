@@ -115,6 +115,43 @@ export function getImagesPreview(fileUrl) {
   })
 }
 
+/**
+ * 点赞帖子
+ * @param {number} postId - 帖子ID
+ */
+export function likePost(postId) {
+  return request({
+    url: `/api/community/posts/${postId}/like`,
+    method: 'post'
+  })
+}
+
+/**
+ * 取消点赞
+ * @param {number} postId - 帖子ID
+ */
+export function unlikePost(postId) {
+  return request({
+    url: `/api/community/posts/${postId}/like`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 获取当前用户点赞的帖子列表（分页）
+ * 对应后端：GET /api/community/posts/liked/me
+ * @param {Object} params - 查询参数
+ * @param {number} params.pageNum - 页码
+ * @param {number} params.pageSize - 每页大小
+ */
+export function getUserLikedPosts(params) {
+  return request({
+    url: '/api/community/posts/liked/me',
+    method: 'get',
+    params: params
+  })
+}
+
 export default {
   getPostList,
   getPostDetail,
@@ -123,5 +160,8 @@ export default {
   deletePost,
   getCategories,
   getThreadTypes,
-  getImagesPreview
+  getImagesPreview,
+  likePost,
+  unlikePost,
+  getUserLikedPosts
 }
