@@ -273,16 +273,12 @@ export default {
         
         if (conversationRes.code === 200 && conversationRes.data) {
           const conversations = conversationRes.data.rows || conversationRes.data || []
-          console.log('📊 后端返回的会话数量:', conversations.length)
-          console.log('📊 后端返回的会话数据:', JSON.stringify(conversations))
           
           // 创建一个 conversationId -> conversation 的映射
           const conversationMap = {}
           conversations.forEach(conv => {
             conversationMap[conv.conversationId] = conv
           })
-          
-          console.log('📊 会话映射:', conversationMap)
           
           // 更新每个对话的未读数（使用 Vue.set 确保响应式）
           this.chats.forEach((chat, index) => {
@@ -291,10 +287,7 @@ export default {
               // 确保 unreadCount 是数字类型
               const unreadCount = parseInt(conv.unreadCount) || 0
               this.$set(this.chats[index], 'unreadCount', unreadCount)
-              console.log(`💬 更新对话 ${chat.conversationId} (${chat.name}) 未读数: ${unreadCount}, 类型: ${typeof unreadCount}`)
-            } else {
-              console.warn(`⚠️ 对话 ${chat.conversationId} 在后端返回中不存在`)
-            }
+            } 
           })
           
           // 更新分类计数和过滤
@@ -476,7 +469,7 @@ export default {
 </script>
 
 <style scoped>
-/* 定义全局变量：核心蓝 #1966FF */
+/* 定义全局变量 */
 page {
   --theme-blue: #1966FF; 
   --theme-blue-light: #EBF2FF;
@@ -504,13 +497,13 @@ page {
   box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.02);
 }
 
-/* 占位符，高度根据 fixed-header 的实际内容调整，约 260rpx-300rpx */
+/* 占位符，高度根据 fixed-header 的实际内容调整 */
 .header-placeholder {
-  height: 280rpx; 
+  height: 290rpx; 
 }
 
 .header {
-  padding: 0 30rpx;
+  padding: 0 32rpx;
   height: 88rpx;
   display: flex;
   align-items: center;
@@ -530,8 +523,8 @@ page {
 }
 
 .action-btn {
-  width: 60rpx;
-  height: 60rpx;
+  width: 64rpx;
+  height: 64rpx;
   background-color: var(--theme-blue);
   border-radius: 50%;
   display: flex;
@@ -548,9 +541,9 @@ page {
   margin-top: -4rpx;
 }
 
-/* 搜索框 */
+/* 搜索框优化 */
 .search-wrapper {
-  padding: 10rpx 30rpx 20rpx;
+  padding: 12rpx 32rpx 24rpx;
   background-color: #fff;
 }
 
@@ -573,12 +566,13 @@ page {
   flex: 1;
   font-size: 28rpx;
   color: var(--text-main);
+  height: 100%;
 }
 
-/* 分类 Tabs */
+/* 分类 Tabs 优化 */
 .category-tabs {
   background-color: #fff;
-  padding-bottom: 20rpx;
+  padding-bottom: 24rpx;
 }
 
 .tabs-scroll {
@@ -588,15 +582,15 @@ page {
 
 .tabs-flex {
   display: flex;
-  padding: 0 30rpx;
+  padding: 0 32rpx;
 }
 
 .tab-item {
   display: inline-flex;
   align-items: center;
-  padding: 12rpx 24rpx;
+  padding: 14rpx 28rpx;
   margin-right: 20rpx;
-  border-radius: 30rpx;
+  border-radius: 32rpx;
   background-color: #F5F5F5;
   transition: all 0.3s;
   border: 1rpx solid transparent;
@@ -608,7 +602,7 @@ page {
 }
 
 .tab-text {
-  font-size: 26rpx;
+  font-size: 28rpx; /* 增大字体 */
   color: #666;
   font-weight: 500;
 }
@@ -619,18 +613,19 @@ page {
 }
 
 .tab-count {
-  margin-left: 8rpx;
+  margin-left: 10rpx;
   background-color: #FF4D4F;
   color: #fff;
-  font-size: 20rpx;
-  padding: 0 8rpx;
+  font-size: 22rpx;
+  padding: 0 10rpx;
   border-radius: 20rpx;
-  line-height: 28rpx;
-  min-width: 28rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  min-width: 32rpx;
   text-align: center;
 }
 
-/* --- 列表区域 --- */
+/* --- 列表区域优化 --- */
 .chat-list {
   flex: 1;
   box-sizing: border-box;
@@ -640,7 +635,7 @@ page {
 .chat-item {
   display: flex;
   align-items: center;
-  padding: 30rpx;
+  padding: 32rpx 24rpx; /* 增加内边距 */
   background-color: #fff;
   margin-bottom: 2rpx;
 }
@@ -649,18 +644,19 @@ page {
   background-color: #F9FAFC;
 }
 
-/* 头像 */
+/* 头像优化 */
 .avatar-container {
   position: relative;
-  margin-right: 24rpx;
+  margin-right: 32rpx; /* 增加间距 */
 }
 
 .chat-avatar {
-  width: 100rpx;
-  height: 100rpx;
+  width: 96rpx; /* 稍微缩小一点更精致，或者保持100看需求，推荐96 */
+  height: 96rpx;
   border-radius: 50%;
-  border: 2rpx solid #f0f0f0;
+  border: 2rpx solid #f5f5f5;
   background-color: #eee;
+  flex-shrink: 0;
 }
 
 .unread-badge {
@@ -678,19 +674,23 @@ page {
   text-align: center;
   border: 2rpx solid #fff;
   box-sizing: border-box;
+  z-index: 2;
 }
 
-/* 内容 */
+/* 内容布局 */
 .chat-content {
   flex: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10rpx;
+  margin-bottom: 8rpx; /* 间距 */
 }
 
 .name-row {
@@ -702,9 +702,9 @@ page {
 
 .chat-name {
   font-size: 32rpx;
-  color: var(--text-main);
+  color: #222; /* 字体颜色加深 */
   font-weight: 600;
-  margin-right: 12rpx;
+  margin-right: 16rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -713,7 +713,7 @@ page {
 /* 角色标签 */
 .role-tag {
   font-size: 20rpx;
-  padding: 2rpx 8rpx;
+  padding: 4rpx 12rpx;
   border-radius: 6rpx;
   margin-right: 10rpx;
   flex-shrink: 0;
@@ -730,28 +730,30 @@ page {
 }
 
 .chat-time {
-  font-size: 22rpx;
-  color: var(--text-sub);
+  font-size: 24rpx; /* 增大时间字体 */
+  color: #999;
   flex-shrink: 0;
 }
 
 .chat-footer {
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
 .message-text {
-  font-size: 26rpx;
+  font-size: 28rpx; /* 增大消息字体 */
   color: #666;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 90%;
+  max-width: 95%;
+  line-height: 1.4;
 }
 
 /* 空状态 */
 .empty-state {
-  padding-top: 120rpx;
+  padding-top: 160rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -761,18 +763,19 @@ page {
 .empty-text {
   font-size: 28rpx;
   color: #999;
-  margin-bottom: 30rpx;
+  margin-bottom: 40rpx;
 }
 
 .empty-btn {
   border: 2rpx solid var(--theme-blue);
   color: var(--theme-blue);
-  font-size: 26rpx;
-  padding: 12rpx 40rpx;
-  border-radius: 30rpx;
+  font-size: 28rpx;
+  padding: 16rpx 48rpx;
+  border-radius: 40rpx;
+  font-weight: 500;
 }
 
-/* --- 弹窗样式 --- */
+/* --- 弹窗样式优化 --- */
 .dialog-card {
   width: 600rpx;
   background-color: #fff;
@@ -792,27 +795,28 @@ page {
   font-size: 34rpx;
   font-weight: bold;
   color: #333;
-  margin-bottom: 10rpx;
+  margin-bottom: 12rpx;
 }
 
 .dialog-subtitle {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #999;
 }
 
 .dialog-body {
-  padding: 0 40rpx 40rpx;
+  padding: 0 40rpx 50rpx;
 }
 
 .input-wrapper {
   background-color: #F5F7FA;
   border-radius: 16rpx;
-  padding: 20rpx;
+  padding: 4rpx 24rpx;
 }
 
+/* 修复：增大输入框高度，方便点击 */
 .dialog-input {
-  height: 40rpx;
-  font-size: 30rpx;
+  height: 80rpx; 
+  font-size: 32rpx;
   color: #333;
   width: 100%;
 }
@@ -829,6 +833,7 @@ page {
   align-items: center;
   justify-content: center;
   font-size: 32rpx;
+  font-weight: 500;
 }
 
 .dialog-btn.cancel {
