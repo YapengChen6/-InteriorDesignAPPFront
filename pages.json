@@ -197,12 +197,7 @@
       "navigationBarTitleText": "发布页面"
     }
   },
-  {
-    "path": "pages/post/FindDesign-order",
-    "style": {
-      "navigationBarTitleText": "寻找设计师页面"
-    }
-  },
+  
   {
     "path": "pages/mine/posted/posted",
     "style": {
@@ -304,13 +299,6 @@
     "style": {
       "navigationBarTitleText": "已完成订单的详情页面"
     }
-  },
-  {
-  	"path" : "pages/review/review",
-  	"style" : 
-  	{
-  		"navigationBarTitleText" : "订单评价"
-  	}
   },
   {
   	"path" : "pages/work/jianli-order",

@@ -129,7 +129,7 @@
           <text class="label">具体需求：</text>
           <editor
             class="rich-text-editor"
-            :placeholder="'请输入您的具体需求，例如：\n- 需要3D效果图\n- 现代简约风格\n- 需要全屋定制\n- 预算包含主材和辅材'"
+            :placeholder="editorPlaceholder"
             @ready="onEditorReady"
             @input="onEditorInput"
             show-confirm-bar="false"
@@ -178,7 +178,9 @@ export default {
         borderRadius: '10rpx'
       },
       // 提交状态
-      isSubmitting: false
+      isSubmitting: false,
+      // Editor placeholder 内容
+      editorPlaceholder: '请输入您的具体需求，例如：需要3D效果图、现代简约风格、需要全屋定制、预算包含主材和辅材'
     }
   },
   methods: {
@@ -665,45 +667,6 @@ export default {
   }
 }
 
-/* 自定义 uni-easyinput 样式 - 增强边框效果 */
-:deep(.uni-easyinput__content) {
-  border-radius: 10rpx !important;
-  border: 2rpx solid #ddd !important;
-}
-
-:deep(.uni-easyinput__content.is-input-border) {
-  border: 2rpx solid #ddd !important;
-}
-
-:deep(.uni-easyinput__content-input) {
-  font-size: 32rpx !important;
-}
-
-:deep(.uni-easyinput__placeholder) {
-  color: #999 !important;
-  font-size: 32rpx !important;
-}
-
-/* 焦点状态下的边框颜色 */
-:deep(.uni-easyinput__content.is-input-border:focus-within) {
-  border-color: #4a6fa5 !important;
-  box-shadow: 0 0 0 2rpx rgba(74, 111, 165, 0.2) !important;
-}
-
-/* 富文本编辑器样式 */
-:deep(.ql-container) {
-  font-size: 32rpx !important;
-  border: none !important;
-}
-
-:deep(.ql-editor) {
-  padding: 0 !important;
-  min-height: 360rpx !important;
-}
-
-:deep(.ql-editor.ql-blank::before) {
-  color: #999 !important;
-  font-style: normal !important;
-  font-size: 32rpx !important;
-}
+/* 移除所有 :deep() 选择器，使用全局样式类替代 */
+/* 注意：这些样式可能需要放在全局样式文件中，因为小程序不支持深度选择器 */
 </style>

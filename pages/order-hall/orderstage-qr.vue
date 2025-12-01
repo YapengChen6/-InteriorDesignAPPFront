@@ -37,7 +37,7 @@
           <view class="stages-container">
             <view 
               v-for="(stage, index) in stages" 
-              :key="stage.orderStageId || 'stage_' + index" 
+              :key="index" 
               class="stage-item"
             >
               <view class="stage-header">
@@ -87,7 +87,7 @@
                   class="status-badge" 
                   :class="statusClassMap[stage.status] || 'status-unknown'"
                 >
-                  {{ getStatusText(stage.status) }}
+                  {{ statusTextMap[stage.status] || '未知' }}
                 </view>
               </view>
 
@@ -134,6 +134,7 @@
     </view>
   </view>
 </template>
+
 <script>
 export default {
   data() {
@@ -150,6 +151,15 @@ export default {
         3: 'status-waiting',
         4: 'status-completed',
         5: 'status-cancelled'
+      },
+      // 状态文本映射
+      statusTextMap: {
+        0: '待确认',
+        1: '已确认',
+        2: '进行中',
+        3: '待验收',
+        4: '已完成',
+        5: '已取消'
       }
     }
   },
@@ -191,19 +201,6 @@ export default {
       } finally {
         this.loading = false
       }
-    },
-
-    // 获取状态文本
-    getStatusText(status) {
-      const statusMap = {
-        0: '待确认',
-        1: '已确认',
-        2: '进行中',
-        3: '待验收',
-        4: '已完成',
-        5: '已取消'
-      }
-      return statusMap[status] || '未知'
     },
 
     // 检查时间冲突（只读展示）
@@ -357,7 +354,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-/* 样式保持不变 */
 .container {
   min-height: 100vh;
   background-color: #f0f2f5;
@@ -515,21 +511,6 @@ export default {
   display: flex;
   gap: 30rpx;
   .form-group { flex: 1; margin-bottom: 0; }
-}
-
-.placeholder { color: #999; }
-
-.error-tip {
-  color: #e74c3c;
-  font-size: 24rpx;
-  margin-top: 10rpx;
-}
-
-.char-count {
-  text-align: right;
-  color: #999;
-  font-size: 24rpx;
-  margin-top: 10rpx;
 }
 
 .time-conflict-tip {
