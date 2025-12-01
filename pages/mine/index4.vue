@@ -610,7 +610,7 @@
 					// 商家功能
 					case '产品管理':
 						uni.navigateTo({
-							url: '/pages/merchant/product'
+							url: '/pages/shop/shop'
 						});
 						break;
 					case '商家页面':

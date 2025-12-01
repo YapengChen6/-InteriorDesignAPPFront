@@ -162,7 +162,7 @@
               <!-- 已上传的图片 -->
               <view 
                 v-for="(image, index) in productImages" 
-                :key="index" 
+                :key="'uploaded_' + index" 
                 class="preview-item"
               >
                 <image :src="image.url" class="preview-image" mode="aspectFill"></image>
@@ -175,7 +175,7 @@
               <!-- 待上传的临时图片 -->
               <view 
                 v-for="(file, index) in tempImageFiles" 
-                :key="index" 
+                :key="'temp_' + index" 
                 class="preview-item temp-image"
               >
                 <image :src="file.tempFilePath" class="preview-image" mode="aspectFill"></image>
