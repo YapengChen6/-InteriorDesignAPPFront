@@ -72,6 +72,10 @@
           if (userInfoResponse.code === 200 || userInfoResponse.success) {
             const userInfo = userInfoResponse.data
             uni.setStorageSync('userInfo', userInfo)
+            // 单独存储用户ID，方便其他页面使用
+            if (userInfo && userInfo.userId) {
+              uni.setStorageSync('userId', userInfo.userId.toString())
+            }
             console.log('用户信息:', userInfo)
             
             // 获取用户路由
@@ -96,6 +100,7 @@
       clearLoginStatus() {
         uni.removeStorageSync('token')
         uni.removeStorageSync('userInfo')
+        uni.removeStorageSync('userId')
         uni.removeStorageSync('userRouters')
         console.log('已清除登录状态')
       },

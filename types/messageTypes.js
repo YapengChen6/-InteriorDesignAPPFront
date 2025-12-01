@@ -7,9 +7,10 @@
  * 消息类型枚举
  */
 export const MESSAGE_TYPES = {
-  NORMAL: 1,        // 普通消息
-  ORDER_REQUEST: 2, // 订单申请
-  CHAT_REQUEST: 3   // 聊天请求
+  TEXT: 1,          // 文本消息
+  IMAGE: 2,         // 图片消息
+  CHAT_REQUEST: 3,  // 聊天请求
+  FILE: 4           // 文件消息
 }
 
 /**

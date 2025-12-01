@@ -103,6 +103,17 @@ export function markMessagesAsReadBatch(messageIds, userId) {
 }
 
 /**
+ * 标记对话中所有未读消息为已读
+ * @param {number} conversationId - 对话 ID
+ */
+export function markConversationAsRead(conversationId) {
+  return request({
+    url: `/api/message/mark-conversation-read/${conversationId}`,
+    method: 'post'
+  })
+}
+
+/**
  * 删除消息
  * @param {number} messageId - 消息 ID
  * @param {number} userId - 用户 ID
@@ -177,16 +188,42 @@ export function getAllMessageTemplates() {
   })
 }
 
+/**
+ * 检查用户在线状态
+ * @param {number} userId - 用户ID
+ */
+export function getUserOnlineStatus(userId) {
+  return request({
+    url: `/api/message/user-online-status/${userId}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 批量检查用户在线状态
+ * @param {array} userIds - 用户ID数组
+ */
+export function getBatchUserOnlineStatus(userIds) {
+  return request({
+    url: '/api/message/batch-user-online-status',
+    method: 'post',
+    data: userIds
+  })
+}
+
 export default {
   getMessageList,
   getUnreadCount,
   getUnreadMessages,
   markMessageAsRead,
   markMessagesAsReadBatch,
+  markConversationAsRead,
   deleteMessage,
   sendMessage,
   getConversationList,
   createConversation,
   getMessageTemplate,
-  getAllMessageTemplates
+  getAllMessageTemplates,
+  getUserOnlineStatus,
+  getBatchUserOnlineStatus
 }
