@@ -87,12 +87,12 @@
       "navigationBarTitleText": "聊天详情",
       "navigationStyle": "custom"
     }
-  },{
+  },/* {
     "path": "pages/test/imageTest",
     "style": {
       "navigationBarTitleText": "图片加载测试"
     }
-  },{
+  }, */{
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
