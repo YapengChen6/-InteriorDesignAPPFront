@@ -18,7 +18,7 @@
   }, {
     "path": "pages/work/index",
     "style": {
-      "navigationBarTitleText": "订单页面"
+      "navigationBarTitleText": "设计师订单页面"
     }
   }, {
     "path": "pages/mine/index4",
@@ -209,12 +209,7 @@
       "navigationBarTitleText": "发布页面"
     }
   },
-  {
-    "path": "pages/post/FindDesign-order",
-    "style": {
-      "navigationBarTitleText": "寻找设计师页面"
-    }
-  },
+  
   {
     "path": "pages/mine/posted/posted",
     "style": {
@@ -318,10 +313,66 @@
     }
   },
   {
-  	"path" : "pages/find-design/design-detail",
+  	"path" : "pages/work/jianli-order",
   	"style" : 
   	{
-  		"navigationBarTitleText" : "设计师详情页面"
+  		"navigationBarTitleText" : "监理订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/order-choose",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "订单选择页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/material_supplier-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "商家订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/user-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "用户订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/order-have",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "确认监理订单施工阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-update",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单监理上传阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/orderstage-qr",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单阶段确认页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-gx",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "更新监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/designorder-work",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理上传每个监理订单阶段页面"
   	}
   }
   ],
@@ -348,7 +399,7 @@
         "text": "发布"
       },
       {
-        "pagePath": "pages/work/index",
+        "pagePath": "pages/work/order-choose",
         "iconPath": "/static/images/tabbar/design.png",
         "selectedIconPath": "/static/images/tabbar/design_.png",
         "text": "订单"

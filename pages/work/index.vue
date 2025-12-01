@@ -264,13 +264,22 @@
 			}
 		},
 		computed: {
-			// 过滤后的订单列表（用于待付款筛选）
+			// 过滤后的订单列表（用于待付款筛选和类型过滤）
 			filteredOrderList() {
+				// 首先过滤只显示设计师订单 (type=1)
+				const designerOrders = this.orderList.filter(order => order.type === 1);
+				
+				// 然后根据状态筛选
 				if (this.activeStatus === '4') {
 					// 筛选待付款订单
-					return this.orderList.filter(order => this.isWaitingPayment(order));
+					return designerOrders.filter(order => this.isWaitingPayment(order));
 				}
-				return this.orderList;
+				
+				if (this.activeStatus !== '') {
+					return designerOrders.filter(order => order.status.toString() === this.activeStatus);
+				}
+				
+				return designerOrders;
 			}
 		},
 		onLoad() {
@@ -1034,11 +1043,15 @@
 				}
 			},
 			
-			// 更新状态统计
+			// 更新状态统计（只统计设计师订单）
 			updateStatusCount() {
+				// 重置统计
 				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 }
 				
-				this.orderList.forEach(order => {
+				// 只统计设计师订单 (type=1)
+				const designerOrders = this.orderList.filter(order => order.type === 1);
+				
+				designerOrders.forEach(order => {
 					const status = order.status.toString()
 					if (this.statusCount[status] !== undefined) {
 						this.statusCount[status]++

@@ -78,7 +78,7 @@
 					</view>
 					<!-- 修复：使用映射表而不是函数调用 -->
 					<view class="order-status" :class="statusClassMap[order.status]">
-						{{ getStatusText(order.status) }}
+						{{ statusTextMap[order.status] || '未知状态' }}
 					</view>
 				</view>
 				
@@ -89,7 +89,7 @@
 						<view class="project-tags">
 							<text class="tag" v-if="order.projectInfo && order.projectInfo.budget">预算 {{ order.projectInfo.budget }}元</text>
 							<text class="tag" v-if="order.expectedEndTime">预计 {{ formatDate(order.expectedEndTime) }}完成</text>
-							<text class="tag">{{ getOrderTypeText(order.type) }}</text>
+							<text class="tag">{{ orderTypeTextMap[order.type] || '未知类型' }}</text>
 							<text class="tag" v-if="order.projectInfo && order.projectInfo.area">{{ order.projectInfo.area }}㎡</text>
 							<text class="tag" v-if="order.projectInfo && order.projectInfo.address">{{ order.projectInfo.address }}</text>
 						</view>
@@ -158,14 +158,58 @@
 							<template v-else-if="order.contractStatus === 2">
 								<!-- 设计师订单：显示施工阶段按钮 -->
 								<template v-if="String(order.type) === '1'">
-									<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+									<!-- 没有施工阶段：上传施工阶段 -->
+									<button v-if="!order.hasStages" 
+											class="btn primary" 
+											@click="uploadConstructionStage(order.orderId)">
+										上传施工阶段
+									</button>
+									
+									<!-- 有施工阶段且状态为0：修改施工阶段 -->
+									<button v-else-if="order.hasStages && order.stageStatus === 0" 
+											class="btn primary" 
+											@click="modifyConstructionStage(order.orderId)">
+										修改施工阶段
+									</button>
+									
+									<!-- 有施工阶段且状态为1：施工阶段 -->
+									<button v-else-if="order.hasStages && order.stageStatus === 1" 
+											class="btn primary" 
+											@click="viewConstructionStage(order.orderId)">
+										施工阶段
+									</button>
+									
+									<!-- 默认按钮 -->
+									<button v-else class="btn primary" @click="uploadConstructionStage(order.orderId)">
 										施工阶段
 									</button>
 								</template>
 								
 								<!-- 监理订单：显示施工阶段按钮 -->
 								<template v-else-if="String(order.type) === '2'">
-									<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+									<!-- 没有施工阶段：上传施工阶段 -->
+									<button v-if="!order.hasStages" 
+											class="btn primary" 
+											@click="uploadConstructionStage(order.orderId)">
+										上传施工阶段
+									</button>
+									
+									<!-- 有施工阶段且状态为0：修改施工阶段 -->
+									<button v-else-if="order.hasStages && order.stageStatus === 0" 
+											class="btn primary" 
+											@click="modifyConstructionStage(order.orderId)">
+										修改施工阶段
+									</button>
+									
+									<!-- 有施工阶段且状态为1：施工阶段 -->
+									<button v-else-if="order.hasStages && order.stageStatus === 1" 
+											class="btn primary" 
+											@click="viewConstructionStage(order.orderId)">
+										施工阶段
+									</button>
+									
+									<!-- 默认按钮 -->
+									<button v-else class="btn primary" @click="uploadConstructionStage(order.orderId)">
 										施工阶段
 									</button>
 								</template>
@@ -200,6 +244,8 @@
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
 	import { getUserProfile } from '@/api/users.js'
+	// 新增：导入施工阶段API
+	import { orderStageService } from '@/api/orderStage.js'
 	
 	export default {
 		data() {
@@ -243,6 +289,21 @@
 					1: 'status-progress',
 					2: 'status-completed',
 					3: 'status-canceled'
+				},
+				
+				// 新增：状态文本映射表
+				statusTextMap: {
+					0: '待确认',
+					1: '进行中',
+					2: '已完成',
+					3: '已取消'
+				},
+				
+				// 新增：订单类型文本映射表
+				orderTypeTextMap: {
+					'0': '设计订单',
+					'1': '设计师订单',
+					'2': '监理订单'
 				}
 			}
 		},
@@ -266,12 +327,91 @@
 				});
 			},
 
-			// 跳转到施工阶段页面
-			goToConstructionStage(orderId) {
-				console.log('🏗️ 跳转到施工阶段页面，订单ID:', orderId, '用户ID:', this.userInfo.userId);
-				uni.navigateTo({
-					url: `/pages/order-hall/design-update?orderId=${orderId}&userId=${this.userInfo.userId}`
-				});
+			// 检查订单施工阶段状态
+			async checkConstructionStagesStatus(orderId) {
+				try {
+					console.log('🔍 检查施工阶段状态，订单ID:', orderId);
+					
+					const response = await orderStageService.list({ orderId: orderId });
+					console.log('📋 施工阶段查询结果:', response);
+					
+					let stages = [];
+					
+					// 解析施工阶段列表
+					if (response && response.code === 200) {
+						if (Array.isArray(response.data)) {
+							stages = response.data;
+						} else if (response.data && Array.isArray(response.data.records)) {
+							stages = response.data.records;
+						} else if (response.data && Array.isArray(response.data.list)) {
+							stages = response.data.list;
+						}
+					} else if (Array.isArray(response)) {
+						stages = response;
+					}
+					
+					console.log('📝 施工阶段列表:', stages);
+					
+					// 返回施工阶段状态信息
+					return {
+						hasStages: stages.length > 0,
+						stageStatus: stages.length > 0 ? Number(stages[0].status) : null, // 取第一个阶段的状态
+						totalStages: stages.length
+					};
+					
+				} catch (error) {
+					console.error('❌ 检查施工阶段状态失败:', error);
+					return {
+						hasStages: false,
+						stageStatus: null,
+						totalStages: 0
+					};
+				}
+			},
+
+			// 上传施工阶段
+			async uploadConstructionStage(orderId) {
+				try {
+					console.log('📤 上传施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+					
+					uni.navigateTo({
+						url: `/pages/order-hall/design-update?orderId=${orderId}&userId=${this.userInfo.userId}`
+					});
+					
+				} catch (error) {
+					console.error('❌ 跳转上传施工阶段页面失败:', error);
+					this.handleApiError(error, '跳转失败');
+				}
+			},
+
+			// 修改施工阶段
+			async modifyConstructionStage(orderId) {
+				try {
+					console.log('✏️ 修改施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+					
+					uni.navigateTo({
+						url: `/pages/order-hall/design-gx?orderId=${orderId}&userId=${this.userInfo.userId}`
+					});
+					
+				} catch (error) {
+					console.error('❌ 跳转修改施工阶段页面失败:', error);
+					this.handleApiError(error, '跳转失败');
+				}
+			},
+
+			// 查看施工阶段
+			async viewConstructionStage(orderId) {
+				try {
+					console.log('👀 查看施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+					
+					uni.navigateTo({
+						url: `/pages/order-hall/designorder-work?orderId=${orderId}&userId=${this.userInfo.userId}`
+					});
+					
+				} catch (error) {
+					console.error('❌ 跳转施工阶段页面失败:', error);
+					this.handleApiError(error, '跳转失败');
+				}
 			},
 
 			// 查看订单详情
@@ -397,7 +537,23 @@
 						const orderWithDetails = {
 							...order,
 							projectInfo,
-							publisherInfo
+							publisherInfo,
+							// 新增施工阶段状态字段
+							hasStages: false,
+							stageStatus: null
+						}
+						
+						// 只有合同已确认的订单才需要检查施工阶段状态
+						if (order.contractStatus === 2) {
+							const stagesStatus = await this.checkConstructionStagesStatus(order.orderId);
+							orderWithDetails.hasStages = stagesStatus.hasStages;
+							orderWithDetails.stageStatus = stagesStatus.stageStatus;
+							
+							console.log(`🏗️ 订单 ${order.orderId} 施工阶段状态:`, {
+								是否有阶段: stagesStatus.hasStages,
+								阶段状态: stagesStatus.stageStatus,
+								总阶段数: stagesStatus.totalStages
+							});
 						}
 						
 						ordersWithDetails.push(orderWithDetails)
@@ -679,16 +835,6 @@
 				this.loadOrderList()
 			},
 			
-			// 获取状态文本
-			getStatusText(status) {
-				return orderService.getOrderStatusText(status)
-			},
-			
-			// 获取订单类型文本
-			getOrderTypeText(type) {
-				return orderService.getOrderTypeText(type)
-			},
-			
 			// 格式化时间
 			formatTime(timeStr) {
 				if (!timeStr) return ''
@@ -816,7 +962,7 @@
 </script>
 
 <style scoped>
-	/* 返回按钮样式 */
+	/* 样式保持不变 */
 	.back-btn {
 		display: flex;
 		align-items: center;
