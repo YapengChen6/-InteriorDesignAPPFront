@@ -36,7 +36,8 @@ export class WebSocketManager {
     this.ws = null
     this.status = WS_CONNECTION_STATUS.DISCONNECTED
     this.userId = null
-    this.baseUrl = options.baseUrl || 'ws://localhost:8081'
+    // 生产环境必须使用WSS协议
+    this.baseUrl = options.baseUrl || 'wss://your-domain.com'
     this.reconnectAttempts = 0
     this.maxReconnectAttempts = options.maxReconnectAttempts || 5
     this.reconnectInterval = options.reconnectInterval || 3000

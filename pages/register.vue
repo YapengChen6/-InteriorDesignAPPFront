@@ -285,10 +285,14 @@ export default {
         console.error('获取验证码失败:', error)
         let errorMessage = '获取失败，请重试'
         
-        if (error.message.includes('网络') || error.message.includes('请求失败')) {
-          errorMessage = '网络异常，请检查网络连接'
-        } else if (error.message) {
-          errorMessage = error.message
+        if (error && error.message) {
+          if (error.message.includes('网络') || error.message.includes('请求失败')) {
+            errorMessage = '网络异常，请检查网络连接'
+          } else {
+            errorMessage = error.message
+          }
+        } else if (typeof error === 'string') {
+          errorMessage = error
         }
         
         uni.showToast({
@@ -515,6 +519,8 @@ export default {
           } else {
             errorMessage = error.message
           }
+        } else if (typeof error === 'string') {
+          errorMessage = error
         }
         
         uni.showToast({

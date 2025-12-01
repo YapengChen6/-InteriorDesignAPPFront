@@ -18,7 +18,7 @@
   }, {
     "path": "pages/work/index",
     "style": {
-      "navigationBarTitleText": "订单页面"
+      "navigationBarTitleText": "设计师订单页面"
     }
   }, {
     "path": "pages/mine/index4",
@@ -71,14 +71,26 @@
       "navigationBarTitleText": "浏览文本"
     }
   },{
-    "path": "pages/message/index",
-    "style": {
-      "navigationBarTitleText": "消息"
-    }
-  },{
     "path": "pages/chat/chatMain",
     "style": {
       "navigationBarTitleText": "聊天"
+    }
+  },{
+    "path": "pages/chat/chatList",
+    "style": {
+      "navigationBarTitleText": "聊天列表",
+      "navigationStyle": "custom"
+    }
+  },{
+    "path": "pages/chat/chatDetail",
+    "style": {
+      "navigationBarTitleText": "聊天详情",
+      "navigationStyle": "custom"
+    }
+  },{
+    "path": "pages/test/imageTest",
+    "style": {
+      "navigationBarTitleText": "图片加载测试"
     }
   },{
     "path": "pages/mine/personal/index",
@@ -197,12 +209,7 @@
       "navigationBarTitleText": "发布页面"
     }
   },
-  {
-    "path": "pages/post/FindDesign-order",
-    "style": {
-      "navigationBarTitleText": "寻找设计师页面"
-    }
-  },
+  
   {
     "path": "pages/mine/posted/posted",
     "style": {
@@ -306,10 +313,66 @@
     }
   },
   {
-  	"path" : "pages/find-design/design-detail",
+  	"path" : "pages/work/jianli-order",
   	"style" : 
   	{
-  		"navigationBarTitleText" : "设计师详情页面"
+  		"navigationBarTitleText" : "监理订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/order-choose",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "订单选择页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/material_supplier-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "商家订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/user-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "用户订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/order-have",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "确认监理订单施工阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-update",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单监理上传阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/orderstage-qr",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单阶段确认页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-gx",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "更新监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/designorder-work",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理上传每个监理订单阶段页面"
   	}
   }
   ],
@@ -324,7 +387,7 @@
         "selectedIconPath": "static/images/tabbar/home_.png",
         "text": "首页"
       }, {
-        "pagePath": "pages/message/index",
+        "pagePath": "pages/chat/chatList",
         "iconPath": "/static/images/tabbar/message_.png",
         "selectedIconPath": "/static/images/tabbar/message.png",
         "text": "消息"
@@ -336,7 +399,7 @@
         "text": "发布"
       },
       {
-        "pagePath": "pages/work/index",
+        "pagePath": "pages/work/order-choose",
         "iconPath": "/static/images/tabbar/design.png",
         "selectedIconPath": "/static/images/tabbar/design_.png",
         "text": "订单"

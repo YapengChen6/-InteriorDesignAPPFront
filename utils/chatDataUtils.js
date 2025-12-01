@@ -228,31 +228,64 @@ export function filterChatsBySearch(chats, searchText) {
 }
 
 /**
- * 更新聊天列表中的分类计数
+ * 按分类和搜索文本过滤聊天列表（组合过滤）
+ * @param {Array} chats - 聊天列表
+ * @param {string} category - 分类（'all', 'designer', 'supervisor', 'user'）
+ * @param {string} searchText - 搜索文本
+ * @returns {Array} - 过滤后的聊天列表
+ */
+export function filterChatsByCategory(chats, category, searchText = '') {
+  let result = chats
+  
+  // 1. 按分类过滤
+  if (category && category !== 'all') {
+    result = filterChatsByRole(result, category)
+  }
+  
+  // 2. 按搜索文本过滤
+  if (searchText) {
+    result = filterChatsBySearch(result, searchText)
+  }
+  
+  return result
+}
+
+/**
+ * 更新聊天列表中的分类计数（统计未读消息数）
  * @param {Array} chats - 聊天列表
  * @returns {Object} - 分类计数对象
  */
 export function updateCategoryCount(chats) {
-  const designerCount = chats.filter(c => {
-    const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
-    return role === ROLE_MAP.designer.userRole
-  }).length
+  // 统计各分类的未读消息总数
+  const designerUnreadCount = chats
+    .filter(c => {
+      const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
+      return role === ROLE_MAP.designer.userRole
+    })
+    .reduce((sum, chat) => sum + (chat.unreadCount || 0), 0)
   
-  const supervisorCount = chats.filter(c => {
-    const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
-    return role === ROLE_MAP.supervisor.userRole
-  }).length
+  const supervisorUnreadCount = chats
+    .filter(c => {
+      const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
+      return role === ROLE_MAP.supervisor.userRole
+    })
+    .reduce((sum, chat) => sum + (chat.unreadCount || 0), 0)
   
-  const userCount = chats.filter(c => {
-    const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
-    return role === ROLE_MAP.user.userRole
-  }).length
+  const userUnreadCount = chats
+    .filter(c => {
+      const role = c.normalizedUserRole !== undefined ? c.normalizedUserRole : c.userRole
+      return role === ROLE_MAP.user.userRole
+    })
+    .reduce((sum, chat) => sum + (chat.unreadCount || 0), 0)
+
+  // 统计所有未读消息总数
+  const allUnreadCount = chats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0)
 
   const counts = {
-    all: chats.length,
-    designer: designerCount,
-    supervisor: supervisorCount,
-    user: userCount
+    all: allUnreadCount,
+    designer: designerUnreadCount,
+    supervisor: supervisorUnreadCount,
+    user: userUnreadCount
   }
   
   console.log('📊 分类计数更新:', counts)

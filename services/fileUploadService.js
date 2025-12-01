@@ -34,6 +34,32 @@ export const SUPPORTED_FILE_TYPES = {
     extensions: ['mp4', 'avi', 'mov', 'wmv', 'flv', '3gp', 'mkv'],
     maxSize: 100 * 1024 * 1024, // 100MB
     mimeTypes: ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-ms-wmv']
+  },
+  DOCUMENT: {
+    extensions: ['doc', 'docx', 'pdf', 'txt', 'rtf', 'xls', 'xlsx', 'ppt', 'pptx'],
+    maxSize: 50 * 1024 * 1024, // 50MB
+    mimeTypes: [
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/pdf',
+      'text/plain',
+      'application/rtf',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    ]
+  },
+  ARCHIVE: {
+    extensions: ['zip', 'rar', '7z', 'tar', 'gz'],
+    maxSize: 100 * 1024 * 1024, // 100MB
+    mimeTypes: [
+      'application/zip',
+      'application/x-rar-compressed',
+      'application/x-7z-compressed',
+      'application/x-tar',
+      'application/gzip'
+    ]
   }
 }
 
@@ -78,6 +104,10 @@ export class FileUploadTask {
       return 'image'
     } else if (SUPPORTED_FILE_TYPES.VIDEO.extensions.includes(extension)) {
       return 'video'
+    } else if (SUPPORTED_FILE_TYPES.DOCUMENT.extensions.includes(extension)) {
+      return 'document'
+    } else if (SUPPORTED_FILE_TYPES.ARCHIVE.extensions.includes(extension)) {
+      return 'archive'
     }
     
     return 'unknown'
@@ -290,6 +320,7 @@ export class FileUploadService {
       url: this.baseUrl,
       filePath: task.file.path || task.file.tempFilePath,
       name: 'file',
+      timeout: 60000, // 60秒超时
       formData: {
         relatedType: task.options.relatedType,
         relatedId: task.options.relatedId || task.options.conversationId || 0,
@@ -538,5 +569,143 @@ export function destroyGlobalFileUploadService() {
   if (globalUploadService) {
     globalUploadService.destroy()
     globalUploadService = null
+  }
+}
+
+/**
+ * 简单的文件上传函数（兼容旧版本API）
+ * @param {string} filePath 文件路径
+ * @param {Object} options 上传选项
+ * @returns {Promise<Object>} 上传结果
+ */
+export async function uploadFile(filePath, options = {}) {
+  try {
+    console.log('📁 简单上传文件:', filePath)
+    
+    // 获取基础URL
+    const getBaseUrl = () => {
+      try {
+        const config = require('@/config.js')
+        return config.baseUrl || 'http://localhost:8081'
+      } catch (e) {
+        return 'http://localhost:8081'
+      }
+    }
+    
+    // 获取token
+    const getToken = () => {
+      return uni.getStorageSync('token') || ''
+    }
+    
+    const baseUrl = getBaseUrl()
+    const token = getToken()
+    
+    console.log('📁 上传配置:', {
+      baseUrl,
+      hasToken: !!token,
+      filePath,
+      options
+    })
+    
+    // 使用uni.uploadFile直接上传
+    return new Promise((resolve) => {
+      const uploadTask = uni.uploadFile({
+        url: `${baseUrl}/api/media/upload/file`,
+        filePath: filePath,
+        name: 'file',
+        timeout: 60000,
+        formData: {
+          relatedType: options.relatedType || 1,
+          relatedId: options.relatedId || options.conversationId || 0,
+          description: options.description || '聊天图片',
+          stage: options.stage || 'chat',
+          sequence: options.sequence || 0
+        },
+        header: {
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        success: (res) => {
+          console.log('📁 上传响应原始数据:', res)
+          console.log('📁 响应状态码:', res.statusCode)
+          console.log('📁 响应数据类型:', typeof res.data)
+          console.log('📁 响应数据内容:', res.data)
+          
+          // 检查HTTP状态码
+          if (res.statusCode !== 200) {
+            resolve({
+              code: res.statusCode,
+              msg: `HTTP错误: ${res.statusCode}`,
+              data: null
+            })
+            return
+          }
+          
+          try {
+            const result = JSON.parse(res.data)
+            console.log('📁 解析后的响应:', result)
+            
+            if (result.code === 200 && result.data && result.data.fileUrl) {
+              resolve({
+                code: 200,
+                msg: result.msg || '上传成功',
+                data: {
+                  url: result.data.fileUrl,
+                  fileUrl: result.data.fileUrl,
+                  fileName: result.data.filename,
+                  fileSize: result.data.size
+                }
+              })
+            } else {
+              resolve({
+                code: result.code || 500,
+                msg: result.msg || result.message || '上传失败',
+                data: null,
+                debug: {
+                  originalResponse: result,
+                  hasData: !!result.data,
+                  hasFileUrl: !!(result.data && result.data.fileUrl)
+                }
+              })
+            }
+          } catch (parseError) {
+            console.error('❌ 解析响应失败:', parseError)
+            console.error('❌ 原始响应数据:', res.data)
+            resolve({
+              code: 500,
+              msg: '解析响应失败: ' + parseError.message,
+              data: null,
+              debug: {
+                parseError: parseError.message,
+                rawData: res.data
+              }
+            })
+          }
+        },
+        fail: (error) => {
+          console.error('❌ 上传请求失败:', error)
+          resolve({
+            code: 500,
+            msg: error.errMsg || '上传请求失败',
+            data: null
+          })
+        }
+      })
+      
+      // 监听上传进度
+      if (uploadTask.onProgressUpdate) {
+        uploadTask.onProgressUpdate((res) => {
+          const progress = Math.round((res.totalBytesSent / res.totalBytesExpectedToSend) * 100)
+          console.log('📁 上传进度:', progress + '%')
+        })
+      }
+    })
+    
+  } catch (error) {
+    console.error('❌ 简单上传失败:', error)
+    return {
+      code: 500,
+      msg: error.message || '上传失败',
+      data: null
+    }
   }
 }
