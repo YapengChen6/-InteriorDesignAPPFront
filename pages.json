@@ -213,7 +213,25 @@
   {
     "path": "pages/shop/shop",
     "style": {
-      "navigationBarTitleText": "商品展示页面"
+      "navigationBarTitleText": "商家商品页面"
+    }
+  },
+  {
+    "path": "pages/shop/add_shop",
+    "style": {
+      "navigationBarTitleText": "新商品上传页面"
+    }
+  },
+  {
+    "path": "pages/shop/shop-list",
+    "style": {
+      "navigationBarTitleText": "购买居家建材页面"
+    }
+  },
+  {
+    "path": "pages/shop/product-detail",
+    "style": {
+      "navigationBarTitleText": "商品详情"
     }
   },
   {
@@ -361,6 +379,27 @@
   	"style" : 
   	{
   		"navigationBarTitleText" : "监理上传每个监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/likes/likes",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "点赞页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/favorites/favorites",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "收藏页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/follows/follows",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "关注页面"
   	}
   }
   ],

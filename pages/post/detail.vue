@@ -100,7 +100,13 @@
 				<!-- 帖子内容 -->
 				<view class="post-body">
 					<view class="content-text">
-						<text>{{ post.content || '暂无内容' }}</text>
+						<!-- 富文本内容：包含 HTML 标签时使用 rich-text 渲染 -->
+						<rich-text 
+							v-if="isRichContent" 
+							:nodes="post.content" 
+						></rich-text>
+						<!-- 纯文本内容：无 HTML 标签时按纯文本显示 -->
+						<text v-else>{{ post.content || '暂无内容' }}</text>
 					</view>
 
 					<!-- 帖子标签 -->
@@ -242,7 +248,8 @@
 </template>
 
 <script>
-import { getPostDetail, getPostList } from '@/api/community.js'
+import { getPostDetail, getPostList, likePost, unlikePost } from '@/api/community.js'
+import { addFavorite, removeFavorite, getFavorites, followUser, unfollowUser, checkFollow } from '@/api/social.js'
 
 export default {
 	data() {
@@ -280,6 +287,16 @@ export default {
 		// 是否有图片
 		hasImages() {
 			return (this.post && this.post.mediaUrls && this.post.mediaUrls.length > 0) || (this.post && this.post.coverUrl)
+		},
+		
+		// 内容是否为富文本（包含 HTML 标签）
+		isRichContent() {
+			if (!this.post || !this.post.content) {
+				return false
+			}
+			// 简单判断：只要包含 HTML 标签（如 <p>、<br> 等），就按富文本渲染
+			const content = this.post.content
+			return /<[^>]+>/.test(content)
 		}
 	},
 	
@@ -436,48 +453,115 @@ export default {
 		
 		// 加载用户交互状态
 		async loadUserInteractionStatus() {
+			if (!this.post || !this.postId) return
+			
 			try {
-				// 这里应该调用API获取用户的点赞、收藏、关注状态
-				// 暂时使用模拟数据
-				this.isLiked = false
-				this.isCollected = false
-				this.isFollowed = false
+				// 并行加载点赞、收藏、关注状态
+				const [likedRes, favoriteRes, followRes] = await Promise.allSettled([
+					// 检查是否已点赞 - 通过尝试查询点赞记录
+					// 由于后端没有直接查询是否点赞的接口，我们需要通过其他方式判断
+					// 这里先设置为false，实际可通过其他API或从帖子详情中获取
+					Promise.resolve({ data: false }),
+					
+					// 检查是否已收藏
+					getFavorites({ postId: this.postId }).catch(() => ({ data: { rows: [] } })),
+					
+					// 检查是否已关注（如果有作者userId）
+					this.post.userId ? checkFollow(this.post.userId).catch(() => ({ data: false })) : Promise.resolve({ data: false })
+				])
+				
+				// 处理点赞状态（如果有接口可以查询）
+				this.isLiked = false // 默认未点赞，实际应该通过API查询
+				
+				// 处理收藏状态
+				if (favoriteRes.status === 'fulfilled' && favoriteRes.value) {
+					const favoriteData = favoriteRes.value.data || favoriteRes.value
+					if (favoriteData.rows && favoriteData.rows.length > 0) {
+						this.isCollected = true
+					} else if (Array.isArray(favoriteData) && favoriteData.length > 0) {
+						this.isCollected = true
+					} else {
+						this.isCollected = false
+					}
+				}
+				
+				// 处理关注状态
+				if (followRes.status === 'fulfilled' && followRes.value) {
+					const followData = followRes.value.data !== undefined ? followRes.value.data : followRes.value
+					this.isFollowed = !!followData
+				} else {
+					this.isFollowed = false
+				}
+				
+				console.log('✅ 用户交互状态加载完成:', {
+					isLiked: this.isLiked,
+					isCollected: this.isCollected,
+					isFollowed: this.isFollowed
+				})
 				
 			} catch (error) {
 				console.error('加载用户交互状态失败:', error)
+				// 失败时使用默认值
+				this.isLiked = false
+				this.isCollected = false
+				this.isFollowed = false
 			}
 		},
 		
 		// 处理点赞
 		async handleLike() {
-			if (this.likeLoading) return
+			if (this.likeLoading || !this.postId) return
 			
 			try {
 				this.likeLoading = true
 				
 				// 调用点赞/取消点赞接口
-				// const api = this.isLiked ? unlikePost : likePost
-				// await api(this.postId)
+				const api = this.isLiked ? unlikePost : likePost
+				const response = await api(this.postId)
 				
-				// 更新本地状态
-				if (this.isLiked) {
-					this.post.likeCount = Math.max(0, (this.post.likeCount || 0) - 1)
+				// 检查响应
+				if (response && response.code === 200) {
+					// 更新本地状态
+					if (this.isLiked) {
+						this.post.likeCount = Math.max(0, (this.post.likeCount || 0) - 1)
+					} else {
+						this.post.likeCount = (this.post.likeCount || 0) + 1
+					}
+					this.isLiked = !this.isLiked
+					
+					// 通知首页更新点赞数
+					uni.$emit('postLikeUpdated', {
+						postId: this.postId,
+						likeCount: this.post.likeCount,
+						isLiked: this.isLiked
+					})
+					
+					uni.showToast({
+						title: this.isLiked ? '点赞成功' : '已取消点赞',
+						icon: 'success'
+					})
 				} else {
-					this.post.likeCount = (this.post.likeCount || 0) + 1
+					throw new Error(response ? response.msg || response.message : '操作失败')
 				}
-				this.isLiked = !this.isLiked
-				
-				uni.showToast({
-					title: this.isLiked ? '点赞成功' : '已取消点赞',
-					icon: 'success'
-				})
 				
 			} catch (error) {
 				console.error('点赞操作失败:', error)
+				
+				// 显示错误信息
+				const errorMsg = error.msg || error.message || '操作失败'
 				uni.showToast({
-					title: '操作失败',
+					title: errorMsg,
 					icon: 'none'
 				})
+				
+				// 如果是"请先登录"错误，可以引导用户登录
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
 			} finally {
 				this.likeLoading = false
 			}
@@ -485,36 +569,59 @@ export default {
 		
 		// 处理收藏
 		async handleCollect() {
-			if (this.collectLoading) return
+			if (this.collectLoading || !this.postId) return
 			
 			try {
 				this.collectLoading = true
 				
 				// 调用收藏/取消收藏接口
-				// const api = this.isCollected ? uncollectPost : collectPost
-				// await api(this.postId)
-				
-				// 更新本地状态
+				let response
 				if (this.isCollected) {
-					this.post.collectCount = Math.max(0, (this.post.collectCount || 0) - 1)
+					// 取消收藏
+					response = await removeFavorite(this.postId)
 				} else {
-					this.post.collectCount = (this.post.collectCount || 0) + 1
+					// 添加收藏
+					response = await addFavorite({ postId: this.postId })
 				}
-				this.isCollected = !this.isCollected
 				
-				uni.showToast({
-					title: this.isCollected ? '收藏成功' : '已取消收藏',
-					icon: 'success'
-				})
+				// 检查响应
+				if (response && response.code === 200) {
+					// 更新本地状态
+					if (this.isCollected) {
+						this.post.collectCount = Math.max(0, (this.post.collectCount || 0) - 1)
+					} else {
+						this.post.collectCount = (this.post.collectCount || 0) + 1
+					}
+					this.isCollected = !this.isCollected
+					
+					uni.showToast({
+						title: this.isCollected ? '收藏成功' : '已取消收藏',
+						icon: 'success'
+					})
+				} else {
+					throw new Error(response ? response.msg || response.message : '操作失败')
+				}
 				
 				this.closeActionMenu()
 				
 			} catch (error) {
 				console.error('收藏操作失败:', error)
+				
+				// 显示错误信息
+				const errorMsg = error.msg || error.message || '操作失败'
 				uni.showToast({
-					title: '操作失败',
+					title: errorMsg,
 					icon: 'none'
 				})
+				
+				// 如果是"请先登录"错误，可以引导用户登录
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
 			} finally {
 				this.collectLoading = false
 			}
@@ -522,28 +629,54 @@ export default {
 		
 		// 处理关注
 		async handleFollow() {
-			if (this.followLoading || !this.post.userId) return
+			if (this.followLoading || !this.post || !this.post.userId) return
+			
+			// 不能关注自己
+			// 这里需要获取当前登录用户的ID，暂时跳过这个检查
 			
 			try {
 				this.followLoading = true
 				
 				// 调用关注/取消关注接口
-				// const api = this.isFollowed ? unfollowUser : followUser
-				// await api(this.post.userId)
+				let response
+				if (this.isFollowed) {
+					// 取消关注
+					response = await unfollowUser(this.post.userId)
+				} else {
+					// 添加关注
+					response = await followUser({ targetUserId: this.post.userId })
+				}
 				
-				this.isFollowed = !this.isFollowed
-				
-				uni.showToast({
-					title: this.isFollowed ? '关注成功' : '已取消关注',
-					icon: 'success'
-				})
+				// 检查响应
+				if (response && response.code === 200) {
+					this.isFollowed = !this.isFollowed
+					
+					uni.showToast({
+						title: this.isFollowed ? '关注成功' : '已取消关注',
+						icon: 'success'
+					})
+				} else {
+					throw new Error(response ? response.msg || response.message : '操作失败')
+				}
 				
 			} catch (error) {
 				console.error('关注操作失败:', error)
+				
+				// 显示错误信息
+				const errorMsg = error.msg || error.message || '操作失败'
 				uni.showToast({
-					title: '操作失败',
+					title: errorMsg,
 					icon: 'none'
 				})
+				
+				// 如果是"请先登录"或"不能关注自己"等错误
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
 			} finally {
 				this.followLoading = false
 			}
