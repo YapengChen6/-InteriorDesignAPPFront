@@ -40,7 +40,7 @@
 					</view>
 					<view class="info-item">
 						<text class="info-label">完成时间</text>
-						<text class="info-value">{{ formatTime(orderInfo.updateTime) || '--' }}</text>
+						<text class="info-value">{{ formatTime(orderInfo.actualEndTime) || '--' }}</text>
 					</view>
 					<view class="info-item">
 						<text class="info-label">订单金额</text>
@@ -57,8 +57,8 @@
 				</view>
 			</view>
 
-			<!-- 项目信息 -->
-			<view class="info-card" v-if="orderInfo.projectInfo">
+			<!-- 项目信息（仅非监理订单显示） -->
+			<view class="info-card" v-if="orderInfo.projectInfo && !isSupervisionOrder">
 				<view class="card-title">项目信息</view>
 				<view class="project-content">
 					<text class="project-title">{{ orderInfo.projectInfo.title || '设计项目' }}</text>
@@ -72,20 +72,19 @@
 				</view>
 			</view>
 
-			<!-- 设计师信息 -->
+			<!-- 设计师/监理信息 -->
 			<view class="info-card" v-if="orderInfo.contractorInfo">
-				<view class="card-title">设计师信息</view>
+				<view class="card-title">
+					{{ isSupervisionOrder ? '监理信息' : '设计师信息' }}
+				</view>
 				<view class="designer-content">
 					<view class="designer-avatar">
 						<image :src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" mode="aspectFill" class="avatar-img" />
 					</view>
 					<view class="designer-info">
-						<text class="designer-name">{{ orderInfo.contractorInfo.name || '设计师' }}</text>
-						<text class="designer-role">{{ orderInfo.contractorInfo.role || '设计师' }}</text>
+						<text class="designer-name">{{ orderInfo.contractorInfo.name || (isSupervisionOrder ? '监理' : '设计师') }}</text>
+						<text class="designer-role">{{ orderInfo.contractorInfo.role || (isSupervisionOrder ? '监理' : '设计师') }}</text>
 						<text class="designer-phone">电话: {{ orderInfo.contractorInfo.phone || '暂无联系方式' }}</text>
-					</view>
-					<view class="contact-btn" @click="contactDesigner(orderInfo.contractorId)">
-						联系
 					</view>
 				</view>
 			</view>
@@ -112,9 +111,9 @@
 						<text class="review-text">{{ orderReview.content }}</text>
 					</view>
 					
-					<!-- 设计师回复 -->
+					<!-- 回复 -->
 					<view class="reply-section" v-if="orderReview.replyContent">
-						<text class="reply-label">设计师回复</text>
+						<text class="reply-label">{{ isSupervisionOrder ? '监理回复' : '设计师回复' }}</text>
 						<text class="reply-text">{{ orderReview.replyContent }}</text>
 						<text class="reply-time" v-if="orderReview.replyTime">
 							回复时间：{{ formatTime(orderReview.replyTime) }}
@@ -135,7 +134,7 @@
 					<view class="file-item" @click="previewFile(orderInfo.contractUrl, '合同文件')">
 						<view class="file-icon">📄</view>
 						<view class="file-info">
-							<text class="file-name">设计服务合同</text>
+							<text class="file-name">{{ isSupervisionOrder ? '监理服务合同' : '设计服务合同' }}</text>
 							<text class="file-desc">点击查看合同详情</text>
 						</view>
 						<view class="file-action">查看</view>
@@ -143,8 +142,8 @@
 				</view>
 			</view>
 
-			<!-- 设计方案文件 -->
-			<view class="info-card" v-if="designSchemes.length > 0">
+			<!-- 设计方案文件 (仅设计订单显示) -->
+			<view class="info-card" v-if="!isSupervisionOrder && designSchemes.length > 0">
 				<view class="card-title">设计方案</view>
 				<view class="file-section">
 					<!-- 效果图方案 -->
@@ -171,17 +170,10 @@
 				</view>
 			</view>
 
-			<!-- 操作按钮 -->
-			<view class="action-section">
-				<button class="action-btn secondary" @click="contactDesigner(orderInfo.contractorId)" 
-						v-if="orderInfo.contractorId">
-					联系设计师
-				</button>
-				<button class="action-btn primary" @click="goToReview" v-if="!hasReviewed">
+			<!-- 操作按钮 - 只有用户才能评价订单 -->
+			<view class="action-section" v-if="showReviewButton">
+				<button class="action-btn primary" @click="goToReview">
 					评价订单
-				</button>
-				<button class="action-btn secondary" @click="shareOrder" v-if="hasReviewed">
-					分享订单
 				</button>
 			</view>
 
@@ -204,7 +196,8 @@
 	import { orderService, OrderStatus, OrderType } from '@/api/order.js'
 	import { getDesignSchemeList } from '@/api/designScheme.js'
 	import { getUserProfile } from '@/api/users.js'
-	import { orderReviewApi } from '@/api/orderReview.js' // 导入评价API
+	import { orderReviewApi } from '@/api/orderReview.js'
+	import { getCurrentRole } from '@/api/users.js'
 
 	export default {
 		data() {
@@ -212,6 +205,9 @@
 				// 页面参数
 				orderId: null,
 				userId: null,
+				
+				// 用户身份信息
+				userRole: 'user', // 默认设为用户
 				
 				// 加载状态
 				loading: false,
@@ -230,6 +226,9 @@
 					updateTime: null,
 					contractUrl: null,
 					remark: '',
+					expectedEndTime: null,
+					actualEndTime: null,
+					contractStatus: null,
 					projectInfo: {},
 					contractorInfo: {}
 				},
@@ -258,6 +257,16 @@
 					const type = scheme.schemeType || scheme.type;
 					return String(type) === "2"; // 施工设计图类型
 				});
+			},
+			
+			// 是否为监理订单
+			isSupervisionOrder() {
+				return this.orderInfo.type === OrderType.SUPERVISION;
+			},
+			
+			// 是否显示评价按钮（只有用户身份且未评价时才显示）
+			showReviewButton() {
+				return !this.hasReviewed && this.userRole === 'user';
 			}
 		},
 		
@@ -277,22 +286,43 @@
 				return;
 			}
 			
-			this.loadOrderDetail();
+			// 获取用户身份并加载订单详情
+			this.getUserRoleAndLoadData();
 		},
 		
 		methods: {
+			// 获取用户身份并加载数据
+			async getUserRoleAndLoadData() {
+				try {
+					// 获取用户角色
+					const roleRes = await getCurrentRole();
+					if (roleRes.code === 200 && roleRes.data) {
+						this.userRole = roleRes.data.roleType;
+					}
+					console.log('✅ 用户身份:', this.userRole);
+				} catch (error) {
+					console.error('❌ 获取用户角色失败，使用默认用户身份:', error);
+					this.userRole = 'user'; // 默认设为用户
+				}
+				
+				// 加载订单详情
+				this.loadOrderDetail();
+			},
+			
 			// 加载订单详情
 			async loadOrderDetail() {
 				try {
 					this.loading = true;
 					
-					console.log('📋 开始加载订单详情，订单ID:', this.orderId);
+					console.log('📋 开始加载订单详情，订单ID:', this.orderId, '用户身份:', this.userRole);
 					
 					// 1. 加载订单基本信息 - 使用列表接口查询单个订单
 					await this.loadOrderInfo();
 					
-					// 2. 加载设计方案
-					await this.loadDesignSchemes();
+					// 2. 加载设计方案（仅设计订单需要）
+					if (!this.isSupervisionOrder) {
+						await this.loadDesignSchemes();
+					}
 					
 					// 3. 检查评价状态
 					await this.checkReviewStatus();
@@ -343,7 +373,7 @@
 							...currentOrder
 						};
 						
-						// 加载设计师信息
+						// 加载设计师/监理信息
 						if (currentOrder.contractorId) {
 							await this.loadDesignerInfo(currentOrder.contractorId);
 						}
@@ -359,33 +389,33 @@
 				}
 			},
 			
-			// 加载设计师信息
+			// 加载设计师/监理信息
 			async loadDesignerInfo(designerId) {
 				try {
-					console.log('👨‍🎨 加载设计师信息，设计师ID:', designerId);
-					const designerInfo = await getUserProfile(designerId);
+					console.log('👨‍🎨 加载设计师/监理信息，ID:', designerId);
+					const userInfo = await getUserProfile(designerId);
 					
-					if (designerInfo && designerInfo.code === 200) {
+					if (userInfo && userInfo.code === 200) {
 						this.orderInfo.contractorInfo = {
-							name: designerInfo.data.name || designerInfo.data.nickname || '设计师',
-							avatar: designerInfo.data.avatar || '/static/images/default-avatar.png',
-							role: '设计师',
-							phone: designerInfo.data.phone || designerInfo.data.mobile || '暂无联系方式'
+							name: userInfo.data.name || userInfo.data.nickname || (this.isSupervisionOrder ? '监理' : '设计师'),
+							avatar: userInfo.data.avatar || '/static/images/default-avatar.png',
+							role: this.isSupervisionOrder ? '监理' : '设计师',
+							phone: userInfo.data.phone || userInfo.data.mobile || '暂无联系方式'
 						};
 					}
 				} catch (error) {
-					console.error('❌ 加载设计师信息失败:', error);
+					console.error('❌ 加载设计师/监理信息失败:', error);
 					// 不影响主要功能，使用默认信息
 					this.orderInfo.contractorInfo = {
-						name: '设计师',
+						name: this.isSupervisionOrder ? '监理' : '设计师',
 						avatar: '/static/images/default-avatar.png',
-						role: '设计师',
+						role: this.isSupervisionOrder ? '监理' : '设计师',
 						phone: '暂无联系方式'
 					};
 				}
 			},
 			
-			// 加载设计方案
+			// 加载设计方案（仅设计订单调用）
 			async loadDesignSchemes() {
 				try {
 					console.log('🎨 加载设计方案，订单ID:', this.orderId);
@@ -541,7 +571,7 @@
 				}
 			},
 			
-			// 预览设计方案
+			// 预览设计方案（仅设计订单可用）
 			previewDesignScheme(scheme) {
 				console.log('🎨 预览设计方案:', scheme);
 				
@@ -570,36 +600,19 @@
 				}
 			},
 			
-			// 联系设计师
-			contactDesigner(designerId) {
-				if (!designerId) {
+			// 去评价（只有用户身份可以调用）
+			goToReview() {
+				if (this.userRole !== 'user') {
 					uni.showToast({
-						title: '暂无设计师信息',
+						title: '只有用户才能评价订单',
 						icon: 'none'
 					});
 					return;
 				}
 				
-				console.log('💬 联系设计师，设计师ID:', designerId);
-				uni.navigateTo({
-					url: `/pages/chat/designer?id=${designerId}`
-				});
-			},
-			
-			// 去评价
-			goToReview() {
 				console.log('📝 去评价，订单ID:', this.orderId, '用户ID:', this.userId);
 				uni.navigateTo({
 					url: `/pages/review/review?orderId=${this.orderId}&userId=${this.userId}`
-				});
-			},
-			
-			// 分享订单
-			shareOrder() {
-				console.log('📤 分享订单，订单ID:', this.orderId);
-				uni.showToast({
-					title: '分享功能开发中',
-					icon: 'none'
 				});
 			},
 			
@@ -892,14 +905,6 @@
 		color: #666;
 	}
 	
-	.contact-btn {
-		background: #3498db;
-		color: white;
-		padding: 15rpx 30rpx;
-		border-radius: 25rpx;
-		font-size: 26rpx;
-	}
-	
 	/* 评价内容 */
 	.review-content {
 		display: flex;
@@ -1064,12 +1069,6 @@
 	.action-btn.primary {
 		background: linear-gradient(135deg, #3498db, #2980b9);
 		color: white;
-	}
-	
-	.action-btn.secondary {
-		background: #f8f9fa;
-		color: #666;
-		border: 2rpx solid #e9ecef;
 	}
 	
 	/* 加载状态 */
