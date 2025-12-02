@@ -22,7 +22,7 @@
 					></image>
 				</view>
 				<view class="user-info">
-					<text class="user-name">{{ userInfo.nickName || userInfo.userName || '用户' }}</text>
+					<text class="user-name">{{ userInfo.name || userInfo.nickName || userInfo.userName || '用户' }}</text>
 					<text class="user-phone">{{ userInfo.phone || userInfo.phonenumber || '未绑定手机号' }}</text>
 					<view class="current-role">
 						<text class="iconfont icon-user"></text> {{ currentRoleName }}
