@@ -111,6 +111,21 @@ export const orderApi = {
   },
 
   /**
+   * 改变订单状态为结束
+   * @param {Number} orderId 订单ID
+   * @returns {Promise}
+   */
+  endOrder(orderId) {
+    console.log('🔧 调用end接口 - orderId:', orderId)
+    return request({
+      url: `${baseURL}/end`,
+      method: 'put',
+      params: { orderId: orderId },
+      loading: true
+    })
+  },
+
+  /**
    * 更改合同状态
    * @param {Number} orderId 订单ID
    * @param {Number} contractStatus 合同状态
@@ -562,7 +577,7 @@ export const orderService = {
   },
 
   /**
-   * 完成订单 - 使用状态更新接口
+   * 完成订单 - 使用结束订单接口
    * @param {Number} orderId 订单ID
    * @returns {Promise}
    */
@@ -570,8 +585,9 @@ export const orderService = {
     try {
       console.log('完成订单，订单ID:', orderId)
       
-      const res = await orderApi.updateStatus(orderId, OrderStatus.COMPLETED)
-      console.log('完成订单响应:', res)
+      // 使用结束订单接口
+      const res = await orderApi.endOrder(orderId)
+      console.log('结束订单响应:', res)
       
       return handleResponse(res, '完成订单')
     } catch (error) {

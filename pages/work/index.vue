@@ -123,7 +123,7 @@
 							<text class="designer-role">客户</text>
 							<text class="designer-phone">电话: {{ order.publisherInfo.phone }}</text>
 						</view>
-						<view class="contact-btn" @click.stop="contactCustomer(order.userId)">
+						<view class="contact-btn" @click.stop="contactOrderParty(order)">
 							联系
 						</view>
 					</view>
@@ -216,7 +216,7 @@
 <script>
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
-	import { getUserProfile } from '@/api/users.js'
+	import { getUserProfile, getCurrentRole } from '@/api/users.js'
 	import { getDesignSchemeList, saveNullScheme } from '@/api/designScheme.js'
 	
 	// 方案类型常量
@@ -240,7 +240,9 @@
 					phone: '',
 					name: '',
 					avatar: '',
-					address: ''
+					address: '',
+					role: '', // 用户角色：customer/designer/supervisor
+					roleName: '' // 角色名称
 				},
 				
 				// 分页参数
@@ -362,15 +364,37 @@
 			// 加载用户信息
 			async loadUserInfo() {
 				try {
-					console.log('👤 开始获取设计师信息...')
-					const res = await getUserProfile();
-					if (res.code === 200) {
-						this.userInfo = res.data;
-						console.log('👤 设计师信息加载完成:', this.userInfo);
+					console.log('👤 开始获取设计师信息...');
+					
+					// 同时获取用户基本信息和角色信息
+					const [userRes, roleRes] = await Promise.all([
+						getUserProfile(),
+						getCurrentRole()
+					]);
+					
+					if (userRes.code === 200) {
+						this.userInfo = userRes.data;
+						
+						// 添加角色信息
+						if (roleRes.code === 200 && roleRes.data) {
+							this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'designer';
+							this.userInfo.roleName = roleRes.data.roleName || '';
+						} else {
+							this.userInfo.role = 'designer'; // 默认角色
+							this.userInfo.roleName = '设计师';
+						}
+						
+						console.log('👤 用户信息加载完成:', {
+							userId: this.userInfo.userId,
+							name: this.userInfo.name,
+							role: this.userInfo.role,
+							roleName: this.userInfo.roleName
+						});
+						
 						this.loadOrderList();
 					} else {
-						console.error('获取设计师信息失败:', res.msg)
-						this.handleApiError(res.msg, '获取设计师信息失败');
+						console.error('获取设计师信息失败:', userRes.msg);
+						this.handleApiError(userRes.msg, '获取设计师信息失败');
 					}
 				} catch (error) {
 					console.error('❌ 获取设计师信息失败:', error);
@@ -1082,18 +1106,65 @@
 				this.loadOrderList()
 			},
 			
-			// 联系客户
-			async contactCustomer(customerId) {
-				if (!customerId) {
+			// 联系订单相关方（设计师 -> 客户）
+			contactOrderParty(order) {
+				try {
+					// 当前用户ID（设计师）
+					const currentUserId = this.userInfo.userId;
+					
+					if (!currentUserId) {
+						uni.showToast({
+							title: '用户信息获取失败',
+							icon: 'none'
+						});
+						return;
+					}
+					
+					console.log('👤 当前用户信息（设计师）:', {
+						userId: currentUserId,
+						role: this.userInfo.role,
+						roleName: this.userInfo.roleName
+					});
+					
+					console.log('📋 订单信息:', {
+						orderId: order.orderId,
+						userId: order.userId, // 订单中的客户ID
+						type: order.type
+					});
+					
+					// 确定对方ID（客户ID）
+					const otherUserId = order.userId || '';
+					
+					if (!otherUserId) {
+						uni.showToast({
+							title: '客户信息不存在',
+							icon: 'none'
+						});
+						return;
+					}
+					
+					// conversationId始终是当前用户ID
+					const conversationId = currentUserId;
+					
+					console.log('💬 聊天跳转参数:', {
+						conversationId: conversationId,
+						otherUserId: otherUserId,
+						userRole: this.userInfo.role,
+						orderId: order.orderId
+					});
+					
+					// 跳转到聊天详情页面
+					uni.navigateTo({
+						url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}&orderId=${order.orderId}`
+					});
+					
+				} catch (error) {
+					console.error('❌ 跳转聊天页面失败:', error);
 					uni.showToast({
-						title: '暂无客户信息',
+						title: '跳转失败，请重试',
 						icon: 'none'
-					})
-					return
+					});
 				}
-				uni.navigateTo({
-					url: `/pages/chat/customer?id=${customerId}`
-				})
 			},
 			
 			// 取消订单
