@@ -301,46 +301,21 @@ export default {
       }
     },
     
-    // --- 核心：处理单条会话 (获取对方头像昵称) ---
+    // --- 核心：处理单条会话 (直接使用后端返回的对方用户信息) ---
     async processConversation(conv) {
       try {
-        const otherUserId = conv.userId1 === this.currentUserId ? conv.userId2 : conv.userId1
+        // 后端已经返回了对方用户的完整信息，直接使用即可
+        const otherUserId = conv.otherUserId
+        const otherUserName = conv.otherUserName || `用户${otherUserId}`
+        const otherUserAvatar = conv.otherUserAvatar ? processAvatarUrl(conv.otherUserAvatar, '/static/images/default-avatar.png') : '/static/images/default-avatar.png'
+        const otherUserRole = conv.otherUserRole || 1
         
-        // 默认值
-        let otherUserName = `用户${otherUserId}`
-        let otherUserAvatar = '/static/images/default-avatar.png'
-        let otherUserRole = 1 
-        
-        try {
-          const userInfoRes = await searchUsers({ userId: otherUserId })
-          if (userInfoRes && userInfoRes.data) {
-            let userData = null
-            if (userInfoRes.data.rows && Array.isArray(userInfoRes.data.rows)) {
-              userData = userInfoRes.data.rows[0]
-            } else if (Array.isArray(userInfoRes.data)) {
-              userData = userInfoRes.data[0]
-            } else {
-              userData = userInfoRes.data
-            }
-            
-            if (userData) {
-              // 名字处理逻辑
-              if (userData.nickName && userData.nickName.trim() !== '') {
-                otherUserName = userData.nickName
-              } else if (userData.userName && userData.userName.trim() !== '' && !/^\d{11}$/.test(userData.userName)) {
-                otherUserName = userData.userName
-              }
-              
-              // 头像处理
-              if (userData.avatar && userData.avatar.trim() !== '') {
-                otherUserAvatar = processAvatarUrl(userData.avatar, '/static/images/default-avatar.png')
-              }
-              otherUserRole = userData.userRole || 1
-            }
-          }
-        } catch (error) {
-          console.warn('⚠️ 获取用户信息失败(ID:' + otherUserId + ')', error)
-        }
+        console.log('📋 处理会话:', {
+          conversationId: conv.conversationId,
+          otherUserId,
+          otherUserName,
+          currentUserId: this.currentUserId
+        })
         
         return {
           id: conv.conversationId,

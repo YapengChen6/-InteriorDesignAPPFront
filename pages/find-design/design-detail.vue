@@ -3,9 +3,12 @@
     <!-- 顶部导航 -->
     <view class="header">
       <view class="back-btn" @click="goBack">←</view>
-      <view class="header-title">用户主页</view>
+      <view class="header-title">设计师详情</view>
       <view class="header-actions">
-        <view class="share-btn" @click="shareUser">分享</view>
+        <view class="like-header-btn" @click="toggleDesignerLike">
+          <text class="like-icon" :class="{ liked: isDesignerLiked }">❤</text>
+        </view>
+        <view class="share-btn" @click="shareDesigner">分享</view>
       </view>
     </view>
 
@@ -15,317 +18,350 @@
       <text>加载中...</text>
     </view>
 
-    <!-- 用户头部信息 -->
-    <view class="user-profile" v-else-if="user">
-      <view class="profile-main">
-        <view class="avatar-section">
-          <view class="user-avatar">{{ user.name.charAt(0) }}</view>
-          <view class="online-badge"></view>
-        </view>
-        <view class="basic-info">
-          <view class="name-section">
-            <view class="name-left">
-              <text class="user-name">{{ user.name }}</text>
-              <text class="cert-badge">官方认证</text>
-            </view>
-            <button class="follow-btn" :class="{ followed: isFollowed }" @click="toggleFollow">
-              {{ isFollowed ? '已关注' : '+ 关注' }}
-            </button>
+    <!-- 设计师详情内容 -->
+    <scroll-view 
+      class="scroll-view" 
+      scroll-y 
+      refresher-enabled
+      @refresherrefresh="onRefresh"
+      @scrolltolower="onLoadMore"
+      v-else-if="designerDetail"
+    >
+      <!-- 设计师头部信息 -->
+      <view class="designer-profile">
+        <view class="profile-main">
+          <view class="avatar-section">
+            <image 
+              :src="getAvatarUrl(designerDetail.userInfo.avatar)" 
+              class="designer-avatar" 
+              mode="aspectFill"
+              @error="onAvatarError"
+            />
+            <view v-if="designerDetail.userInfo.isOnline" class="online-badge"></view>
           </view>
-          <view class="stats-row">
-            <view class="stat-item">
-              <text class="stat-number">{{ getFollowCount(user.followers) }}</text>
-              <text class="stat-label">关注</text>
+          <view class="basic-info">
+            <view class="name-section">
+              <view class="name-left">
+                <text class="designer-name">{{ designerDetail.userInfo.nickName || '设计师' }}</text>
+                <text v-if="designerDetail.userInfo.professionalTitle" class="cert-badge">
+                  {{ designerDetail.userInfo.professionalTitle }}
+                </text>
+              </view>
+              <view class="action-buttons">
+                <button class="follow-btn" :class="{ followed: isFollowed }" @click="toggleFollow">
+                  {{ isFollowed ? '已关注' : '+ 关注' }}
+                </button>
+                <button class="like-btn" :class="{ liked: isDesignerLiked }" @click="toggleDesignerLike">
+                  <text class="like-btn-icon">❤</text>
+                  <text class="like-btn-text">{{ isDesignerLiked ? '已点赞' : '点赞' }}</text>
+                  <text class="like-btn-count" v-if="designerLikeCount > 0">{{ designerLikeCount }}</text>
+                </button>
+              </view>
             </view>
-            <view class="stat-item">
-              <text class="stat-number">{{ user.projects }}</text>
-              <text class="stat-label">案例</text>
+            
+            <!-- 设计师标签 -->
+            <view class="tags-row" v-if="designerDetail.userInfo.specialty">
+              <view 
+                v-for="(tag, index) in getSpecialtyTags(designerDetail.userInfo.specialty)" 
+                :key="index" 
+                class="tag-item"
+              >
+                {{ tag }}
+              </view>
             </view>
-            <view class="stat-item">
-              <text class="stat-number">{{ user.rating }}</text>
-              <text class="stat-label">评分</text>
-            </view>
-          </view>
-        </view>
-      </view>
-      
-      <!-- 用户简介 -->
-      <view class="user-description">
-        <text class="description-text">{{ user.description }}</text>
-      </view>
-    </view>
-
-    <!-- 内容分类 -->
-    <view class="content-tabs" v-if="user">
-      <view 
-        class="tab-item" 
-        :class="{ active: activeTab === 'design' }" 
-        @click="changeTab('design')"
-      >
-        设计师案例
-      </view>
-      <view 
-        class="tab-item" 
-        :class="{ active: activeTab === 'supervision' }" 
-        @click="changeTab('supervision')"
-      >
-        监工案例
-      </view>
-      <view 
-        class="tab-item" 
-        :class="{ active: activeTab === 'shop' }" 
-        @click="changeTab('shop')"
-      >
-        店铺
-      </view>
-      <view 
-        class="tab-item" 
-        :class="{ active: activeTab === 'posts' }" 
-        @click="changeTab('posts')"
-      >
-        用户帖子
-      </view>
-    </view>
-
-    <!-- 设计师案例 -->
-    <view class="content-section" v-if="user && activeTab === 'design'">
-      <view class="section-header">
-        <text class="section-title">设计师案例</text>
-      </view>
-      <view class="posts-grid">
-        <view 
-          class="post-card" 
-          v-for="post in designCases" 
-          :key="post.id"
-          @click="viewPostDetail(post)"
-        >
-          <view class="post-image-placeholder">
-            <text class="image-text">{{ post.title }}</text>
-          </view>
-          <view class="post-info">
-            <text class="post-title">{{ post.title }}</text>
-            <text class="post-specs">{{ post.specs }}</text>
-            <view class="post-actions">
-              <view class="like-btn" @click.stop="toggleLike(post)">
-                <text class="like-icon" :class="{ liked: post.isLiked }">❤</text>
-                <text class="like-count">{{ post.likes }}</text>
+            
+            <!-- 设计师统计数据 - 只保留作品和点赞数 -->
+            <view class="stats-row">
+              <view class="stat-item">
+                <text class="stat-number">{{ portfolioCount }}</text>
+                <text class="stat-label">作品</text>
+              </view>
+              <view class="stat-item">
+                <text class="stat-number">{{ designerLikeCount }}</text>
+                <text class="stat-label">点赞</text>
               </view>
             </view>
           </view>
         </view>
       </view>
-    </view>
 
-    <!-- 监工案例 -->
-    <view class="content-section" v-if="user && activeTab === 'supervision'">
-      <view class="section-header">
-        <text class="section-title">监工案例</text>
-      </view>
-      <view class="posts-grid">
+      <!-- 内容分类 -->
+      <view class="content-tabs">
         <view 
-          class="post-card" 
-          v-for="post in supervisionCases" 
-          :key="post.id"
-          @click="viewPostDetail(post)"
+          class="tab-item" 
+          :class="{ active: activeTab === 'portfolios' }" 
+          @click="changeTab('portfolios')"
         >
-          <view class="post-image-placeholder">
-            <text class="image-text">{{ post.title }}</text>
-          </view>
-          <view class="post-info">
-            <text class="post-title">{{ post.title }}</text>
-            <text class="post-specs">{{ post.specs }}</text>
-            <view class="post-actions">
-              <view class="like-btn" @click.stop="toggleLike(post)">
-                <text class="like-icon" :class="{ liked: post.isLiked }">❤</text>
-                <text class="like-count">{{ post.likes }}</text>
-              </view>
-            </view>
+          作品集
+          <view v-if="portfolioCount > 0" class="tab-badge">
+            {{ portfolioCount }}
           </view>
         </view>
-      </view>
-    </view>
-
-    <!-- 店铺 -->
-    <view class="content-section" v-if="user && activeTab === 'shop'">
-      <view class="section-header">
-        <text class="section-title">店铺</text>
-      </view>
-      <view class="posts-grid">
         <view 
-          class="post-card" 
-          v-for="post in shopItems" 
-          :key="post.id"
-          @click="viewPostDetail(post)"
+          class="tab-item" 
+          :class="{ active: activeTab === 'intro' }" 
+          @click="changeTab('intro')"
         >
-          <view class="post-image-placeholder">
-            <text class="image-text">{{ post.title }}</text>
-          </view>
-          <view class="post-info">
-            <text class="post-title">{{ post.title }}</text>
-            <text class="post-price">￥{{ post.price }}</text>
-            <view class="post-actions">
-              <view class="like-btn" @click.stop="toggleLike(post)">
-                <text class="like-icon" :class="{ liked: post.isLiked }">❤</text>
-                <text class="like-count">{{ post.likes }}</text>
-              </view>
-            </view>
-          </view>
+          设计师简介
         </view>
       </view>
-    </view>
 
-    <!-- 用户帖子 - 调用真实接口 -->
-    <view class="content-section" v-if="user && activeTab === 'posts'">
-      <view class="section-header">
-        <text class="section-title">用户帖子</text>
-        <view class="posts-count" v-if="userPosts.length > 0">
-          共{{ userPosts.length }}篇
-        </view>
-      </view>
-      
-      <!-- 加载状态 -->
-      <view class="loading-posts" v-if="loadingPosts">
-        <view class="loading-spinner small"></view>
-        <text>加载帖子中...</text>
-      </view>
-      
-      <!-- 空状态 -->
-      <view class="empty-posts" v-else-if="userPosts.length === 0">
-        <view class="empty-icon">📝</view>
-        <view class="empty-text">暂无帖子</view>
-        <view class="empty-desc">该用户还没有发布任何帖子</view>
-      </view>
-      
-      <!-- 帖子列表 -->
-      <view class="posts-grid" v-else>
-        <view 
-          class="post-card" 
-          v-for="post in userPosts" 
-          :key="post.id"
-          @click="viewPostDetail(post)"
-        >
-          <view class="post-image-placeholder">
-            <text class="image-text">{{ post.title }}</text>
-            <view class="post-category" v-if="post.category">
-              {{ post.category }}
-            </view>
+      <!-- 作品集列表 - 放在上面 -->
+      <view class="content-section" v-if="activeTab === 'portfolios'">
+        <view class="section-header">
+          <text class="section-title">设计师作品集</text>
+          <view class="portfolio-count" v-if="portfolios.length > 0">
+            共{{ portfolios.length }}个作品
           </view>
-          <view class="post-info">
-            <text class="post-title">{{ post.title }}</text>
-            <text class="post-content">{{ post.content }}</text>
-            <view class="post-meta">
-              <text class="post-time" v-if="post.createTime">
-                {{ formatTime(post.createTime) }}
-              </text>
-              <view class="post-actions">
-                <view class="like-btn" @click.stop="toggleLike(post)">
-                  <text class="like-icon" :class="{ liked: post.isLiked }">❤</text>
-                  <text class="like-count">{{ post.likeCount || post.likes || 0 }}</text>
+        </view>
+        
+        <!-- 加载状态 -->
+        <view class="loading-posts" v-if="loadingPortfolios">
+          <view class="loading-spinner small"></view>
+          <text>加载作品中...</text>
+        </view>
+        
+        <!-- 空状态 -->
+        <view class="empty-posts" v-else-if="portfolios.length === 0">
+          <view class="empty-icon">🎨</view>
+          <view class="empty-text">暂无作品</view>
+          <view class="empty-desc">该设计师还没有发布作品</view>
+        </view>
+        
+        <!-- 作品集网格 -->
+        <view class="portfolios-grid" v-else>
+          <view 
+            class="portfolio-card" 
+            v-for="item in portfolios" 
+            :key="item.thread.threadId"
+            @click="viewPortfolioDetail(item)"
+          >
+            <view class="portfolio-image-container">
+              <image 
+                :src="item.thread.coverUrl || '/static/design/default-portfolio.jpg'" 
+                class="portfolio-image" 
+                mode="aspectFill"
+              />
+              <view class="portfolio-overlay">
+                <view class="portfolio-likes" @click.stop="togglePortfolioLike(item)">
+                  <text class="likes-icon" :class="{ liked: item.thread.isLiked }">❤️</text>
+                  <text class="likes-count">{{ item.thread.likeCount || 0 }}</text>
                 </view>
               </view>
+              <view v-if="item.portfolio.style" class="portfolio-category">
+                {{ item.portfolio.style }}
+              </view>
+            </view>
+            <view class="portfolio-info">
+              <text class="portfolio-title">{{ item.thread.title || item.portfolio.projectName }}</text>
+              <text class="portfolio-desc">{{ getPortfolioDescription(item) }}</text>
+              <view class="portfolio-meta">
+                <text class="portfolio-size" v-if="item.portfolio.area">
+                  {{ item.portfolio.area }}㎡
+                </text>
+                <text class="portfolio-style" v-if="item.portfolio.style">
+                  {{ item.portfolio.style }}
+                </text>
+                <text class="portfolio-budget" v-if="item.portfolio.budget">
+                  ¥{{ formatBudget(item.portfolio.budget) }}
+                </text>
+              </view>
             </view>
           </view>
         </view>
       </view>
-      
-      <!-- 加载更多 -->
-      <view class="load-more" v-if="hasMorePosts && !loadingPosts">
-        <button class="load-more-btn" @click="loadMorePosts">加载更多</button>
+
+      <!-- 设计师简介 - 放在下面 -->
+      <view class="content-section intro-section" v-if="activeTab === 'intro'">
+        <view class="section-header">
+          <text class="section-title">设计师简介</text>
+        </view>
+        
+        <!-- 个人简介 -->
+        <view class="intro-item" v-if="designerDetail.userInfo.remark">
+          <text class="intro-label">个人简介：</text>
+          <text class="intro-content">{{ designerDetail.userInfo.remark }}</text>
+        </view>
+        
+        <!-- 基本信息网格 -->
+        <view class="intro-grid">
+          <view class="info-card" v-if="designerDetail.userInfo.address">
+            <view class="info-header">
+              <text class="info-icon">📍</text>
+              <text class="info-title">所在地区</text>
+            </view>
+            <text class="info-value">{{ designerDetail.userInfo.address }}</text>
+          </view>
+          
+          <view class="info-card" v-if="designerDetail.userInfo.phonenumber">
+            <view class="info-header">
+              <text class="info-icon">📱</text>
+              <text class="info-title">联系电话</text>
+            </view>
+            <text class="info-value">{{ designerDetail.userInfo.phonenumber }}</text>
+          </view>
+          
+          <view class="info-card" v-if="designerDetail.userInfo.workYears">
+            <view class="info-header">
+              <text class="info-icon">🎓</text>
+              <text class="info-title">工作经验</text>
+            </view>
+            <text class="info-value">{{ designerDetail.userInfo.workYears }}</text>
+          </view>
+          
+          <view class="info-card" v-if="designerDetail.userInfo.sex !== undefined">
+            <view class="info-header">
+              <text class="info-icon">{{ genderInfo.icon }}</text>
+              <text class="info-title">性别</text>
+            </view>
+            <text class="info-value">{{ genderInfo.text }}</text>
+          </view>
+          
+          <view class="info-card" v-if="designerDetail.userInfo.professionalTitle">
+            <view class="info-header">
+              <text class="info-icon">🏆</text>
+              <text class="info-title">专业职称</text>
+            </view>
+            <text class="info-value">{{ designerDetail.userInfo.professionalTitle }}</text>
+          </view>
+          
+          <view class="info-card" v-if="designerDetail.userInfo.specialty">
+            <view class="info-header">
+              <text class="info-icon">💡</text>
+              <text class="info-title">擅长风格</text>
+            </view>
+            <view class="info-tags">
+              <view 
+                v-for="(tag, index) in getSpecialtyTags(designerDetail.userInfo.specialty)" 
+                :key="index" 
+                class="info-tag"
+              >
+                {{ tag }}
+              </view>
+            </view>
+          </view>
+          
+          <view class="info-card" v-if="designerDetail.userInfo.email">
+            <view class="info-header">
+              <text class="info-icon">📧</text>
+              <text class="info-title">电子邮箱</text>
+            </view>
+            <text class="info-value">{{ designerDetail.userInfo.email }}</text>
+          </view>
+          
+          <view class="info-card stats-card">
+            <view class="info-header">
+              <text class="info-icon">📊</text>
+              <text class="info-title">统计数据</text>
+            </view>
+            <view class="stats-info">
+              <view class="stats-item">
+                <text class="stats-number">{{ portfolioCount }}</text>
+                <text class="stats-label">作品数</text>
+              </view>
+              <view class="stats-item">
+                <text class="stats-number">{{ designerLikeCount }}</text>
+                <text class="stats-label">获赞数</text>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
-    </view>
+    </scroll-view>
 
     <!-- 错误状态 -->
     <view class="error-state" v-else-if="!loading">
       <view class="error-icon">😕</view>
-      <view class="error-text">用户信息加载失败</view>
-      <button class="retry-btn" @click="loadUserDetail">重新加载</button>
+      <view class="error-text">设计师信息加载失败</view>
+      <view class="error-desc">{{ errorMessage }}</view>
+      <button class="retry-btn" @click="loadDesignerDetail">重新加载</button>
     </view>
 
     <!-- 底部操作栏 -->
-    <view class="bottom-actions" v-if="user">
-      <button class="contact-btn" @click="contactUser">联系用户</button>
+    <view class="bottom-actions" v-if="designerDetail">
+      <view class="action-group">
+        <button class="action-btn contact" @click="contactDesigner">
+          联系设计师
+        </button>
+        <button class="action-btn appointment" @click="makeAppointment">
+          预约咨询
+        </button>
+      </view>
     </view>
   </view>
 </template>
 
 <script>
-// 模拟的用户数据
-const mockUsers = {
-  108: {
-    id: 108,
-    name: '设计达人',
-    rating: 4.8,
-    projects: 67,
-    location: '北京',
-    phone: '138****5678',
-    experience: '6年',
-    followers: '2.3k',
-    style: '现代简约、北欧风格',
-    description: '资深室内设计师，6年设计经验。专注于现代简约和北欧风格，擅长小户型空间优化和功能性设计。曾为多个知名楼盘提供设计服务，获得业主一致好评。'
-  }
-};
+// 导入API
+import {
+  getDesignerDetail,
+  getDesignerPortfolios,
+  checkFollowStatus,
+  followDesigner,
+  unfollowDesigner,
+  likePortfolio,
+  unlikePortfolio,
+  contactDesigner
+} from '@/api/designerdetail.js'
 
-// API基础URL - 根据实际情况修改
-const API_BASE_URL = 'http://localhost:8080';
+// 导入点赞API
+import {
+  toggleUserLike,
+  checkLikeStatus,
+  getUserLikeCount
+} from '@/api/like.js'
+
+const API_BASE_URL = 'http://localhost:8081';
 
 export default {
   data() {
     return {
-      userId: null,
-      user: null,
+      designerId: null,
+      designerDetail: null,
       loading: true,
       isFollowed: false,
-      activeTab: 'posts', // 默认显示用户帖子
+      isDesignerLiked: false,
+      designerLikeCount: 0,
+      errorMessage: '',
+      activeTab: 'portfolios', // 默认显示作品集，放在上面
       
-      // 用户帖子相关
-      userPosts: [],
-      loadingPosts: false,
-      postsPageNum: 1,
-      postsPageSize: 10,
-      hasMorePosts: true,
-      
-      // 模拟数据
-      designCases: [
-        {
-          id: 1,
-          title: '保利阅江台',
-          specs: '160m²/现代简约/复式',
-          likes: 240,
-          isLiked: false
-        },
-        {
-          id: 2,
-          title: '龙湖天街',
-          specs: '120m²/北欧风格/平层',
-          likes: 189,
-          isLiked: false
-        }
-      ],
-      supervisionCases: [
-        {
-          id: 1,
-          title: '施工现场记录',
-          specs: '水电改造阶段',
-          likes: 89,
-          isLiked: false
-        }
-      ],
-      shopItems: [
-        {
-          id: 1,
-          title: '现代简约沙发',
-          price: '2,800',
-          likes: 156,
-          isLiked: false
-        }
-      ]
+      // 作品集相关
+      portfolios: [],
+      loadingPortfolios: false,
+      portfoliosPageNum: 1,
+      portfoliosPageSize: 10,
+      hasMorePortfolios: true,
+    }
+  },
+
+  computed: {
+    // 计算作品数量
+    portfolioCount() {
+      if (this.designerDetail && this.designerDetail.portfolios) {
+        return this.designerDetail.portfolios.length || 0;
+      }
+      return 0;
+    },
+    
+    // 计算性别显示信息
+    genderInfo() {
+      if (!this.designerDetail || !this.designerDetail.userInfo) {
+        return { text: '未知', icon: '👤' };
+      }
+      const sexCode = String(this.designerDetail.userInfo.sex || '2');
+      const genderMap = {
+        '0': { text: '男', icon: '👨' },
+        '1': { text: '女', icon: '👩' },
+        '2': { text: '未知', icon: '👤' }
+      };
+      return genderMap[sexCode] || genderMap['2'];
     }
   },
 
   onLoad(options) {
-    this.userId = options.id || 108; // 测试用户ID 108
-    console.log('用户ID:', this.userId);
-    this.loadUserDetail();
+    this.designerId = options.id || options.userId || 1;
+    console.log('设计师ID:', this.designerId);
+    this.loadDesignerDetail();
   },
 
   methods: {
@@ -333,265 +369,730 @@ export default {
       uni.navigateBack();
     },
 
-    async loadUserDetail() {
+    // 加载设计师完整详情
+    async loadDesignerDetail() {
       this.loading = true;
+      this.errorMessage = '';
+      
       try {
-        // 模拟API加载延迟
-        await new Promise(resolve => setTimeout(resolve, 800));
+        const res = await getDesignerDetail(this.designerId);
+        console.log('设计师详情接口响应:', res);
         
-        // 使用模拟数据，实际项目中应该调用API
-        this.user = mockUsers[this.userId];
-        
-        if (!this.user) {
-          throw new Error('用户不存在');
+        if (res.code === 200) {
+          this.designerDetail = res.data;
+          console.log('设计师详情数据:', this.designerDetail);
+          
+          // 处理作品集数据
+          if (this.designerDetail.portfolios && this.designerDetail.portfolios.length > 0) {
+            this.portfolios = this.designerDetail.portfolios;
+          }
+          
+          // 检查关注状态
+          this.checkFollowStatus();
+          
+          // 检查点赞状态和获取点赞数
+          this.checkDesignerLikeStatus();
+          this.getDesignerLikeCount();
+          
+        } else {
+          throw new Error(res.msg || '获取设计师详情失败');
         }
-        
-        console.log('加载的用户数据:', this.user);
-        
-        // 加载用户帖子
-        this.loadUserPosts();
-        
       } catch (error) {
-        console.error('加载用户详情失败:', error);
+        console.error('加载设计师详情失败:', error);
+        this.errorMessage = error.message;
+        
+        // 如果接口失败，使用模拟数据
+        this.useMockDesignerData();
+        
         uni.showToast({
-          title: '加载失败',
-          icon: 'error'
+          title: '使用演示数据',
+          icon: 'none',
+          duration: 2000
         });
       } finally {
         this.loading = false;
       }
     },
 
-    // 加载用户帖子列表 - 调用真实接口
-    async loadUserPosts() {
-      if (this.loadingPosts) return;
+    // 使用模拟设计师数据
+    useMockDesignerData() {
+      this.designerDetail = {
+        userInfo: {
+          userId: this.designerId,
+          nickName: '设计师' + this.designerId,
+          avatar: '',
+          phonenumber: '15685529979',
+          email: 'designer@example.com',
+          sex: '0',
+          address: '北京市 北京市 东城区',
+          professionalTitle: '高级设计师',
+          workYears: '8年',
+          specialty: '现代简约、北欧风格、中式设计',
+          remark: '资深室内设计师，专注现代简约风格设计，服务超过200个家庭，注重功能性与美学的完美结合。'
+        },
+        portfolios: [
+          {
+            thread: {
+              threadId: "49",
+              title: "现代简约公寓设计",
+              content: "120平米三室两厅，白色与木色搭配，简约而不简单",
+              coverUrl: "/static/design/portfolio1.jpg",
+              viewCount: 1250,
+              likeCount: 245,
+              commentCount: 56,
+              createTime: null
+            },
+            portfolio: {
+              portfolioId: "10",
+              projectName: "现代简约公寓",
+              designScheme: "现代简约风格设计，注重空间利用率",
+              area: 120,
+              style: "现代简约",
+              budget: 68000,
+              createTime: null
+            },
+            mediaList: []
+          }
+        ]
+      };
       
-      this.loadingPosts = true;
+      this.portfolios = this.designerDetail.portfolios;
+      // 模拟点赞数据
+      this.isDesignerLiked = false;
+      this.designerLikeCount = 45;
+    },
+
+    // 检查设计师点赞状态
+    async checkDesignerLikeStatus() {
       try {
-        // 调用后端API获取用户帖子列表
-        const res = await uni.request({
-          url: `${API_BASE_URL}/api/community/posts/user/${this.userId}`,
-          method: 'GET',
-          data: {
-            pageNum: this.postsPageNum,
-            pageSize: this.postsPageSize
-          },
-          header: {
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        console.log('用户帖子API响应:', res);
-        
-        if (res.statusCode === 200 && res.data.success) {
-          const data = res.data.data;
-          const newPosts = data.records || data.list || [];
-          
-          // 映射数据到前端格式
-          const mappedPosts = newPosts.map(post => ({
-            id: post.id || post.threadId,
-            title: post.title || '无标题',
-            content: post.content || '暂无内容',
-            likeCount: post.likeCount || 0,
-            isLiked: post.hasLiked || false,
-            createTime: post.createTime,
-            category: post.category
-          }));
-          
-          if (this.postsPageNum === 1) {
-            this.userPosts = mappedPosts;
-          } else {
-            this.userPosts = [...this.userPosts, ...mappedPosts];
-          }
-          
-          // 判断是否还有更多数据
-          this.hasMorePosts = mappedPosts.length === this.postsPageSize;
-          
-        } else {
-          console.warn('API返回异常:', res.data);
-          // 使用模拟数据作为fallback
-          this.useMockPosts();
+        const res = await checkLikeStatus(this.designerId);
+        if (res.code === 200) {
+          this.isDesignerLiked = res.data || false;
+        } else if (res.code === 401) {
+          // 未登录状态，设置为未点赞
+          this.isDesignerLiked = false;
         }
-        
       } catch (error) {
-        console.error('加载用户帖子失败:', error);
-        // 网络错误时使用模拟数据
-        this.useMockPosts();
-        uni.showToast({
-          title: '网络错误，使用演示数据',
-          icon: 'none'
-        });
-      } finally {
-        this.loadingPosts = false;
+        console.error('检查点赞状态失败:', error);
+        this.isDesignerLiked = false;
       }
     },
 
-    // 使用模拟帖子数据
-    useMockPosts() {
-      const mockPosts = [
-        {
-          id: 1,
-          title: '现代简约风格设计心得',
-          content: '分享现代简约风格的设计理念和实践经验...',
-          likeCount: 45,
-          isLiked: false,
-          createTime: '2024-01-15 10:30:00',
-          category: '设计分享'
-        },
-        {
-          id: 2,
-          title: '小户型空间优化技巧',
-          content: '如何在小户型中实现功能与美观的平衡...',
-          likeCount: 78,
-          isLiked: true,
-          createTime: '2024-01-10 14:20:00',
-          category: '经验分享'
-        },
-        {
-          id: 3,
-          title: '装修材料选购指南',
-          content: '从环保性、耐用性、价格等多维度分析...',
-          likeCount: 112,
-          isLiked: false,
-          createTime: '2024-01-05 09:15:00',
-          category: '材料知识'
-        }
-      ];
-      
-      if (this.postsPageNum === 1) {
-        this.userPosts = mockPosts;
-      } else {
-        this.userPosts = [...this.userPosts, ...mockPosts];
-      }
-      this.hasMorePosts = false;
-    },
-
-    // 加载更多帖子
-    async loadMorePosts() {
-      if (this.loadingPosts || !this.hasMorePosts) return;
-      
-      this.postsPageNum++;
-      await this.loadUserPosts();
-    },
-
-    // 切换标签
-    changeTab(tab) {
-      this.activeTab = tab;
-      if (tab === 'posts' && this.userPosts.length === 0) {
-        this.postsPageNum = 1;
-        this.loadUserPosts();
-      }
-    },
-
-    getFollowCount(followers) {
-      if (typeof followers === 'string' && followers.includes('k')) {
-        return followers;
-      }
-      return parseInt(followers) || 0;
-    },
-
-    // 格式化时间
-    formatTime(timeStr) {
-      if (!timeStr) return '';
-      // 简单格式化，实际项目中可以使用dayjs等库
-      return timeStr.split(' ')[0];
-    },
-
-    toggleFollow() {
-      this.isFollowed = !this.isFollowed;
-      uni.showToast({
-        title: this.isFollowed ? '关注成功' : '已取消关注',
-        icon: 'success'
-      });
-    },
-
-    shareUser() {
-      uni.showShareMenu({
-        withShareTicket: true
-      });
-    },
-
-    // 点赞/取消点赞 - 调用真实接口
-    async toggleLike(post) {
+    // 获取设计师点赞总数
+    async getDesignerLikeCount() {
       try {
-        const isLiking = !post.isLiked;
-        const url = `${API_BASE_URL}/api/community/posts/${post.id}/like`;
-        const method = isLiking ? 'POST' : 'DELETE';
+        const res = await getUserLikeCount(this.designerId);
+        if (res.code === 200) {
+          this.designerLikeCount = res.data || 0;
+        }
+      } catch (error) {
+        console.error('获取点赞数失败:', error);
+        this.designerLikeCount = 0;
+      }
+    },
+
+    // 点赞/取消点赞设计师
+    async toggleDesignerLike() {
+      try {
+        const res = await toggleUserLike(this.designerId);
+        console.log('点赞接口响应:', res);
         
-        const res = await uni.request({
-          url,
-          method,
-          header: {
-            'Content-Type': 'application/json',
-            // 实际项目中需要添加认证token
-            // 'Authorization': 'Bearer ' + this.getToken()
+        if (res.code === 200) {
+          const result = res.data;
+          this.isDesignerLiked = result.isLiked || !this.isDesignerLiked;
+          
+          // 更新点赞数
+          if (result.isLiked) {
+            this.designerLikeCount += 1;
+          } else {
+            this.designerLikeCount = Math.max(0, this.designerLikeCount - 1);
           }
-        });
-        
-        if (res.statusCode === 200 && res.data.success) {
-          post.isLiked = isLiking;
-          post.likeCount = isLiking ? (post.likeCount + 1) : Math.max(0, post.likeCount - 1);
           
           uni.showToast({
-            title: isLiking ? '点赞成功' : '取消点赞',
-            icon: 'success'
+            title: this.isDesignerLiked ? '点赞成功' : '取消点赞',
+            icon: 'success',
+            duration: 2000
+          });
+          
+        } else if (res.code === 401) {
+          // 未登录
+          uni.showModal({
+            title: '提示',
+            content: '请先登录后再进行点赞操作',
+            confirmText: '去登录',
+            success: (modalRes) => {
+              if (modalRes.confirm) {
+                // 跳转到登录页
+                uni.navigateTo({
+                  url: '/pages/login/index'
+                });
+              }
+            }
+          });
+        } else if (res.code === 400 && res.message === '不能给自己点赞') {
+          uni.showToast({
+            title: '不能给自己点赞',
+            icon: 'none',
+            duration: 2000
           });
         } else {
           uni.showToast({
-            title: res.data.message || '操作失败',
-            icon: 'none'
+            title: res.message || '操作失败',
+            icon: 'none',
+            duration: 2000
           });
         }
       } catch (error) {
         console.error('点赞操作失败:', error);
-        // 模拟成功
-        post.isLiked = !post.isLiked;
-        post.likeCount = post.isLiked ? (post.likeCount + 1) : Math.max(0, post.likeCount - 1);
+        // 模拟操作
+        this.isDesignerLiked = !this.isDesignerLiked;
+        this.designerLikeCount = this.isDesignerLiked ? 
+          this.designerLikeCount + 1 : 
+          Math.max(0, this.designerLikeCount - 1);
+        
         uni.showToast({
-          title: post.isLiked ? '点赞成功' : '取消点赞',
+          title: this.isDesignerLiked ? '点赞成功' : '取消点赞',
+          icon: 'success',
+          duration: 2000
+        });
+      }
+    },
+
+    // 处理擅长领域标签
+    getSpecialtyTags(specialty) {
+      if (!specialty) return [];
+      return specialty.split('、').map(tag => tag.trim());
+    },
+
+    // 获取作品描述
+    getPortfolioDescription(item) {
+      if (item.portfolio.designScheme && item.portfolio.designScheme.trim()) {
+        return item.portfolio.designScheme;
+      }
+      if (item.thread.content) {
+        // 移除HTML标签
+        return item.thread.content.replace(/<[^>]+>/g, '').substring(0, 60) + '...';
+      }
+      return '暂无描述';
+    },
+
+    // 格式化预算金额
+    formatBudget(budget) {
+      if (!budget) return '0';
+      const num = Number(budget);
+      if (isNaN(num)) return budget;
+      
+      if (num >= 10000) {
+        return (num / 10000).toFixed(1) + '万';
+      }
+      return num.toLocaleString();
+    },
+
+    // 检查关注状态
+    async checkFollowStatus() {
+      try {
+        const res = await checkFollowStatus(this.designerId);
+        if (res.code === 200) {
+          this.isFollowed = res.data.isFollowed || false;
+        }
+      } catch (error) {
+        console.error('检查关注状态失败:', error);
+        this.isFollowed = false;
+      }
+    },
+
+    // 切换关注状态
+    async toggleFollow() {
+      try {
+        if (this.isFollowed) {
+          await unfollowDesigner(this.designerId);
+          this.isFollowed = false;
+          uni.showToast({
+            title: '已取消关注',
+            icon: 'success'
+          });
+        } else {
+          await followDesigner(this.designerId);
+          this.isFollowed = true;
+          uni.showToast({
+            title: '关注成功',
+            icon: 'success'
+          });
+        }
+      } catch (error) {
+        console.error('关注操作失败:', error);
+        this.isFollowed = !this.isFollowed;
+        uni.showToast({
+          title: this.isFollowed ? '关注成功' : '已取消关注',
           icon: 'success'
         });
       }
     },
 
-    viewPostDetail(post) {
-      uni.showToast({
-        title: `查看帖子: ${post.title}`,
-        icon: 'none'
-      });
-      // 实际项目中可以跳转到帖子详情页
-      // uni.navigateTo({
-      //   url: `/pages/post/detail?id=${post.id}`
-      // });
+    // 切换作品点赞状态
+    async togglePortfolioLike(item) {
+      try {
+        const threadId = item.thread.threadId;
+        const isLiking = !item.thread.isLiked;
+        
+        if (isLiking) {
+          await likePortfolio(threadId);
+          item.thread.isLiked = true;
+          item.thread.likeCount = (item.thread.likeCount || 0) + 1;
+          uni.showToast({
+            title: '点赞成功',
+            icon: 'success'
+          });
+        } else {
+          await unlikePortfolio(threadId);
+          item.thread.isLiked = false;
+          item.thread.likeCount = Math.max(0, (item.thread.likeCount || 1) - 1);
+          uni.showToast({
+            title: '取消点赞',
+            icon: 'success'
+          });
+        }
+      } catch (error) {
+        console.error('点赞操作失败:', error);
+        item.thread.isLiked = !item.thread.isLiked;
+        item.thread.likeCount = item.thread.isLiked ? 
+          (item.thread.likeCount || 0) + 1 : 
+          Math.max(0, (item.thread.likeCount || 1) - 1);
+        uni.showToast({
+          title: item.thread.isLiked ? '点赞成功' : '取消点赞',
+          icon: 'success'
+        });
+      }
     },
 
-    contactUser() {
+    // 联系设计师
+    async contactDesigner() {
       uni.showModal({
-        title: '联系用户',
-        content: `确定要联系 ${this.user.name} 吗？\n电话：${this.user.phone}`,
-        success: (res) => {
+        title: '联系设计师',
+        content: `确定要联系设计师 ${this.designerDetail.userInfo.nickName} 吗？`,
+        success: async (res) => {
           if (res.confirm) {
-            uni.makePhoneCall({
-              phoneNumber: this.user.phone.replace('****', '0000')
-            });
+            try {
+              const contactData = {
+                contactType: '咨询',
+                message: '我对您的设计作品很感兴趣，想了解更多信息'
+              };
+              
+              const result = await contactDesigner(this.designerId, contactData);
+              if (result.code === 200) {
+                uni.showToast({
+                  title: '联系请求已发送',
+                  icon: 'success'
+                });
+              } else {
+                throw new Error(result.msg || '联系失败');
+              }
+            } catch (error) {
+              console.error('联系设计师失败:', error);
+              uni.showToast({
+                title: '联系请求发送成功',
+                icon: 'success'
+              });
+            }
           }
         }
       });
+    },
+
+    // 获取头像URL
+    getAvatarUrl(avatar) {
+      if (!avatar || avatar === '') return '/static/default-avatar.png';
+      if (avatar.startsWith('http')) return avatar;
+      return `${API_BASE_URL}${avatar}`;
+    },
+
+    // 切换标签
+    changeTab(tab) {
+      this.activeTab = tab;
+    },
+
+    // 查看作品详情
+    viewPortfolioDetail(item) {
+      const threadId = item.thread.threadId;
+      console.log('查看作品详情:', threadId);
+      
+      uni.navigateTo({
+        url: `/pages/designer/portfolio-detail?id=${threadId}`,
+        fail: () => {
+          uni.showModal({
+            title: '提示',
+            content: `查看作品: ${item.thread.title}`,
+            showCancel: false
+          });
+        }
+      });
+    },
+
+    // 分享设计师
+    shareDesigner() {
+      uni.showShareMenu({
+        withShareTicket: true,
+        success: () => {
+          uni.showToast({
+            title: '分享成功',
+            icon: 'success'
+          });
+        }
+      });
+    },
+
+    // 预约设计师
+    makeAppointment() {
+      uni.navigateTo({
+        url: `/pages/designer/appointment?id=${this.designerId}`
+      });
+    },
+
+    // 头像加载失败处理
+    onAvatarError(e) {
+      console.error('头像加载失败:', e);
+      this.designerDetail.userInfo.avatar = '/static/default-avatar.png';
+    },
+
+    // 下拉刷新
+    onRefresh() {
+      console.log('下拉刷新');
+      this.loadDesignerDetail();
+    },
+
+    // 上拉加载更多
+    onLoadMore() {
+      console.log('上拉加载更多');
+    },
+
+    // 页面显示时刷新数据
+    onShow() {
+      if (this.designerId) {
+        this.checkFollowStatus();
+        this.checkDesignerLikeStatus();
+        this.getDesignerLikeCount();
+      }
     }
   }
 }
 </script>
 
 <style scoped>
-/* 之前的样式保持不变，添加新样式 */
+.container {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #f5f7fa;
+}
 
-/* 帖子数量 */
-.posts-count {
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40rpx 30rpx;
+  background: white;
+  border-bottom: 1px solid #eee;
+}
+
+.back-btn {
+  font-size: 36rpx;
+  color: #333;
+  padding: 10rpx;
+}
+
+.header-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.like-header-btn {
+  padding: 10rpx;
+  font-size: 32rpx;
+}
+
+.like-header-btn .like-icon {
+  color: #999;
+  transition: color 0.3s;
+}
+
+.like-header-btn .like-icon.liked {
+  color: #ff4757;
+}
+
+.header-actions .share-btn {
+  font-size: 28rpx;
+  color: #6a11cb;
+  padding: 10rpx;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 200rpx 0;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 6rpx solid #f3f3f3;
+  border-top: 6rpx solid #6a11cb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 30rpx;
+}
+
+.scroll-view {
+  height: calc(100vh - 120rpx);
+}
+
+.designer-profile {
+  background: white;
+  padding: 40rpx 30rpx;
+  border-bottom: 10rpx solid #f5f7fa;
+}
+
+.profile-main {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+}
+
+.avatar-section {
+  position: relative;
+  margin-right: 30rpx;
+}
+
+.designer-avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  border: 4rpx solid #f0f0f0;
+  background-color: #f8f8f8;
+}
+
+.online-badge {
+  position: absolute;
+  bottom: 10rpx;
+  right: 10rpx;
+  width: 20rpx;
+  height: 20rpx;
+  background-color: #4CAF50;
+  border: 2rpx solid white;
+  border-radius: 50%;
+}
+
+.basic-info {
+  flex: 1;
+}
+
+.name-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+  flex-wrap: wrap;
+}
+
+.name-left {
+  flex: 1;
+  min-width: 200rpx;
+}
+
+.designer-name {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #333;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.cert-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ff7e5f, #feb47b);
+  color: white;
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  margin-left: 16rpx;
+  vertical-align: middle;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 15rpx;
+  margin-top: 10rpx;
+  flex-wrap: wrap;
+}
+
+.follow-btn {
+  background: #6a11cb;
+  color: white;
+  border: none;
+  border-radius: 30rpx;
+  padding: 12rpx 24rpx;
+  font-size: 26rpx;
+  min-width: 100rpx;
+  height: 60rpx;
+  line-height: 36rpx;
+}
+
+.follow-btn.followed {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.like-btn {
+  background: #f8f9fa;
+  color: #666;
+  border: 1rpx solid #e0e0e0;
+  border-radius: 30rpx;
+  padding: 12rpx 24rpx;
+  font-size: 26rpx;
+  min-width: 100rpx;
+  height: 60rpx;
+  line-height: 36rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.like-btn.liked {
+  background: #fff5f5;
+  color: #ff4757;
+  border-color: #ffc8c8;
+}
+
+.like-btn-icon {
+  font-size: 28rpx;
+}
+
+.like-btn-text {
+  font-size: 26rpx;
+}
+
+.like-btn-count {
+  font-size: 22rpx;
+  color: #999;
+  margin-left: 4rpx;
+}
+
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 30rpx;
+}
+
+.tag-item {
+  background: #f0f7ff;
+  color: #1890ff;
+  font-size: 24rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 10rpx;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-number {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.stat-label {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.content-tabs {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid #eee;
+  padding: 0 30rpx;
+}
+
+.tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 30rpx 0;
+  font-size: 28rpx;
+  color: #666;
+  position: relative;
+}
+
+.tab-item.active {
+  color: #6a11cb;
+  font-weight: 600;
+}
+
+.tab-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 4rpx;
+  background-color: #6a11cb;
+  border-radius: 2rpx;
+}
+
+.tab-badge {
+  display: inline-block;
+  background: #ff4d4f;
+  color: white;
+  font-size: 20rpx;
+  padding: 2rpx 8rpx;
+  border-radius: 20rpx;
+  margin-left: 8rpx;
+  vertical-align: top;
+}
+
+.content-section {
+  padding: 30rpx;
+  background: white;
+}
+
+.content-section.intro-section {
+  background: #f5f7fa;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30rpx;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.portfolio-count {
   font-size: 26rpx;
   color: #999;
 }
 
-/* 帖子加载状态 */
 .loading-posts {
   display: flex;
   flex-direction: column;
@@ -604,10 +1105,10 @@ export default {
 .loading-spinner.small {
   width: 40rpx;
   height: 40rpx;
+  border-width: 4rpx;
   margin-bottom: 16rpx;
 }
 
-/* 空状态 */
 .empty-posts {
   text-align: center;
   padding: 80rpx 40rpx;
@@ -629,21 +1130,55 @@ export default {
   color: #aaa;
 }
 
-/* 帖子元信息 */
-.post-meta {
+.portfolios-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
+}
+
+.portfolio-card {
+  background: white;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
+}
+
+.portfolio-image-container {
+  position: relative;
+  width: 100%;
+  height: 300rpx;
+}
+
+.portfolio-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.portfolio-overlay {
+  position: absolute;
+  bottom: 10rpx;
+  right: 10rpx;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-top: 16rpx;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
 }
 
-.post-time {
-  font-size: 22rpx;
-  color: #999;
+.portfolio-likes {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  color: white;
+  font-size: 24rpx;
 }
 
-/* 帖子分类标签 */
-.post-category {
+.likes-icon.liked {
+  color: #ff4757;
+}
+
+.portfolio-category {
   position: absolute;
   top: 16rpx;
   right: 16rpx;
@@ -654,21 +1189,237 @@ export default {
   font-size: 20rpx;
 }
 
-/* 加载更多 */
-.load-more {
-  display: flex;
-  justify-content: center;
-  margin-top: 40rpx;
+.portfolio-info {
+  padding: 20rpx;
 }
 
-.load-more-btn {
-  background: #f5f5f5;
+.portfolio-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  display: block;
+  margin-bottom: 10rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-desc {
+  font-size: 24rpx;
   color: #666;
-  border: none;
-  border-radius: 30rpx;
-  padding: 20rpx 60rpx;
-  font-size: 26rpx;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-bottom: 15rpx;
 }
 
-/* 其他样式保持不变... */
+.portfolio-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  font-size: 22rpx;
+  color: #999;
+}
+
+/* 设计师简介样式 */
+.intro-item {
+  margin-bottom: 30rpx;
+  padding: 30rpx;
+  background: white;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.intro-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 15rpx;
+  display: block;
+}
+
+.intro-content {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+  display: block;
+}
+
+.intro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
+}
+
+.info-card {
+  background: white;
+  border-radius: 16rpx;
+  padding: 25rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s;
+}
+
+.info-card:active {
+  transform: translateY(-2rpx);
+}
+
+.info-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 15rpx;
+}
+
+.info-icon {
+  font-size: 28rpx;
+}
+
+.info-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.info-value {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.info-tag {
+  background: #f0f7ff;
+  color: #1890ff;
+  font-size: 22rpx;
+  padding: 6rpx 12rpx;
+  border-radius: 16rpx;
+}
+
+.stats-card {
+  grid-column: span 2;
+}
+
+.stats-info {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 10rpx;
+}
+
+.stats-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stats-number {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.stats-label {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 200rpx 30rpx;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 80rpx;
+  margin-bottom: 30rpx;
+}
+
+.error-text {
+  font-size: 32rpx;
+  color: #333;
+  margin-bottom: 16rpx;
+  font-weight: 600;
+}
+
+.error-desc {
+  font-size: 28rpx;
+  color: #999;
+  margin-bottom: 40rpx;
+}
+
+.retry-btn {
+  background: #6a11cb;
+  color: white;
+  border: none;
+  border-radius: 8rpx;
+  padding: 20rpx 40rpx;
+  font-size: 28rpx;
+}
+
+.bottom-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 20rpx 30rpx;
+  border-top: 1px solid #eee;
+  z-index: 100;
+}
+
+.action-group {
+  display: flex;
+  gap: 20rpx;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 24rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+  border: none;
+  border-radius: 8rpx;
+  transition: all 0.3s ease;
+}
+
+.action-btn.contact {
+  background: #6a11cb;
+  color: white;
+}
+
+.action-btn.appointment {
+  background: #f0f0f0;
+  color: #333;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 响应式调整 */
+@media (max-width: 375px) {
+  .intro-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-card {
+    grid-column: span 1;
+  }
+  
+  .portfolios-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
