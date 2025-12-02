@@ -619,7 +619,8 @@ export async function uploadFile(filePath, options = {}) {
           relatedId: options.relatedId || options.conversationId || 0,
           description: options.description || '聊天图片',
           stage: options.stage || 'chat',
-          sequence: options.sequence || 0
+          sequence: options.sequence || 0,
+          fileName: options.fileName || ''  // 传递原始文件名
         },
         header: {
           'Authorization': token ? `Bearer ${token}` : ''
