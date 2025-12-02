@@ -219,7 +219,6 @@ export default {
         });
         return;
       }
-      
       console.log('跳转到设计师详情，ID:', userId);
       
       // 使用正确的路径：/pages/find-design/design-detail
@@ -248,6 +247,7 @@ export default {
     },
 
     contactDesigner(designer) {
+       //console.log(' 📱 当前设计师信息:', designer.userId);
       if (!designer || !designer.userId) {
         uni.showToast({
           title: '设计师信息无效',
@@ -301,6 +301,7 @@ export default {
     },
 
     onlineConsult(designer) {
+		//获取用户ID
 	  const currentUserId = this.currentUserInfo.userId;
       uni.navigateTo({
           url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${designer.userId}`
