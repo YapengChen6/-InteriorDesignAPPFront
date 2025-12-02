@@ -40,7 +40,7 @@
             </view>
             <view class="detail-item">
               <view class="detail-icon">📍</view>
-              <view>{{ supervisor.city || '未知地区' }}</view>
+              <view>{{ supervisor.address || supervisor.city||'未知地区' }}</view>
             </view>
             <view class="detail-item">
               <view class="detail-icon">📞</view>
@@ -72,7 +72,7 @@
 
 <script>
 import { getSupervisorList, contactSupervisor } from '@/api/supervisorpublic'
-
+import { getUserProfile } from "@/api/users.js"
 export default {
   name: 'SupervisorList',
   data() {
@@ -80,7 +80,11 @@ export default {
       searchKeyword: '',
       supervisors: [],
       loading: false,
-      searchTimer: null
+      searchTimer: null,
+	  searchTimer: null,
+	  defaultAvatar: '/static/default-avatar.png',
+	  currentUserInfo: null, // 添加当前用户信息
+	  isLoadingUser: false // 添加用户信息加载状态
     }
   },
   
@@ -92,9 +96,45 @@ export default {
   
   onLoad() {
     this.loadSupervisors()
+		this.getCurrentUserInfo(); // 页面加载时获取用户信息
   },
   
   methods: {
+	  // 新增：获取当前用户信息的方法
+	  async getCurrentUserInfo() {
+	          // 防止重复请求
+	      if (this.isLoadingUser) return;
+	          
+	      this.isLoadingUser = true;
+	      try {
+	  		const response = await getUserProfile();
+	          console.log('用户信息API响应:', response);
+	            
+	          if (response.code === 200) {
+	          this.currentUserInfo = response.data;
+	          console.log('当前用户信息:', this.currentUserInfo);
+	              // 存储到全局数据，方便其他地方使用
+	              if (getApp().globalData) {
+	                getApp().globalData.userInfo = response.data;
+	              }
+	              
+	              // 存储到本地缓存
+	              try {
+	                uni.setStorageSync('userInfo', response.data);
+	              } catch (storageError) {
+	                console.log('存储用户信息失败:', storageError);
+	              }
+	            } else {
+	              console.error('获取用户信息失败:', response.msg);
+	              this.currentUserInfo = null;
+	            }
+	          } catch (error) {
+	            console.error('获取用户信息异常:', error);
+	            this.currentUserInfo = null;
+	          } finally {
+	            this.isLoadingUser = false;
+	          }
+	        },
     // 加载监工列表
     async loadSupervisors() {
       this.loading = true
@@ -166,21 +206,7 @@ export default {
           title: '联系监工',
           content: '确定要联系此监工吗？',
           success: async (res) => {
-            if (res.confirm) {
-              const response = await contactSupervisor(userId)
-              
-              if (response.code === 200) {
-                uni.showToast({
-                  title: '联系请求已发送，监工会尽快回复您',
-                  icon: 'success'
-                })
-              } else {
-                uni.showToast({
-                  title: response.msg || '联系监工失败',
-                  icon: 'none'
-                })
-              }
-            }
+			this.onlineConsult(userId)
           }
         })
       } catch (error) {
@@ -191,7 +217,13 @@ export default {
         })
       }
     },
-    
+    onlineConsult(supervisorUserId) {
+    	//获取用户ID
+      const currentUserId = this.currentUserInfo.userId;
+      uni.navigateTo({
+          url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${supervisorUserId}`
+      });
+    },
     // 格式化手机号
     formatPhone(phone) {
       if (!phone) return '电话未提供'
