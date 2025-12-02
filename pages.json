@@ -87,12 +87,7 @@
       "navigationBarTitleText": "聊天详情",
       "navigationStyle": "custom"
     }
-  },/* {
-    "path": "pages/test/imageTest",
-    "style": {
-      "navigationBarTitleText": "图片加载测试"
-    }
-  }, */{
+  },{
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
@@ -225,25 +220,7 @@
   {
     "path": "pages/shop/shop",
     "style": {
-      "navigationBarTitleText": "商家商品页面"
-    }
-  },
-  {
-    "path": "pages/shop/add_shop",
-    "style": {
-      "navigationBarTitleText": "新商品上传页面"
-    }
-  },
-  {
-    "path": "pages/shop/shop-list",
-    "style": {
-      "navigationBarTitleText": "购买居家建材页面"
-    }
-  },
-  {
-    "path": "pages/shop/product-detail",
-    "style": {
-      "navigationBarTitleText": "商品详情"
+      "navigationBarTitleText": "商品展示页面"
     }
   },
   {
@@ -394,24 +371,10 @@
   	}
   },
   {
-  	"path" : "pages/mine/likes/likes",
+  	"path" : "pages/order-hall/orderstage-detail",
   	"style" : 
   	{
-  		"navigationBarTitleText" : "点赞页面"
-  	}
-  },
-  {
-  	"path" : "pages/mine/favorites/favorites",
-  	"style" : 
-  	{
-  		"navigationBarTitleText" : "收藏页面"
-  	}
-  },
-  {
-  	"path" : "pages/mine/follows/follows",
-  	"style" : 
-  	{
-  		"navigationBarTitleText" : "关注页面"
+  		"navigationBarTitleText" : "监理订单每个监理订单阶段的详情页面"
   	}
   }
   ],
