@@ -45,7 +45,8 @@
                   <view class="stage-number">{{ stage.sequence }}</view>
                   <view class="stage-info">
                     <text class="stage-name">{{ stage.name }}</text>
-                    <view class="stage-status" :class="getStatusClass(stage.status)">
+                    <!-- 修改这里：使用计算属性 -->
+                    <view class="stage-status" :class="stage.statusClass">
                       {{ getStatusText(stage.status) }}
                     </view>
                   </view>
@@ -275,7 +276,13 @@ export default {
 
   computed: {
     sortedStages() {
-      return [...this.stages].sort((a, b) => a.sequence - b.sequence)
+      // 修改：在计算属性中处理状态类
+      return [...this.stages].sort((a, b) => a.sequence - b.sequence).map(stage => {
+        return {
+          ...stage,
+          statusClass: this.getStatusClass(stage.status)
+        }
+      })
     },
     currentStageName() {
       return this.currentStage ? this.currentStage.name : ''
@@ -310,7 +317,8 @@ export default {
               name: item.name || '',
               description: item.description || '',
               expanded: false,
-              recentLogs: []
+              recentLogs: [],
+              statusClass: this.getStatusClass(Number(item.status) || 0) // 添加状态类
             }
 
             // 对于已开始、进行中、待验收、已完成的阶段，加载任务列表
@@ -675,6 +683,7 @@ export default {
         &.status-inspect { background: #fff3e0; color: #ff9800; }
         &.status-completed { background: #e8f5e9; color: #4caf50; }
         &.status-cancelled { background: #f5f5f5; color: #9e9e9e; }
+        &.status-unknown { background: #f5f5f5; color: #9e9e9e; }
       }
     }
   }
