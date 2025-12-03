@@ -47,7 +47,7 @@
           class="filter-picker"
           :disabled="!level1CategoryIndex || level2CategoryOptions.length === 0"
         >
-          <view class="filter-box" :class="{ 'disabled': !level1CategoryIndex || level2CategoryOptions.length === 0 }">
+          <view class="filter-box" :class="{'disabled': !level1CategoryIndex || level2CategoryOptions.length === 0}">
             <text class="filter-text">{{ (level2CategoryOptions[level2CategoryIndex] && level2CategoryOptions[level2CategoryIndex].name) || '二级分类' }}</text>
             <uni-icons type="arrowdown" size="14" color="#666"></uni-icons>
           </view>
@@ -98,23 +98,24 @@
       @refresherrefresh="handlePullDownRefresh"
     >
       <view class="grid-container">
-        <view 
-          class="product-card" 
-          v-for="(product, index) in filteredProducts" 
-          :key="product.id"
-        >
+        <template v-for="(product, index) in filteredProducts">
+          <view 
+            v-if="product"
+            class="product-card" 
+            :key="product.id || product.productSpuId || product.spuId || index"
+          >
           <!-- 商品图片 -->
-          <view class="product-image">
+          <view class="card-media">
             <image 
               :src="getProductImage(product)" 
               mode="aspectFill" 
-              class="image"
+              class="thumb"
               @error="onImageError(product)"
               lazy-load
             ></image>
             <!-- 状态标签 -->
-            <view class="status-badge" :class="product.status === '0' ? 'status-on' : 'status-off'">
-              {{ product.status === '0' ? '上架' : '下架' }}
+            <view class="status-badge" :class="getProductStatus(product) === '0' ? 'on' : 'off'">
+              {{ getProductStatus(product) === '0' ? '上架' : '下架' }}
             </view>
           </view>
           
@@ -125,13 +126,12 @@
             <text class="product-detail">{{ product.productDetail }}</text>
             <view class="price-section">
               <text class="market-price">￥{{ formatPrice(product.marketPrice) }}</text>
-              <text class="cost-price" v-if="product.costPrice">成本: ￥{{ formatPrice(product.costPrice) }}</text>
             </view>
             <text class="product-stock">总库存: {{ calculateTotalStock(product) }}</text>
             <text class="spec-type">规格类型: {{ getSpecTypeText(product.specType) }}</text>
             <view 
               class="sku-summary" 
-              v-if="productSkuSummary[product.id] && productSkuSummary[product.id].length"
+              v-if="product && product.id && productSkuSummary[product.id] && productSkuSummary[product.id].length"
             >
               <text class="sku-summary-title">SKU：</text>
               <view class="sku-summary-chips">
@@ -152,24 +152,25 @@
               <uni-icons type="eye" size="14" color="#909399"></uni-icons>
               详情
             </button>
+            <button class="stock-btn" @click="openStockManagement(product)" :disabled="actionLoading">
+              <uni-icons type="shop" size="14" color="#409EFF"></uni-icons>
+              库存
+            </button>
             <button class="status-btn" @click="toggleProductStatus(product)" :disabled="actionLoading">
               <uni-icons 
-                :type="product.status === '0' ? 'arrowdown' : 'arrowup'" 
+                :type="getProductStatus(product) === '0' ? 'arrowdown' : 'arrowup'" 
                 size="14" 
-                :color="product.status === '0' ? '#E6A23C' : '#67C23A'"
+                :color="getProductStatus(product) === '0' ? '#E6A23C' : '#67C23A'"
               ></uni-icons>
-              {{ product.status === '0' ? '下架' : '上架' }}
-            </button>
-            <button class="edit-btn" @click="handleEdit(product)" :disabled="actionLoading">
-              <uni-icons type="compose" size="14" color="#409EFF"></uni-icons>
-              编辑
+              {{ getProductStatus(product) === '0' ? '下架' : '上架' }}
             </button>
             <button class="delete-btn" @click="handleDelete(product)" :disabled="actionLoading">
               <uni-icons type="trash" size="14" color="#F56C6C"></uni-icons>
               删除
             </button>
           </view>
-        </view>
+          </view>
+        </template>
       </view>
 
       <!-- 加载更多 -->
@@ -199,6 +200,93 @@
         </button>
       </view>
     </scroll-view>
+
+    <!-- 库存管理弹窗 -->
+    <uni-popup ref="stockPopup" type="bottom" :safe-area="false">
+      <view class="stock-management-popup">
+        <view class="popup-header">
+          <text class="popup-title">库存管理</text>
+          <text class="popup-subtitle">{{ (currentProduct && currentProduct.productName) || '' }}</text>
+          <view class="close-btn" @click="closeStockManagement">
+            <uni-icons type="close" size="20" color="#666"></uni-icons>
+          </view>
+        </view>
+        
+        <scroll-view class="popup-content" scroll-y>
+          <!-- 单规格商品 -->
+          <view v-if="!currentProduct || getSpecTypeText(currentProduct.specType) === '单规格' || getSpecTypeText(currentProduct.specType) === '无规格'" class="single-sku-stock">
+            <view class="stock-item">
+              <view class="stock-info">
+                <text class="stock-label">商品库存</text>
+                <text class="stock-total">总库存: {{ calculateTotalStock(currentProduct) }}</text>
+              </view>
+              <view class="stock-input-wrapper">
+                <input 
+                  class="stock-input" 
+                  type="number" 
+                  v-model="singleStockValue"
+                  placeholder="请输入库存"
+                  :disabled="stockLoading"
+                />
+                <button class="save-stock-btn" @click="saveSingleStock" :disabled="stockLoading">
+                  {{ stockLoading ? '保存中...' : '保存' }}
+                </button>
+              </view>
+            </view>
+          </view>
+
+          <!-- 多规格商品 -->
+          <view v-else class="multi-sku-stock">
+            <view class="stock-list">
+              <view 
+                v-for="(sku, index) in currentProductSkus" 
+                :key="sku.productSkuId || index"
+                class="stock-item"
+              >
+                <view class="stock-info">
+                  <text class="stock-label">{{ getSkuDisplayName(sku) }}</text>
+                  <text class="stock-detail">
+                    售价: ¥{{ formatPrice(sku.salePrice) }} | 
+                    库存: {{ sku.stockQuantity || sku.stock || 0 }}
+                  </text>
+                </view>
+                <view class="stock-input-wrapper">
+                  <input 
+                    class="stock-input" 
+                    type="number" 
+                    v-model="sku.editStock"
+                    placeholder="请输入库存"
+                    :disabled="stockLoading"
+                  />
+                  <button class="save-stock-btn" @click="saveSkuStock(sku)" :disabled="stockLoading">
+                    {{ stockLoading ? '保存中...' : '保存' }}
+                  </button>
+                </view>
+              </view>
+            </view>
+            
+            <!-- 批量设置 -->
+            <view class="batch-stock-setting">
+              <view class="batch-header">
+                <text class="batch-title">批量设置库存</text>
+              </view>
+              <view class="batch-input-wrapper">
+                <input 
+                  class="batch-input" 
+                  type="number" 
+                  v-model="batchStockValue"
+                  placeholder="输入库存数量"
+                  :disabled="stockLoading"
+                />
+                <button class="batch-save-btn" @click="batchSaveStock" :disabled="stockLoading">
+                  {{ stockLoading ? '设置中...' : '应用到全部' }}
+                </button>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+    </uni-popup>
   </view>
 </template>
 
@@ -238,37 +326,48 @@ export default {
       level2Categories: [],
       level3Categories: [],
       selectedCategoryId: null, // 当前选中的三级分类ID
-      loadingCategories: false
+      loadingCategories: false,
+      // 库存管理相关
+      currentProduct: null, // 当前正在管理库存的商品
+      currentProductSkus: [], // 当前商品的SKU列表
+      singleStockValue: '', // 单规格商品的库存值
+      batchStockValue: '', // 批量设置的库存值
+      stockLoading: false // 库存保存加载状态
     }
   },
   
   computed: {
     filteredProducts() {
-      let filtered = [...this.products];
+      // 先过滤掉 null 或 undefined 的产品
+      let filtered = this.products.filter(product => product != null);
       
       // 搜索过滤
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(product => 
-          product.productName.toLowerCase().includes(query) || 
-          (product.categoryPath && product.categoryPath.toLowerCase().includes(query)) ||
-          (product.productDetail && product.productDetail.toLowerCase().includes(query))
+          product && product.productName && (
+            product.productName.toLowerCase().includes(query) || 
+            (product.categoryPath && product.categoryPath.toLowerCase().includes(query)) ||
+            (product.productDetail && product.productDetail.toLowerCase().includes(query))
+          )
         );
       }
       
       // 三级分类过滤
       if (this.selectedCategoryId) {
         filtered = filtered.filter(product => 
-          product.categoryId === this.selectedCategoryId
+          product && product.categoryId === this.selectedCategoryId
         );
       }
       
-      // 状态过滤
+      // 状态过滤（统一使用 productStatus 字段）
       if (this.statusIndex > 0) {
         const statusValue = this.statusIndex === 1 ? '0' : '2';
-        filtered = filtered.filter(product => 
-          product.status === statusValue
-        );
+        filtered = filtered.filter(product => {
+          if (!product) return false;
+          const status = this.getProductStatus(product);
+          return status === statusValue;
+        });
       }
       
       return filtered;
@@ -286,7 +385,12 @@ export default {
         if (images && images.length > 0) {
           // 选择第一张图片作为展示图片
           const firstImage = images[0];
-          return firstImage.fileUrl || firstImage.url || firstImage;
+          // 兼容不同的字段名：fileUrl, file_url, url
+          const imageUrl = firstImage.fileUrl || firstImage.file_url || firstImage.url || firstImage;
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim() !== '') {
+            console.log(`🖼️ 商品 ${product.productName || productId} 使用图片:`, imageUrl);
+            return imageUrl;
+          }
         }
       }
       
@@ -299,10 +403,14 @@ export default {
       }
       if (product.imageList && product.imageList.length > 0) {
         const firstImg = product.imageList[0];
-        return typeof firstImg === 'string' ? firstImg : (firstImg.fileUrl || firstImg.url);
+        const imageUrl = typeof firstImg === 'string' ? firstImg : (firstImg.fileUrl || firstImg.file_url || firstImg.url);
+        if (imageUrl) {
+          return imageUrl;
+        }
       }
       
       // 默认图片
+      console.warn(`⚠️ 商品 ${product.productName || productId} 没有图片，使用默认图片`);
       return '/static/images/default-product.jpg';
     },
 
@@ -668,22 +776,40 @@ export default {
             return;
           }
 
+          console.log(`🖼️ 开始加载商品 ${product.productName || spuId} 的图片，SPU ID: ${spuId}`);
+
           // 调用媒体API获取商品图片列表
           const imageRes = await mediaApi.getProductSpuImages(spuId);
+          
+          console.log(`🖼️ 商品 ${product.productName || spuId} 图片API响应:`, imageRes);
           
           if (imageRes && imageRes.code === 200) {
             // 兼容不同的返回格式
             let images = [];
             if (Array.isArray(imageRes.data)) {
               images = imageRes.data;
+              console.log(`🖼️ 商品 ${product.productName || spuId} 数据格式: Array, 数量: ${images.length}`);
             } else if (imageRes.data && imageRes.data.images && Array.isArray(imageRes.data.images)) {
               images = imageRes.data.images;
+              console.log(`🖼️ 商品 ${product.productName || spuId} 数据格式: data.images, 数量: ${images.length}`);
             } else if (imageRes.data && imageRes.data.data && Array.isArray(imageRes.data.data)) {
               images = imageRes.data.data;
+              console.log(`🖼️ 商品 ${product.productName || spuId} 数据格式: data.data, 数量: ${images.length}`);
+            } else {
+              console.warn(`⚠️ 商品 ${product.productName || spuId} 图片数据格式未知:`, imageRes.data);
             }
             
             // 过滤掉已删除的图片（del_flag !== '2'）
-            images = images.filter(img => !img.delFlag || img.delFlag !== '2');
+            images = images.filter(img => {
+              const delFlag = img.delFlag || img.del_flag;
+              const isDeleted = delFlag === '2' || delFlag === 2;
+              if (isDeleted) {
+                console.log(`🖼️ 跳过已删除的图片:`, img);
+              }
+              return !isDeleted;
+            });
+            
+            console.log(`🖼️ 商品 ${product.productName || spuId} 过滤后的图片数量: ${images.length}`);
             
             // 如果有图片，按sequence排序
             if (images.length > 0) {
@@ -693,17 +819,38 @@ export default {
                 const seqB = b.sequence || 0;
                 return seqA - seqB;
               });
+              
+              // 打印第一张图片的信息用于调试
+              if (sortedImages.length > 0) {
+                const firstImg = sortedImages[0];
+                const imageUrl = firstImg.fileUrl || firstImg.file_url || firstImg.url;
+                console.log(`🖼️ 商品 ${product.productName || spuId} 第一张图片信息:`, {
+                  fileUrl: imageUrl,
+                  mediaId: firstImg.mediaId || firstImg.media_id,
+                  sequence: firstImg.sequence
+                });
+                
+                // 将图片URL直接设置到商品对象上，确保响应式更新
+                if (imageUrl) {
+                  this.$set(product, 'imageUrl', imageUrl);
+                  this.$set(product, 'imageList', sortedImages);
+                }
+              }
+              
               this.productImagesMap.set(spuId, sortedImages);
+              console.log(`✅ 商品 ${product.productName || spuId} 图片加载成功，共 ${sortedImages.length} 张`);
             } else {
               // 没有图片时也设置空数组，避免重复请求
+              console.warn(`⚠️ 商品 ${product.productName || spuId} 没有可用图片`);
               this.productImagesMap.set(spuId, []);
             }
           } else {
             // API返回失败，设置空数组
+            console.warn(`⚠️ 商品 ${product.productName || spuId} 图片API返回失败:`, imageRes);
             this.productImagesMap.set(spuId, []);
           }
         } catch (error) {
-          console.error(`加载商品 ${product.productName || product.id} 的图片失败:`, error);
+          console.error(`❌ 加载商品 ${product.productName || product.id} 的图片失败:`, error);
           const spuId = product.productSpuId || product.spuId || product.id;
           if (spuId) {
             // 出错时也设置空数组，避免重复请求
@@ -713,6 +860,7 @@ export default {
       });
       
       await Promise.all(imagePromises);
+      console.log('🖼️ 所有商品图片加载完成');
     },
 
     // 根据分类加载商品
@@ -769,27 +917,51 @@ export default {
       }
     },
     
-    // 格式化商品数据
+    // 格式化商品数据（统一处理状态字段，并确保使用数值型 spuId）
     formatProductData(products) {
-      return products.map(product => {
-        const id = product.productSpuId || product.spuId || product.id
+      return products
+        .map(product => {
+          // 确保 product 不为 null 或 undefined
+          if (!product) {
+            console.warn('商品数据为空，已跳过')
+            return null
+          }
+          
+          const rawId = product.productSpuId != null
+            ? product.productSpuId
+            : (product.spuId != null ? product.spuId : product.id)
+
+          const numericId = Number(rawId)
+          if (!Number.isInteger(numericId) || isNaN(numericId)) {
+            console.warn('商品ID异常，已跳过该商品：', product.productName, rawId)
+            return null
+          }
+
+        // 统一获取商品状态，优先使用 productStatus
+        const productStatus = product.productStatus !== undefined 
+          ? String(product.productStatus) 
+          : (product.status !== undefined ? String(product.status) : '0')
+        
         return {
-          id,
+            id: numericId,
+            spuId: numericId,
           productName: product.productName,
           categoryId: product.categoryId,
           categoryPath: product.categoryPath,
           productDetail: product.productDetail,
           marketPrice: product.marketPrice,
           costPrice: product.costPrice,
-          status: product.status !== undefined ? String(product.status) : '0', // 确保status是字符串
+          status: productStatus, // 统一使用 status 字段
+          productStatus: productStatus, // 同时保留 productStatus 字段以保持一致性
           specType: product.specType,
           imageUrl: product.imageUrl,
           coverImage: product.coverImage,
           imageList: product.imageList || [],
-          skuList: this.productSkusMap.get(id) || [],
+            skuList: this.productSkusMap.get(numericId) || [],
           originalData: product
         }
       })
+        .filter(item => item !== null)
     },
     
     // 格式化价格
@@ -843,13 +1015,6 @@ export default {
       }
       uni.navigateTo({
         url: `/pages/shop/product-detail?id=${spuId}`
-      });
-    },
-    
-    // 编辑产品
-    handleEdit(product) {
-      uni.navigateTo({
-        url: `/pages/merchant/productupdate?type=edit&id=${product.id}`
       });
     },
     
@@ -921,11 +1086,23 @@ export default {
       }
     },
     
-    // 上架/下架商品
+    // 统一获取商品状态
+    getProductStatus(product) {
+      if (product.productStatus !== undefined) {
+        return String(product.productStatus);
+      }
+      if (product.status !== undefined) {
+        return String(product.status);
+      }
+      return '0';
+    },
+    
+    // 上架/下架商品（只有此页面可以修改商品状态）
     async toggleProductStatus(product) {
       if (this.actionLoading) return;
       
-      const newStatus = product.status === '0' ? '2' : '0';
+      const currentStatus = this.getProductStatus(product);
+      const newStatus = currentStatus === '0' ? '2' : '0';
       const action = newStatus === '0' ? '上架' : '下架';
       
       uni.showModal({
@@ -950,9 +1127,9 @@ export default {
         });
 
         let res;
-        const spuId = product.id || (product.originalData && (product.originalData.productSpuId || product.originalData.spuId));
-        if (!spuId) {
-          throw new Error('商品ID不存在');
+        const spuId = product.spuId || product.id;
+        if (!Number.isInteger(spuId)) {
+          throw new Error('商品ID异常，无法执行上下架操作');
         }
         
         if (newStatus === '0') {
@@ -972,10 +1149,21 @@ export default {
             duration: 2000
           });
           
-          // 更新本地状态
+          // 更新本地状态（同时更新 status 和 productStatus 字段以保持一致性）
           const productIndex = this.products.findIndex(p => p.id === product.id);
           if (productIndex !== -1) {
             this.products[productIndex].status = newStatus;
+            this.products[productIndex].productStatus = newStatus;
+            // 同时更新 allProducts 中的状态
+            const allProductIndex = this.allProducts.findIndex(p => {
+              const pId = p.productSpuId || p.spuId || p.id;
+              const productId = product.id || product.productSpuId || product.spuId;
+              return pId === productId;
+            });
+            if (allProductIndex !== -1) {
+              this.allProducts[allProductIndex].status = newStatus;
+              this.allProducts[allProductIndex].productStatus = newStatus;
+            }
             this.$forceUpdate();
           }
           
@@ -1038,6 +1226,274 @@ export default {
         this.loadMoreStatus = 'loading';
         this.pageParams.pageNum++;
         this.loadProducts();
+      }
+    },
+
+    // 打开库存管理弹窗
+    async openStockManagement(product) {
+      if (!product || !product.id) {
+        uni.showToast({
+          title: '商品信息不完整',
+          icon: 'none'
+        });
+        return;
+      }
+
+      this.currentProduct = product;
+      this.singleStockValue = '';
+      this.batchStockValue = '';
+      
+      // 获取商品的SKU列表
+      const spuId = product.id || product.productSpuId || product.spuId;
+      if (this.productSkusMap.has(spuId)) {
+        const skus = this.productSkusMap.get(spuId);
+        // 为每个SKU添加编辑用的库存字段
+        this.currentProductSkus = skus.map(sku => ({
+          ...sku,
+          editStock: sku.stockQuantity || sku.stock || 0
+        }));
+      } else {
+        // 如果没有SKU，尝试加载
+        try {
+          const skuRes = await productApi.getProductSkusBySpuId(spuId);
+          if (skuRes.code === 200) {
+            const normalizedSkus = this.normalizeSkuList(skuRes.data || []);
+            this.currentProductSkus = normalizedSkus.map(sku => ({
+              ...sku,
+              editStock: sku.stockQuantity || sku.stock || 0
+            }));
+            this.productSkusMap.set(spuId, normalizedSkus);
+          } else {
+            this.currentProductSkus = [];
+          }
+        } catch (error) {
+          console.error('加载SKU列表失败:', error);
+          this.currentProductSkus = [];
+        }
+      }
+
+      // 如果是单规格商品，设置初始库存值
+      const specType = this.getSpecTypeText(product.specType);
+      if (specType === '单规格' || specType === '无规格') {
+        this.singleStockValue = this.calculateTotalStock(product);
+      }
+
+      // 打开弹窗
+      this.$refs.stockPopup.open();
+    },
+
+    // 关闭库存管理弹窗
+    closeStockManagement() {
+      this.$refs.stockPopup.close();
+      this.currentProduct = null;
+      this.currentProductSkus = [];
+      this.singleStockValue = '';
+      this.batchStockValue = '';
+    },
+
+    // 获取SKU显示名称
+    getSkuDisplayName(sku) {
+      const parsedDetail = this.parseSkuDetail(sku);
+      const specText = this.buildSkuSpecText(parsedDetail, sku);
+      return specText || '默认规格';
+    },
+
+    // 保存单规格商品库存
+    async saveSingleStock() {
+      if (!this.currentProduct) return;
+
+      const stockValue = parseInt(this.singleStockValue);
+      if (isNaN(stockValue) || stockValue < 0) {
+        uni.showToast({
+          title: '请输入有效的库存数量',
+          icon: 'none'
+        });
+        return;
+      }
+
+      const spuId = this.currentProduct.id || this.currentProduct.productSpuId || this.currentProduct.spuId;
+      
+      // 如果是单规格，需要找到对应的SKU并更新
+      if (this.currentProductSkus.length > 0) {
+        const sku = this.currentProductSkus[0];
+        await this.updateSkuStock(sku, stockValue);
+      } else {
+        // 如果没有SKU，可能需要创建或更新SPU的库存
+        uni.showToast({
+          title: '该商品没有SKU信息',
+          icon: 'none'
+        });
+      }
+    },
+
+    // 保存单个SKU库存
+    async saveSkuStock(sku) {
+      if (!sku || !sku.productSkuId) {
+        uni.showToast({
+          title: 'SKU信息不完整',
+          icon: 'none'
+        });
+        return;
+      }
+
+      const stockValue = parseInt(sku.editStock);
+      if (isNaN(stockValue) || stockValue < 0) {
+        uni.showToast({
+          title: '请输入有效的库存数量',
+          icon: 'none'
+        });
+        return;
+      }
+
+      await this.updateSkuStock(sku, stockValue);
+    },
+
+    // 批量保存库存
+    async batchSaveStock() {
+      if (!this.currentProduct || this.currentProductSkus.length === 0) {
+        uni.showToast({
+          title: '没有可设置的SKU',
+          icon: 'none'
+        });
+        return;
+      }
+
+      const stockValue = parseInt(this.batchStockValue);
+      if (isNaN(stockValue) || stockValue < 0) {
+        uni.showToast({
+          title: '请输入有效的库存数量',
+          icon: 'none'
+        });
+        return;
+      }
+
+      this.stockLoading = true;
+      try {
+        uni.showLoading({
+          title: '批量设置中...',
+          mask: true
+        });
+
+        const updatePromises = this.currentProductSkus.map(sku => {
+          if (sku.productSkuId) {
+            return this.updateSkuStock(sku, stockValue, false); // false表示不显示toast
+          }
+          return Promise.resolve();
+        });
+
+        await Promise.all(updatePromises);
+
+        uni.hideLoading();
+        uni.showToast({
+          title: '批量设置成功',
+          icon: 'success'
+        });
+
+        // 更新本地数据
+        this.currentProductSkus.forEach(sku => {
+          sku.editStock = stockValue;
+        });
+
+        // 重新加载商品列表以更新显示
+        this.pageParams.pageNum = 1;
+        if (this.selectedCategoryId) {
+          await this.loadProductsByCategory();
+        } else {
+          await this.loadProducts();
+        }
+      } catch (error) {
+        uni.hideLoading();
+        console.error('批量设置库存失败:', error);
+        uni.showToast({
+          title: '批量设置失败，请重试',
+          icon: 'none'
+        });
+      } finally {
+        this.stockLoading = false;
+      }
+    },
+
+    // 更新SKU库存（内部方法）
+    async updateSkuStock(sku, stockValue, showToast = true) {
+      if (!sku || !sku.productSkuId) {
+        throw new Error('SKU信息不完整');
+      }
+
+      this.stockLoading = true;
+      try {
+        if (showToast) {
+          uni.showLoading({
+            title: '保存中...',
+            mask: true
+          });
+        }
+
+        const spuId = this.currentProduct.id || this.currentProduct.productSpuId || this.currentProduct.spuId;
+        
+        // 构建更新数据
+        const updateData = {
+          productSkuId: Number(sku.productSkuId),
+          spuId: Number(spuId),
+          salePrice: Number(sku.salePrice || sku.sale_price || 0),
+          costPrice: Number(sku.costPrice || sku.cost_price || 0),
+          stockQuantity: Number(stockValue),
+          skuDetail: sku.skuDetail || sku.sku_detail || '',
+          skuStatus: String(sku.skuStatus || sku.sku_status || '0')
+        };
+
+        const res = await productApi.updateProductSku(updateData);
+        
+        if (showToast) {
+          uni.hideLoading();
+        }
+
+        if (res.code === 200) {
+          // 更新本地数据
+          sku.stockQuantity = stockValue;
+          sku.stock = stockValue;
+          sku.editStock = stockValue;
+
+          // 更新productSkusMap
+          const spuId = this.currentProduct.id || this.currentProduct.productSpuId || this.currentProduct.spuId;
+          if (this.productSkusMap.has(spuId)) {
+            const skus = this.productSkusMap.get(spuId);
+            const index = skus.findIndex(s => s.productSkuId === sku.productSkuId);
+            if (index !== -1) {
+              skus[index] = { ...skus[index], ...sku };
+            }
+          }
+
+          if (showToast) {
+            uni.showToast({
+              title: '保存成功',
+              icon: 'success'
+            });
+          }
+
+          // 重新加载商品列表以更新显示
+          this.pageParams.pageNum = 1;
+          if (this.selectedCategoryId) {
+            await this.loadProductsByCategory();
+          } else {
+            await this.loadProducts();
+          }
+        } else {
+          throw new Error(res.message || '保存失败');
+        }
+      } catch (error) {
+        if (showToast) {
+          uni.hideLoading();
+        }
+        console.error('更新库存失败:', error);
+        if (showToast) {
+          uni.showToast({
+            title: error.message || '保存失败，请重试',
+            icon: 'none'
+          });
+        }
+        throw error;
+      } finally {
+        this.stockLoading = false;
       }
     }
   },
@@ -1164,12 +1620,12 @@ export default {
       overflow: hidden;
       box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
       
-      .product-image {
-        width: 100%;
-        height: 300rpx;
+      .card-media {
         position: relative;
+        width: 100%;
+        height: 320rpx;
         
-        .image {
+        .thumb {
           width: 100%;
           height: 100%;
         }
@@ -1177,20 +1633,18 @@ export default {
         .status-badge {
           position: absolute;
           top: 16rpx;
-          right: 16rpx;
-          padding: 8rpx 16rpx;
-          border-radius: 20rpx;
-          font-size: 22rpx;
-          font-weight: 500;
+          left: 16rpx;
+          padding: 4rpx 16rpx;
+          border-radius: 999rpx;
+          font-size: 20rpx;
+          color: #ffffff;
           
-          &.status-on {
-            background: rgba(64, 158, 255, 0.9);
-            color: #fff;
+          &.on {
+            background: rgba(255, 87, 34, 0.9);
           }
           
-          &.status-off {
-            background: rgba(153, 153, 153, 0.9);
-            color: #fff;
+          &.off {
+            background: rgba(144, 147, 153, 0.9);
           }
         }
       }
@@ -1338,8 +1792,187 @@ export default {
           color: #F56C6C;
           background: #fef0f0;
         }
+
+        .stock-btn {
+          color: #409EFF;
+          background: #ecf5ff;
+        }
       }
     }
+  }
+
+  /* 库存管理弹窗样式 */
+  .stock-management-popup {
+    background: #fff;
+    border-radius: 32rpx 32rpx 0 0;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .popup-header {
+    display: flex;
+    flex-direction: column;
+    padding: 32rpx;
+    border-bottom: 1rpx solid #ebeef5;
+    position: relative;
+  }
+
+  .popup-title {
+    font-size: 36rpx;
+    font-weight: 600;
+    color: #303133;
+    margin-bottom: 8rpx;
+  }
+
+  .popup-subtitle {
+    font-size: 26rpx;
+    color: #909399;
+  }
+
+  .close-btn {
+    position: absolute;
+    top: 32rpx;
+    right: 32rpx;
+    width: 48rpx;
+    height: 48rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #f5f7fa;
+  }
+
+  .popup-content {
+    flex: 1;
+    padding: 32rpx;
+    max-height: calc(80vh - 200rpx);
+  }
+
+  .stock-item {
+    background: #f8f9fa;
+    border-radius: 16rpx;
+    padding: 24rpx;
+    margin-bottom: 24rpx;
+  }
+
+  .stock-info {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20rpx;
+  }
+
+  .stock-label {
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #303133;
+    margin-bottom: 8rpx;
+  }
+
+  .stock-total,
+  .stock-detail {
+    font-size: 24rpx;
+    color: #909399;
+  }
+
+  .stock-input-wrapper {
+    display: flex;
+    gap: 16rpx;
+    align-items: center;
+  }
+
+  .stock-input {
+    flex: 1;
+    height: 80rpx;
+    padding: 0 24rpx;
+    background: #fff;
+    border: 1rpx solid #dcdfe6;
+    border-radius: 12rpx;
+    font-size: 28rpx;
+    color: #303133;
+  }
+
+  .stock-input:disabled {
+    background: #f5f7fa;
+    color: #c0c4cc;
+  }
+
+  .save-stock-btn {
+    padding: 0 32rpx;
+    height: 80rpx;
+    background: #409EFF;
+    color: #fff;
+    border: none;
+    border-radius: 12rpx;
+    font-size: 26rpx;
+    white-space: nowrap;
+  }
+
+  .save-stock-btn:disabled {
+    background: #c0c4cc;
+    opacity: 0.6;
+  }
+
+  .save-stock-btn::after {
+    border: none;
+  }
+
+  .batch-stock-setting {
+    margin-top: 32rpx;
+    padding-top: 32rpx;
+    border-top: 1rpx solid #ebeef5;
+  }
+
+  .batch-header {
+    margin-bottom: 20rpx;
+  }
+
+  .batch-title {
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #303133;
+  }
+
+  .batch-input-wrapper {
+    display: flex;
+    gap: 16rpx;
+    align-items: center;
+  }
+
+  .batch-input {
+    flex: 1;
+    height: 80rpx;
+    padding: 0 24rpx;
+    background: #fff;
+    border: 1rpx solid #dcdfe6;
+    border-radius: 12rpx;
+    font-size: 28rpx;
+    color: #303133;
+  }
+
+  .batch-input:disabled {
+    background: #f5f7fa;
+    color: #c0c4cc;
+  }
+
+  .batch-save-btn {
+    padding: 0 32rpx;
+    height: 80rpx;
+    background: #67C23A;
+    color: #fff;
+    border: none;
+    border-radius: 12rpx;
+    font-size: 26rpx;
+    white-space: nowrap;
+  }
+
+  .batch-save-btn:disabled {
+    background: #c0c4cc;
+    opacity: 0.6;
+  }
+
+  .batch-save-btn::after {
+    border: none;
   }
   
   .load-more {
