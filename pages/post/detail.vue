@@ -48,9 +48,9 @@
 				<!-- 图片展示区域 -->
 				<view class="post-images" v-if="hasImages">
 					<!-- 单图展示 -->
-					<view v-if="post.mediaUrls && post.mediaUrls.length === 1" class="single-image">
+					<view v-if="getImageList().length === 1" class="single-image">
 						<image 
-							:src="post.mediaUrls[0]" 
+							:src="getImageList()[0]" 
 							mode="widthFix"
 							class="post-image"
 							@click="previewImage(0)"
@@ -60,40 +60,51 @@
 						></image>
 					</view>
 
-					<!-- 多图展示 -->
-					<view v-else-if="post.mediaUrls && post.mediaUrls.length > 1" class="multi-images">
-						<view 
-							v-for="(image, index) in post.mediaUrls" 
-							:key="index"
-							:class="['image-item', getImageLayoutClass(post.mediaUrls.length, index)]"
-							@click="previewImage(index)"
+					<!-- 多图轮播展示 -->
+					<view v-else-if="getImageList().length > 1" class="swiper-container">
+						<swiper 
+							ref="postSwiper"
+							class="post-swiper"
+							:indicator-dots="true"
+							:indicator-color="'rgba(255, 255, 255, 0.5)'"
+							:indicator-active-color="'#ff2e63'"
+							:autoplay="swiperAutoplay"
+							:circular="true"
+							:interval="4000"
+							:duration="500"
+							:disable-touch="false"
+							:current="currentImageIndex"
+							@change="onSwiperChange"
+							@animationfinish="onSwiperAnimationFinish"
 						>
-							<image 
-								:src="image" 
-								mode="aspectFill"
-								class="post-image"
-								@error="handleImageError"
-								@load="handleImageLoad"
-								lazy-load
-							></image>
-							<!-- 多图指示器 -->
-							<view v-if="index === 2 && post.mediaUrls.length > 3" class="image-count">
-								+{{ post.mediaUrls.length - 3 }}
-							</view>
+							<swiper-item 
+								v-for="(image, index) in getImageList()" 
+								:key="index"
+								class="swiper-item"
+							>
+								<image 
+									:src="image" 
+									mode="aspectFit"
+									class="swiper-image"
+									@click="previewImage(index)"
+									@error="handleImageError"
+									@load="handleImageLoad"
+									lazy-load
+								></image>
+							</swiper-item>
+						</swiper>
+						<!-- 左箭头 -->
+						<view class="swiper-arrow swiper-arrow-left" @click="prevImage">
+							<uni-icons type="left" size="20" color="#ffffff"></uni-icons>
 						</view>
-					</view>
-
-					<!-- 只有封面图 -->
-					<view v-else-if="post.coverUrl" class="single-image">
-						<image 
-							:src="post.coverUrl" 
-							mode="widthFix"
-							class="post-image"
-							@click="previewImage(0)"
-							@error="handleImageError"
-							@load="handleImageLoad"
-							lazy-load
-						></image>
+						<!-- 右箭头 -->
+						<view class="swiper-arrow swiper-arrow-right" @click="nextImage">
+							<uni-icons type="right" size="20" color="#ffffff"></uni-icons>
+						</view>
+						<!-- 图片数量指示器 -->
+						<view class="swiper-indicator-text">
+							{{ currentImageIndex + 1 }} / {{ getImageList().length }}
+						</view>
 					</view>
 				</view>
 
@@ -279,7 +290,13 @@ export default {
 			comments: [],
 			
 			// 相关推荐
-			relatedPosts: []
+			relatedPosts: [],
+			
+			// 轮播图当前索引
+			currentImageIndex: 0,
+			
+			// 轮播图自动播放控制
+			swiperAutoplay: true
 		}
 	},
 	
@@ -309,6 +326,18 @@ export default {
 		} else {
 			this.error = '帖子ID不存在'
 		}
+	},
+	
+	onShow() {
+		// 页面显示时恢复自动播放
+		if (this.post && this.getImageList().length > 1) {
+			this.swiperAutoplay = true
+		}
+	},
+	
+	onHide() {
+		// 页面隐藏时暂停自动播放，节省资源
+		this.swiperAutoplay = false
 	},
 	
 	methods: {
@@ -716,10 +745,7 @@ export default {
 		
 		// 图片预览
 		previewImage(index) {
-			const images = this.post.mediaUrls || []
-			if (images.length === 0 && this.post.coverUrl) {
-				images.push(this.post.coverUrl)
-			}
+			const images = this.getImageList()
 			
 			if (images.length > 0) {
 				uni.previewImage({
@@ -731,16 +757,82 @@ export default {
 			}
 		},
 		
-		// 获取图片布局类名
-		getImageLayoutClass(total, index) {
-			if (total === 2) {
-				return index === 0 ? 'image-left' : 'image-right'
-			} else if (total === 3) {
-				return index === 0 ? 'image-large' : 'image-small'
-			} else if (total >= 4) {
-				return index < 3 ? 'image-grid' : 'image-hidden'
+		// 获取图片列表（统一处理 mediaUrls 和 coverUrl）
+		getImageList() {
+			if (!this.post) return []
+			
+			if (this.post.mediaUrls && this.post.mediaUrls.length > 0) {
+				return this.post.mediaUrls
+			} else if (this.post.coverUrl) {
+				return [this.post.coverUrl]
 			}
-			return 'image-single'
+			return []
+		},
+		
+		// 轮播图切换事件
+		onSwiperChange(e) {
+			this.currentImageIndex = e.detail.current
+		},
+		
+		// 轮播图动画完成事件（用于检测手动滑动）
+		onSwiperAnimationFinish(e) {
+			this.currentImageIndex = e.detail.current
+			// 手动滑动后，短暂暂停自动播放，给用户时间查看
+			if (!this.swiperAutoplay) {
+				setTimeout(() => {
+					this.swiperAutoplay = true
+				}, 3000)
+			}
+		},
+		
+		// 切换到上一张图片
+		prevImage() {
+			const imageList = this.getImageList()
+			if (imageList.length <= 1) return
+			
+			// 暂停自动播放
+			this.swiperAutoplay = false
+			
+			// 计算上一张的索引（支持循环）
+			let prevIndex = this.currentImageIndex - 1
+			if (prevIndex < 0) {
+				prevIndex = imageList.length - 1 // 循环到最后一张
+			}
+			
+			// 更新当前索引，swiper会通过:current绑定自动更新
+			this.currentImageIndex = prevIndex
+			
+			// 3秒后恢复自动播放
+			setTimeout(() => {
+				if (this.post && this.getImageList().length > 1) {
+					this.swiperAutoplay = true
+				}
+			}, 3000)
+		},
+		
+		// 切换到下一张图片
+		nextImage() {
+			const imageList = this.getImageList()
+			if (imageList.length <= 1) return
+			
+			// 暂停自动播放
+			this.swiperAutoplay = false
+			
+			// 计算下一张的索引（支持循环）
+			let nextIndex = this.currentImageIndex + 1
+			if (nextIndex >= imageList.length) {
+				nextIndex = 0 // 循环到第一张
+			}
+			
+			// 更新当前索引，swiper会通过:current绑定自动更新
+			this.currentImageIndex = nextIndex
+			
+			// 3秒后恢复自动播放
+			setTimeout(() => {
+				if (this.post && this.getImageList().length > 1) {
+					this.swiperAutoplay = true
+				}
+			}, 3000)
 		},
 		
 		// 获取帖子图片URL
@@ -1082,62 +1174,81 @@ export default {
 	overflow: hidden;
 }
 
-.multi-images {
-	display: grid;
-	gap: 4px;
-}
-
-.image-item {
-	position: relative;
-	border-radius: 4px;
-	overflow: hidden;
-	cursor: pointer;
-}
-
-.image-single {
-	grid-column: span 2;
-}
-
-.image-left {
-	grid-column: 1;
-}
-
-.image-right {
-	grid-column: 2;
-}
-
-.image-large {
-	grid-column: span 2;
-	grid-row: span 2;
-}
-
-.image-small {
-	grid-column: span 1;
-}
-
-.image-grid {
-	grid-column: span 1;
-}
-
-.image-hidden {
-	display: none;
-}
-
 .post-image {
 	width: 100%;
-	height: 100%;
-	object-fit: cover;
+	display: block;
 }
 
-.image-count {
+/* 轮播图容器 */
+.swiper-container {
+	position: relative;
+	width: 100%;
+	height: 400rpx;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #f5f5f5;
+}
+
+.post-swiper {
+	width: 100%;
+	height: 100%;
+}
+
+.swiper-item {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.swiper-image {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+/* 左右箭头 */
+.swiper-arrow {
 	position: absolute;
-	top: 8px;
-	right: 8px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 60rpx;
+	height: 60rpx;
+	background: rgba(0, 0, 0, 0.4);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 20;
+	cursor: pointer;
+	transition: all 0.3s;
+}
+
+.swiper-arrow:active {
+	background: rgba(0, 0, 0, 0.6);
+	transform: translateY(-50%) scale(0.95);
+}
+
+.swiper-arrow-left {
+	left: 20rpx;
+}
+
+.swiper-arrow-right {
+	right: 20rpx;
+}
+
+/* 图片数量指示器 */
+.swiper-indicator-text {
+	position: absolute;
+	bottom: 10rpx;
+	right: 10rpx;
 	background: rgba(0, 0, 0, 0.6);
 	color: white;
-	padding: 4px 8px;
-	border-radius: 12px;
-	font-size: 12px;
+	padding: 4rpx 12rpx;
+	border-radius: 20rpx;
+	font-size: 24rpx;
+	z-index: 10;
 }
 
 /* 帖子正文 */
