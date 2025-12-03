@@ -87,12 +87,8 @@
       "navigationBarTitleText": "聊天详情",
       "navigationStyle": "custom"
     }
-  },/* {
-    "path": "pages/test/imageTest",
-    "style": {
-      "navigationBarTitleText": "图片加载测试"
-    }
-  }, */{
+  },
+  {
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
@@ -185,12 +181,7 @@
       "navigationBarTitleText": "产品修改"
     }
   },
-  {
-    "path": "pages/merchant/product",
-    "style": {
-      "navigationBarTitleText": "产品页面"
-    }
-  },
+  
   {
     "path": "pages/post/post",
     "style": {
@@ -241,9 +232,55 @@
     }
   },
   {
+    "path": "pages/shop/cart",
+    "style": {
+      "navigationBarTitleText": "购物车"
+    }
+  },
+  {
     "path": "pages/shop/product-detail",
     "style": {
       "navigationBarTitleText": "商品详情"
+    }
+  },
+  {
+    "path": "pages/shop/cart",
+    "style": {
+      "navigationBarTitleText": "购物车"
+    }
+  },
+  {
+    "path": "pages/shop/checkout",
+    "style": {
+      "navigationBarTitleText": "结算页面"
+    }
+  },
+  {
+    "path": "pages/shop/order-detail",
+    "style": {
+      "navigationBarTitleText": "普通用户订单详情页面"
+    }
+  },
+  {
+    "path": "pages/order/detail",
+    "style": {
+      "navigationBarTitleText": "商家订单详情页面"
+    }
+  },
+  {
+    "path": "pages/shop/manage",
+    "style": {
+      "navigationBarTitleText": "商家页面"
+    }
+  }, {
+    "path": "pages/shop/shop-detail",
+    "style": {
+      "navigationBarTitleText": "商家详情"
+    }
+  }, {
+    "path": "pages/shop/manage",
+    "style": {
+      "navigationBarTitleText": "店铺管理"
     }
   },
   {

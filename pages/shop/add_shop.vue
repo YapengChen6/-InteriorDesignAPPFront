@@ -1,11 +1,50 @@
 <template>
   <view class="container">
-    <view class="header">
-      <text class="title">商品上传</text>
-      <text class="subtitle">请按照步骤填写商品信息，确保信息准确完整</text>
+    <!-- 角色检查中 -->
+    <view class="role-checking" v-if="checkingRole">
+      <uni-load-more status="loading" content="检查用户权限..."></uni-load-more>
     </view>
     
-    <view class="upload-container">
+    <!-- 非材料商提示页面 -->
+    <view class="no-permission-page" v-else-if="roleChecked && !isMaterialSupplier">
+      <view class="permission-header">
+        <image src="/static/images/no-permission.png" class="permission-icon" mode="aspectFit"></image>
+        <text class="permission-title">权限不足</text>
+        <text class="permission-desc">只有材料商（商家）才能上传商品</text>
+      </view>
+      
+      <view class="permission-content">
+        <text class="content-title">如何成为材料商？</text>
+        <view class="steps-list">
+          <view class="step-item">
+            <text class="step-number">1</text>
+            <text class="step-text">点击下方按钮进入商家入驻页面</text>
+          </view>
+          <view class="step-item">
+            <text class="step-number">2</text>
+            <text class="step-text">填写商家入驻申请信息</text>
+          </view>
+          <view class="step-item">
+            <text class="step-number">3</text>
+            <text class="step-text">等待审核通过后即可上传商品</text>
+          </view>
+        </view>
+      </view>
+      
+      <view class="permission-actions">
+        <button class="btn btn-primary" @tap="goToMerchantJoin">去申请商家入驻</button>
+        <button class="btn btn-secondary" @tap="goBack">返回</button>
+      </view>
+    </view>
+    
+    <!-- 材料商可以访问的商品上传页面 -->
+    <view v-else-if="isMaterialSupplier">
+      <view class="header">
+        <text class="title">商品上传</text>
+        <text class="subtitle">请按照步骤填写商品信息，确保信息准确完整</text>
+      </view>
+      
+      <view class="upload-container">
       <!-- 步骤指示器 -->
       <view class="steps">
         <view 
@@ -393,6 +432,7 @@
         </view>
       </scroll-view>
     </view>
+    </view>
   </view>
 </template>
 
@@ -409,9 +449,17 @@ import {
 // 导入图片上传相关API
 import { uploadImage, deleteImage, updateImageInfo } from '@/api/join.js'
 
+// 导入用户角色API
+import { getCurrentRole } from '@/api/users.js'
+
 export default {
   data() {
     return {
+      // 角色检查相关
+      roleChecked: false,
+      isMaterialSupplier: false,
+      checkingRole: true,
+      
       currentStep: 1,
       
       // 分类数据
@@ -1528,10 +1576,63 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+    
+    // 检查用户角色
+    async checkUserRole() {
+      try {
+        this.checkingRole = true
+        const res = await getCurrentRole()
+        
+        if (res && res.code === 200) {
+          const roleType = res.data?.roleType || res.data?.role || 'user'
+          this.isMaterialSupplier = roleType === 'material_supplier'
+          
+          if (!this.isMaterialSupplier) {
+            console.log('当前用户不是材料商，角色类型:', roleType)
+          } else {
+            console.log('当前用户是材料商，允许上传商品')
+          }
+        } else {
+          // 如果获取角色失败，默认不允许
+          this.isMaterialSupplier = false
+          console.warn('获取用户角色失败:', res?.msg || '未知错误')
+        }
+      } catch (error) {
+        console.error('检查用户角色失败:', error)
+        this.isMaterialSupplier = false
+        uni.showToast({
+          title: '获取用户信息失败',
+          icon: 'none'
+        })
+      } finally {
+        this.checkingRole = false
+        this.roleChecked = true
+      }
+    },
+    
+    // 跳转到商家入驻页面
+    goToMerchantJoin() {
+      uni.navigateTo({
+        url: '/pages/join/ShopJoin1'
+      })
+    },
+    
+    // 返回上一页
+    goBack() {
+      uni.navigateBack()
     }
   },
   
   async onLoad() {
+    // 首先检查用户角色
+    await this.checkUserRole()
+    
+    // 只有材料商才能继续
+    if (!this.isMaterialSupplier) {
+      return
+    }
+    
     // 页面加载时只加载一级分类
     await this.loadLevel1Categories()
   },
@@ -2284,6 +2385,112 @@ export default {
 }
 
 /* 响应式设计 */
+/* 角色检查相关样式 */
+.role-checking {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: 100rpx 40rpx;
+}
+
+.no-permission-page {
+  padding: 60rpx 40rpx;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.permission-header {
+  text-align: center;
+  margin-bottom: 60rpx;
+}
+
+.permission-icon {
+  width: 200rpx;
+  height: 200rpx;
+  margin-bottom: 30rpx;
+  opacity: 0.8;
+}
+
+.permission-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.permission-desc {
+  display: block;
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+.permission-content {
+  background: white;
+  border-radius: 24rpx;
+  padding: 40rpx;
+  margin-bottom: 40rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+}
+
+.content-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 30rpx;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 30rpx;
+}
+
+.step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.step-number {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: bold;
+  flex-shrink: 0;
+  box-shadow: 0 4rpx 12rpx rgba(37, 99, 235, 0.3);
+}
+
+.step-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.6;
+  padding-top: 15rpx;
+}
+
+.permission-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.permission-actions .btn {
+  width: 100%;
+}
+
 @media (max-width: 750rpx) {
   .container {
     padding: 15rpx;

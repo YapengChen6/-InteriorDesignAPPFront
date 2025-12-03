@@ -12,24 +12,24 @@
 				class="address-card" 
 				:class="{ 'default': address.isDefault }" 
 				v-for="address in addresses" 
-				:key="address.id"
+				:key="address.addressId"
 			>
 				<view class="default-tag" v-if="address.isDefault">默认地址</view>
 				<view class="address-info">
 					<view class="address-name">{{ address.name }} {{ address.phone }}</view>
-					<view class="address-detail">{{ address.region }} {{ address.detail }}</view>
+					<view class="address-detail">{{ address.region }}</view>
 				</view>
 				<view class="address-actions">
 					<view>
 						<text 
 							class="action-btn" 
-							@tap="setDefaultAddress(address.id)"
+							@tap="setDefaultAddress(address.addressId)"
 							v-if="!address.isDefault"
 						>设为默认</text>
 					</view>
 					<view>
-						<text class="action-btn" @tap="editAddress(address.id)">编辑</text>
-						<text class="action-btn" @tap="deleteAddress(address.id)">删除</text>
+						<text class="action-btn" @tap="editAddress(address.addressId)">编辑</text>
+						<text class="action-btn" @tap="deleteAddress(address.addressId)">删除</text>
 					</view>
 				</view>
 			</view>
@@ -81,42 +81,30 @@
 						</view>
 					</view>
 					<view class="form-group">
-						<label class="form-label">所在地区</label>
+						<label class="form-label">收货地址</label>
 						<input 
 							type="text" 
 							class="editor-input"
 							v-model="formData.region" 
-							placeholder="省 市 区"
+							placeholder="省市区 + 街道楼牌等详细信息"
 							placeholder-class="placeholder"
-							maxlength="50"
-							confirm-type="done"
-							@focus="onInputFocus"
-							@blur="onInputBlur"
-						/>
-					</view>
-					<view class="form-group">
-						<label class="form-label">详细地址</label>
-						<input 
-							type="text" 
-							class="editor-input"
-							v-model="formData.detail" 
-							placeholder="街道、楼牌号等"
-							placeholder-class="placeholder"
-							maxlength="100"
+							maxlength="200"
 							confirm-type="done"
 							@focus="onInputFocus"
 							@blur="onInputBlur"
 						/>
 					</view>
 					<view class="checkbox-group">
+						<checkbox-group @change="onDefaultChange">
 						<label class="checkbox-label">
 							<checkbox 
-								:checked="formData.isDefault" 
-								@tap="toggleDefault" 
+									value="1"
+									:checked="!!formData.isDefault"
 								style="transform:scale(0.7)"
 							/>
 							<text>设为默认地址</text>
 						</label>
+						</checkbox-group>
 					</view>
 					<view class="modal-footer">
 						<button class="btn-cancel" @tap="closeModal">取消</button>
@@ -129,32 +117,23 @@
 </template>
 
 <script>
+	import { 
+		getAddressList, 
+		addAddress, 
+		updateAddress, 
+		deleteAddress as apiDeleteAddress, 
+		setDefaultAddress as apiSetDefaultAddress 
+	} from '@/api/address.js'
+
 	export default {
 		data() {
 			return {
-				addresses: [
-					{
-						id: 1,
-						name: '张三',
-						phone: '13800138000',
-						region: '北京市 朝阳区 望京街道',
-						detail: '阜通东大街6号院',
-						isDefault: true
-					},
-					{
-						id: 2,
-						name: '李四',
-						phone: '13900139000',
-						region: '上海市 浦东新区 陆家嘴街道',
-						detail: '世纪大道100号环球金融中心',
-						isDefault: false
-					}
-				],
+				fromPage: '', // 标记从哪个页面进入，例：checkout
+				addresses: [],
 				formData: {
 					name: '',
 					phone: '',
 					region: '',
-					detail: '',
 					isDefault: false
 				},
 				currentEditId: null,
@@ -162,7 +141,33 @@
 				showModal: false
 			}
 		},
+		async onLoad(options) {
+			// 记录来源页面，例如 /pages/mine/address?from=checkout
+			if (options && options.from) {
+				this.fromPage = options.from;
+			}
+			// 初始化加载后端地址列表
+			await this.loadAddressList();
+		},
 		methods: {
+			// 从后端加载地址列表
+			async loadAddressList() {
+				try {
+					const res = await getAddressList();
+					if (res && res.code === 200 && Array.isArray(res.data)) {
+						this.addresses = res.data;
+					} else {
+						this.addresses = [];
+					}
+				} catch (e) {
+					console.error('加载地址列表失败：', e);
+					this.addresses = [];
+					uni.showToast({
+						title: e.message || '加载地址失败',
+						icon: 'none'
+					});
+				}
+			},
 			// 输入框聚焦事件
 			onInputFocus() {
 				console.log('输入框聚焦');
@@ -183,12 +188,18 @@
 			
 			// 打开编辑地址模态框
 			editAddress(id) {
-				const address = this.addresses.find(addr => addr.id === id);
+				const address = this.addresses.find(addr => addr.addressId === id);
 				if (!address) return;
 				
 				this.currentEditId = id;
 				this.isEditing = true;
-				this.formData = { ...address };
+				// 后端 isDefault 通常是 0/1，把它转成布尔值，避免勾选异常
+				this.formData = {
+					name: address.name || '',
+					phone: address.phone || '',
+					region: address.region || '',
+					isDefault: address.isDefault === 1 || address.isDefault === true
+				};
 				this.showModal = true;
 			},
 			
@@ -203,26 +214,42 @@
 					name: '',
 					phone: '',
 					region: '',
-					detail: '',
 					isDefault: false
 				};
 			},
 			
-			// 切换默认地址状态
-			toggleDefault() {
-				this.formData.isDefault = !this.formData.isDefault;
+			// 勾选“设为默认地址”时触发
+			onDefaultChange(e) {
+				// checkbox-group 返回选中的 value 数组，非空表示选中
+				const values = e && e.detail && e.detail.value ? e.detail.value : [];
+				this.formData.isDefault = Array.isArray(values) && values.length > 0;
 			},
 			
 			// 设置默认地址
-			setDefaultAddress(id) {
-				this.addresses = this.addresses.map(address => ({
-					...address,
-					isDefault: address.id === id
-				}));
+			async setDefaultAddress(id) {
+				try {
+					await apiSetDefaultAddress(id);
+					// 重新从后端加载，确保当前页和结算页看到的是同一条默认地址
+					await this.loadAddressList();
+
 				uni.showToast({
 					title: '设置成功',
 					icon: 'success'
 				});
+
+					// 如果是从结算页进入，设置默认后自动返回上一页
+					if (this.fromPage === 'checkout') {
+						setTimeout(() => {
+							uni.navigateBack();
+						}, 400);
+					}
+				} catch (e) {
+					console.error('设置默认地址失败：', e);
+					uni.showToast({
+						title: e.message || '设置失败',
+						icon: 'none'
+					});
+				}
 			},
 			
 			// 删除地址
@@ -230,21 +257,30 @@
 				uni.showModal({
 					title: '提示',
 					content: '确定要删除这个地址吗？',
-					success: (res) => {
+					success: async (res) => {
 						if (res.confirm) {
-							this.addresses = this.addresses.filter(address => address.id !== id);
+							try {
+								await apiDeleteAddress(id);
+								await this.loadAddressList();
 							uni.showToast({
 								title: '删除成功',
 								icon: 'success'
 							});
+							} catch (e) {
+								console.error('删除地址失败：', e);
+								uni.showToast({
+									title: e.message || '删除失败',
+									icon: 'none'
+								});
+							}
 						}
 					}
 				});
 			},
 			
 			// 处理表单提交
-			handleFormSubmit() {
-				if (!this.formData.name || !this.formData.phone || !this.formData.region || !this.formData.detail) {
+			async handleFormSubmit() {
+				if (!this.formData.name || !this.formData.phone || !this.formData.region) {
 					uni.showToast({
 						title: '请填写完整信息',
 						icon: 'none'
@@ -262,39 +298,48 @@
 					return;
 				}
 				
+				try {
 				if (this.isEditing) {
-					// 编辑现有地址
-					this.addresses = this.addresses.map(address => 
-						address.id === this.currentEditId 
-							? { ...address, ...this.formData } 
-							: { 
-								...address, 
-								isDefault: this.formData.isDefault ? false : address.isDefault 
-							}
-					);
+						// 编辑现有地址：带上 addressId
+						await updateAddress({
+							addressId: this.currentEditId,
+							name: this.formData.name,
+							phone: this.formData.phone,
+							region: this.formData.region,
+							isDefault: this.formData.isDefault ? 1 : 0
+						});
 				} else {
 					// 添加新地址
-					const newAddress = {
-						id: Date.now(), // 使用时间戳作为ID
-						...this.formData
-					};
-					
-					if (this.formData.isDefault) {
-						// 如果新地址设为默认，取消其他地址的默认状态
-						this.addresses = this.addresses.map(address => ({
-							...address,
-							isDefault: false
-						}));
+						await addAddress({
+							name: this.formData.name,
+							phone: this.formData.phone,
+							region: this.formData.region,
+							isDefault: this.formData.isDefault ? 1 : 0
+						});
 					}
 					
-					this.addresses.push(newAddress);
-				}
+					// 重新加载地址列表，和后端保持一致
+					await this.loadAddressList();
 				
 				this.closeModal();
 				uni.showToast({
 					title: '保存成功',
 					icon: 'success'
 				});
+
+					// 如果是从结算页进入，保存后直接返回结算页（结算页会重新拉取默认地址）
+					if (this.fromPage === 'checkout') {
+						setTimeout(() => {
+							uni.navigateBack();
+						}, 400);
+					}
+				} catch (e) {
+					console.error('保存地址失败：', e);
+					uni.showToast({
+						title: e.message || '保存失败',
+						icon: 'none'
+					});
+				}
 			}
 		}
 	}

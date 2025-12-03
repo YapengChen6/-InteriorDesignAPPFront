@@ -69,18 +69,10 @@
 
           <view class="form-group">
             <label class="form-label">商品状态</label>
-            <picker 
-              @change="onProductStatusChange" 
-              :value="productStatusIndex" 
-              :range="productStatusOptions" 
-              range-key="name"
-              class="full-width-picker"
-            >
-              <view class="picker custom-picker">
-                <text class="picker-text">{{ productStatusIndex >= 0 ? productStatusOptions[productStatusIndex].name : '请选择状态' }}</text>
-                <text class="picker-arrow">▼</text>
-              </view>
-            </picker>
+            <view class="picker custom-picker disabled-picker">
+              <text class="picker-text">{{ productStatusIndex >= 0 ? productStatusOptions[productStatusIndex].name : '请选择状态' }}</text>
+              <text class="picker-tip">（状态修改请在商品管理页面的上下架按钮操作）</text>
+            </view>
           </view>
         </view>
       </view>
@@ -357,6 +349,7 @@ export default {
         { id: '0', name: '上架' },
         { id: '2', name: '下架' }
       ],
+      originalProductStatus: null, // 保存编辑时的原始状态，确保编辑时不能修改状态
       skuStatusOptions: [
         { id: '0', name: '上架' },
         { id: '2', name: '下架' }
@@ -483,11 +476,15 @@ export default {
             this.categoryIndex = this.categoryOptions.indexOf('其他');
           }
           
-          // 设置商品状态选择器
+          // 设置商品状态选择器（保存原始状态，编辑时不能修改）
+          const originalStatus = product.productStatus?.toString() || '0';
+          this.originalProductStatus = originalStatus;
           const statusIndex = this.productStatusOptions.findIndex(item => 
-            item.id === product.productStatus?.toString()
+            item.id === originalStatus
           );
           this.productStatusIndex = statusIndex >= 0 ? statusIndex : 0;
+          // 确保 spuData 中的状态与原始状态一致
+          this.spuData.productStatus = originalStatus;
           
           // 加载SKU数据
           if (specType === '1' && product.productSkus && product.productSkus.length > 0) {
@@ -717,8 +714,9 @@ export default {
     },
     
     onProductStatusChange(e) {
-      this.productStatusIndex = e.detail.value;
-      this.spuData.productStatus = this.productStatusOptions[this.productStatusIndex].id;
+      // 已禁用状态修改功能，此方法不再使用
+      // 状态修改请在商品管理页面（shop.vue）的上下架按钮操作
+      console.warn('商品状态修改已禁用，请在商品管理页面使用上下架按钮操作');
     },
     
     onSpecTypeChange(e) {
@@ -828,6 +826,7 @@ export default {
       this.errors = {};
       this.categoryIndex = -1;
       this.productStatusIndex = 0;
+      this.originalProductStatus = null; // 重置原始状态
     },
     
     validateForm() {
@@ -1014,11 +1013,16 @@ export default {
 
       try {
         // 准备商品数据
+        // 编辑模式下，使用原始状态值，不允许通过编辑页面修改状态
+        const finalProductStatus = this.isEditMode && this.originalProductStatus !== null 
+          ? parseInt(this.originalProductStatus) 
+          : parseInt(this.spuData.productStatus);
+        
         const formData = {
           productName: this.spuData.productName,
           productDetail: this.spuData.productDetail,
           category: this.spuData.category,
-          productStatus: parseInt(this.spuData.productStatus),
+          productStatus: finalProductStatus,
           specType: parseInt(this.spuData.specType),
           marketPrice: parseFloat(this.spuData.marketPrice),
           costPrice: parseFloat(this.spuData.costPrice),
@@ -1258,6 +1262,23 @@ export default {
   font-size: 24rpx;
   color: #999;
   margin-left: 16rpx;
+}
+
+.disabled-picker {
+  background-color: #f5f5f5 !important;
+  border-color: #d9d9d9 !important;
+  opacity: 0.8;
+}
+
+.disabled-picker .picker-text {
+  color: #666;
+}
+
+.picker-tip {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 8rpx;
+  display: block;
 }
 
 .remove-btn-top-right {

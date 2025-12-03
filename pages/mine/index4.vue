@@ -22,8 +22,10 @@
 					></image>
 				</view>
 				<view class="user-info">
-					<text class="user-name">{{ userInfo.nickName || userInfo.userName || '用户' }}</text>
-					<text class="user-phone">{{ userInfo.phone || userInfo.phonenumber || '未绑定手机号' }}</text>
+					<text class="user-name">
+						{{ (userInfo.nickName || userInfo.userName || '用户') }}
+						{{ userInfo.phone || userInfo.phonenumber ? ' ' + (userInfo.phone || userInfo.phonenumber) : '' }}
+					</text>
 					<view class="current-role">
 						<text class="iconfont icon-user"></text> {{ currentRoleName }}
 					</view>
@@ -135,6 +137,19 @@
 							<view class="menu-text">
 								<text class="menu-name">商家页面</text>
 								<text class="menu-desc">查看和管理商家主页</text>
+							</view>
+						</view>
+						<text class="iconfont icon-chevron-right"></text>
+					</view>
+					
+					<view class="menu-item" @tap="handleMenuClick('我的订单')">
+						<view class="menu-item-left">
+							<view class="menu-icon orange">
+								<text class="iconfont icon-shopping-cart"></text>
+							</view>
+							<view class="menu-text">
+								<text class="menu-name">我的订单</text>
+								<text class="menu-desc">查看和管理商家订单</text>
 							</view>
 						</view>
 						<text class="iconfont icon-chevron-right"></text>
@@ -586,7 +601,7 @@
 					// 普通用户功能
 					case '查看订单':
 						uni.navigateTo({
-							url: '/pages/order/list'
+							url: '/pages/mine/viewOrder/viewOrder'
 						});
 						break;
 					case '收货地址':
@@ -601,11 +616,6 @@
 							url: '/pages/designer/works'
 						});
 						break;
-					case '我的订单':
-						uni.navigateTo({
-							url: '/pages/order/list'
-						});
-						break;
 						
 					// 商家功能
 					case '产品管理':
@@ -615,8 +625,24 @@
 						break;
 					case '商家页面':
 						uni.navigateTo({
-							url: '/pages/business/store/index'
+							url: '/pages/shop/manage'
 						});
+						break;
+					
+					// 不同角色的“我的订单”
+					case '我的订单':
+						// 根据当前角色类型跳转到不同的订单页面
+						if (this.currentRoleType === 'material_supplier') {
+							// 材料商订单页面
+						uni.navigateTo({
+							url: '/pages/work/material_supplier-order'
+						});
+						} else {
+							// 其他角色暂时统一跳转到商品订单列表
+							uni.navigateTo({
+								url: '/pages/mine/viewOrder/viewOrder'
+							});
+						}
 						break;
 						
 					// 监工功能

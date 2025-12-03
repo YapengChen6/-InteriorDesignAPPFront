@@ -272,6 +272,17 @@ export function getOnShelfProductSpus() {
 }
 
 /**
+ * 根据商家ID查询已上架的商品
+ */
+export function getOnShelfProductSpusByShopId(shopId) {
+  return request({
+    url: `/api/product-shelf/spu/on-shelf-by-shop/${shopId}`,
+    method: 'get',
+    baseURL
+  })
+}
+
+/**
  * 查询已下架的SPU
  */
 export function getOffShelfProductSpus() {
