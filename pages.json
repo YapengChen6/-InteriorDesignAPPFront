@@ -376,7 +376,13 @@
   	{
   		"navigationBarTitleText" : "监理订单每个监理订单阶段的详情页面"
   	}
-  }
+},
+{
+	"path": "pages/common/web-view",
+	"style": {
+		"navigationBarTitleText": "文件预览页面"
+	}
+}
   ],
   "tabBar": {
     "color": "#000000",

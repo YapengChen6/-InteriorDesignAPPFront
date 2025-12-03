@@ -61,7 +61,7 @@
 					</view>
 					
 					<!-- 文件上传区域 -->
-					<view class="file-upload-area" @click="chooseFiles" v-if="fileList.length === 0">
+					<view class="file-upload-area" @click="chooseFile" v-if="fileList.length === 0">
 						<view class="upload-content">
 							<view class="upload-icon">
 								<image class="upload-icon-img" src="/static/images/upload-icon.png" mode="aspectFit"></image>
@@ -77,14 +77,14 @@
 						<view class="file-list">
 							<view class="file-item" v-for="(file, index) in fileList" :key="index">
 								<view class="file-wrapper">
-									<view class="file-icon" :class="fileTypeClasses[file.type] || fileTypeClasses.other">
-										<text class="file-type-icon">{{ getFileTypeIcon(file.type) }}</text>
+									<view class="file-icon" :class="'file-type-' + file.fileType">
+										<text class="file-type-icon">{{ getFileTypeIcon(file.fileType) }}</text>
 									</view>
 									<view class="file-info">
 										<view class="file-name">{{ file.name }}</view>
 										<view class="file-meta">
 											<text class="file-size">{{ formatFileSize(file.size) }}</text>
-											<text class="file-type">{{ getFileTypeText(file.type) }}</text>
+											<text class="file-type">{{ getFileTypeText(file.fileType) }}</text>
 										</view>
 										<view class="file-progress" v-if="file.uploading">
 											<view class="progress-container">
@@ -108,9 +108,9 @@
 										</view>
 									</view>
 									<view class="file-actions">
-										<button class="btn-action preview" @click.stop="previewFile(index)">
+										<button class="btn-action preview" @click.stop="previewFile(index)" :loading="file.previewLoading">
 											<text class="btn-icon">👁️</text>
-											<text class="btn-text">预览</text>
+											<text class="btn-text">{{ file.previewLoading ? '打开中...' : '预览' }}</text>
 										</button>
 										<button class="btn-action delete" @click.stop="removeFile(index)">
 											<text class="btn-icon">🗑️</text>
@@ -172,47 +172,6 @@
 			</view>
 		</scroll-view>
 
-		<!-- 文件预览弹窗 -->
-		<view class="preview-modal" v-if="showPreview">
-			<view class="preview-overlay" @click="closePreview"></view>
-			<view class="preview-content">
-				<view class="preview-header">
-					<text class="preview-title">{{ previewFileName }}</text>
-					<view class="preview-actions">
-						<button class="btn-download" @click="downloadFile" v-if="previewUrl">
-							<text class="btn-icon">⬇️</text>
-							<text class="btn-text">下载</text>
-						</button>
-						<button class="btn-close" @click="closePreview">
-							<text class="btn-icon">✕</text>
-						</button>
-					</view>
-				</view>
-				<view class="preview-body">
-					<image 
-						v-if="isImageFile(previewFileType)" 
-						:src="previewUrl" 
-						class="preview-image"
-						mode="aspectFit"
-					/>
-					<iframe 
-						v-else-if="previewFileType.includes('pdf')" 
-						:src="previewUrl" 
-						class="preview-iframe"
-					/>
-					<view v-else class="preview-unsupported">
-						<text class="unsupported-icon">📄</text>
-						<text class="unsupported-text">当前文件类型不支持在线预览</text>
-						<text class="unsupported-desc">请下载后使用本地应用打开</text>
-						<button class="btn-download-large" @click="downloadFile">
-							<text class="btn-icon">⬇️</text>
-							<text class="btn-text">下载文件</text>
-						</button>
-					</view>
-				</view>
-			</view>
-		</view>
-
 		<!-- 全局加载遮罩 -->
 		<view class="global-loading" v-if="loading">
 			<view class="loading-modal">
@@ -224,6 +183,15 @@
 				</view>
 			</view>
 		</view>
+		
+		<!-- 简单提示组件 -->
+		<uni-popup ref="errorPopup" type="message">
+			<uni-popup-message 
+				type="error" 
+				:message="errorMessage" 
+				:duration="3000"
+			/>
+		</uni-popup>
 	</view>
 </template>
 
@@ -231,6 +199,8 @@
 	import { uploadDocument } from '@/api/join.js'
 	import { updateDesignScheme } from '@/api/designScheme.js'
 	import { updateDesignSchemeStatus } from '@/api/designScheme.js'
+	import uniPopup from '@/uni_modules/uni-popup/components/uni-popup/uni-popup.vue'
+	import uniPopupMessage from '@/uni_modules/uni-popup/components/uni-popup-message/uni-popup-message.vue'
 	
 	// 文件相关常量
 	const RELATED_TYPES = {
@@ -246,35 +216,46 @@
 	// 最大上传数量
 	const MAX_UPLOAD_COUNT = 1
 	
-	// 支持的文件类型
-	const SUPPORTED_FILE_TYPES = {
-		// 图片类型
-		'image/jpeg': 'image',
-		'image/jpg': 'image',
-		'image/png': 'image',
-		'image/gif': 'image',
-		'image/bmp': 'image',
-		'image/webp': 'image',
-		
-		// 文档类型
-		'application/pdf': 'document',
-		'application/msword': 'document',
-		'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'document',
-		'application/vnd.ms-excel': 'document',
-		'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'document',
-		'application/vnd.ms-powerpoint': 'document',
-		'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'document',
-		'text/plain': 'document',
-		
-		// 压缩包类型
-		'application/zip': 'archive',
-		'application/x-rar-compressed': 'archive',
-		'application/x-7z-compressed': 'archive',
-		'application/x-tar': 'archive',
-		'application/gzip': 'archive'
+	// 支持的文件类型映射
+	const FILE_TYPE_MAP = {
+		'jpg': 'image',
+		'jpeg': 'image',
+		'png': 'image',
+		'gif': 'image',
+		'bmp': 'image',
+		'webp': 'image',
+		'pdf': 'document',
+		'doc': 'document',
+		'docx': 'document',
+		'xls': 'document',
+		'xlsx': 'document',
+		'ppt': 'document',
+		'pptx': 'document',
+		'txt': 'document',
+		'zip': 'archive',
+		'rar': 'archive',
+		'7z': 'archive',
+		'tar': 'archive',
+		'gz': 'archive'
+	}
+	
+	// 微信小程序支持的文档类型映射
+	const WECHAT_FILE_TYPES = {
+		'pdf': 'pdf',
+		'doc': 'doc',
+		'docx': 'doc',
+		'xls': 'xls',
+		'xlsx': 'xls',
+		'ppt': 'ppt',
+		'pptx': 'ppt'
 	}
 	
 	export default {
+		components: {
+			uniPopup,
+			uniPopupMessage
+		},
+		
 		data() {
 			return {
 				// 页面参数
@@ -295,19 +276,11 @@
 				submitting: false,
 				uploadedCount: 0,
 				
-				// 预览相关
-				showPreview: false,
-				previewUrl: '',
-				previewFileName: '',
-				previewFileType: '',
+				// 错误信息
+				errorMessage: '',
 				
-				// 文件类型样式类映射
-				fileTypeClasses: {
-					'image': 'file-type-image',
-					'document': 'file-type-document',
-					'archive': 'file-type-archive',
-					'other': 'file-type-other'
-				}
+				// 当前正在预览的文件索引
+				currentPreviewIndex: -1
 			}
 		},
 		
@@ -329,22 +302,9 @@
 					   this.fileList.length > 0
 			},
 			
-			// 剩余可上传数量
-			remainingCount() {
-				return MAX_UPLOAD_COUNT - this.fileList.length
-			},
-			
 			// 参数是否有效
 			isParamsValid() {
 				return this.orderId && this.schemeId && this.schemeType
-			},
-			
-			// 是否可预览
-			isPreviewable() {
-				return this.previewFileType && (
-					this.isImageFile(this.previewFileType) || 
-					this.previewFileType.includes('pdf')
-				)
 			}
 		},
 		
@@ -436,15 +396,14 @@
 				uni.navigateBack()
 			},
 			
-			// 选择文件
-			chooseFiles() {
+			// 选择文件 - 微信小程序使用 chooseMessageFile
+			chooseFile() {
 				if (!this.isParamsValid) {
 					this.showParamsError()
 					return
 				}
 				
-				const remainingCount = MAX_UPLOAD_COUNT - this.fileList.length
-				if (remainingCount <= 0) {
+				if (this.fileList.length >= MAX_UPLOAD_COUNT) {
 					uni.showToast({
 						title: `只能上传${MAX_UPLOAD_COUNT}个文件`,
 						icon: 'none'
@@ -452,13 +411,53 @@
 					return
 				}
 				
-				uni.chooseFile({
-					count: remainingCount,
+				uni.chooseMessageFile({
+					count: 1,
 					type: 'all',
-					extension: Object.keys(SUPPORTED_FILE_TYPES),
 					success: (res) => {
 						console.log('📁 选择的文件:', res)
-						this.handleSelectedFiles(res.tempFiles)
+						const tempFile = res.tempFiles[0]
+						
+						// 检查文件大小（限制20MB）
+						if (tempFile.size > 20 * 1024 * 1024) {
+							uni.showToast({
+								title: '文件大小不能超过20MB',
+								icon: 'none'
+							})
+							return
+						}
+						
+						// 获取文件扩展名
+						const fileExt = this.getFileExtension(tempFile.path)
+						const fileType = this.getFileTypeByExt(fileExt)
+						
+						// 验证文件类型
+						if (!fileType) {
+							uni.showToast({
+								title: '不支持的文件类型',
+								icon: 'none'
+							})
+							return
+						}
+						
+						// 清空原有文件
+						this.fileList = []
+						
+						// 添加新文件
+						this.fileList.push({
+							path: tempFile.path,
+							name: tempFile.name || `文件.${fileExt}`,
+							size: tempFile.size,
+							fileType: fileType,
+							fileExt: fileExt,
+							uploading: false,
+							previewLoading: false,
+							progress: 0,
+							url: null
+						})
+						
+						console.log('📋 更新后的文件列表:', this.fileList)
+						
 					},
 					fail: (error) => {
 						console.error('❌ 选择文件失败:', error)
@@ -470,48 +469,15 @@
 				})
 			},
 			
-			// 处理选择的文件
-			handleSelectedFiles(tempFiles) {
-				// 如果已有文件，先清空
-				if (this.fileList.length > 0) {
-					this.fileList = []
-				}
-				
-				const newFiles = tempFiles.map((file, index) => {
-					const fileType = this.getFileType(file.type)
-					return {
-						path: file.path,
-						name: file.name || `文件${this.fileList.length + index + 1}.${this.getFileExtension(file.path)}`,
-						size: file.size,
-						type: fileType,
-						uploading: false,
-						progress: 0,
-						url: null,
-						fileType: file.type
-					}
-				})
-				
-				this.fileList = [...this.fileList, ...newFiles]
-				console.log('📋 更新后的文件列表:', this.fileList)
-				
-				// 如果超过最大数量，截取前1个
-				if (this.fileList.length > MAX_UPLOAD_COUNT) {
-					this.fileList = this.fileList.slice(0, MAX_UPLOAD_COUNT)
-					uni.showToast({
-						title: `只能上传${MAX_UPLOAD_COUNT}个文件，已自动截取`,
-						icon: 'none'
-					})
-				}
-			},
-			
-			// 获取文件类型
-			getFileType(mimeType) {
-				return SUPPORTED_FILE_TYPES[mimeType] || 'other'
-			},
-			
 			// 获取文件扩展名
 			getFileExtension(filePath) {
-				return filePath.split('.').pop().toLowerCase()
+				const parts = filePath.split('.')
+				return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+			},
+			
+			// 根据扩展名获取文件类型
+			getFileTypeByExt(ext) {
+				return FILE_TYPE_MAP[ext] || 'other'
 			},
 			
 			// 获取文件类型图标
@@ -545,15 +511,12 @@
 				return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 			},
 			
-			// 预览文件 - 处理 blob: 协议和其他文件路径
-			previewFile(index) {
+			// 预览文件（简化版）
+			async previewFile(index) {
 				const file = this.fileList[index]
 				console.log('🔍 预览文件信息:', file)
 				
-				// 获取文件路径
-				const filePath = file.path
-				
-				if (!filePath) {
+				if (!file.path) {
 					uni.showToast({
 						title: '文件未选择或已失效',
 						icon: 'none'
@@ -561,114 +524,233 @@
 					return
 				}
 				
-				// 处理 blob: 协议路径（H5环境）
-				if (filePath.startsWith('blob:')) {
-					this.handleBlobFilePreview(filePath, file.name, file.fileType || file.type)
-				} else {
-					// 正常的小程序临时文件路径
-					this.previewLocalFile(filePath, file.name, file.fileType || file.type)
+				// 设置当前预览索引和加载状态
+				this.currentPreviewIndex = index
+				this.fileList[index].previewLoading = true
+				
+				try {
+					// 获取文件扩展名
+					const fileExt = this.getFileExtension(file.name || file.path)
+					
+					console.log('📄 开始预览文件:', {
+						path: file.path,
+						ext: fileExt,
+						type: file.fileType
+					})
+					
+					// 如果是图片，直接预览
+					if (file.fileType === 'image') {
+						await this.previewImageFile(file.path)
+					} 
+					// 如果是支持的文档类型（PDF、Word、Excel、PPT）
+					else if (WECHAT_FILE_TYPES[fileExt]) {
+						await this.previewDocumentFile(file.path, fileExt, file.name)
+					}
+					// 其他文件类型，提示下载
+					else {
+						await this.handleOtherFile(file, fileExt)
+					}
+					
+				} catch (error) {
+					console.error('❌ 预览文件失败:', error)
+					this.showError(this.getErrorMessage(error))
+				} finally {
+					// 重置加载状态
+					if (this.currentPreviewIndex === index) {
+						this.fileList[index].previewLoading = false
+						this.currentPreviewIndex = -1
+					}
 				}
 			},
-
-			// 处理 blob: 协议文件预览（H5环境）- 在当前页面预览
-			handleBlobFilePreview(blobUrl, fileName, fileType) {
-				console.log('🌐 处理blob文件预览:', { blobUrl, fileName, fileType })
-				
-				// 设置预览数据
-				this.previewUrl = blobUrl
-				this.previewFileName = fileName
-				this.previewFileType = fileType
-				this.showPreview = true
-			},
-
-			// 预览本地临时文件（小程序环境）
-			previewLocalFile(filePath, fileName, fileType) {
-				console.log('📂 预览本地文件:', { filePath, fileName, fileType })
-				
-				uni.showLoading({
-					title: '打开文件中...',
-					mask: true
-				})
-				
-				// 如果是图片，使用图片预览
-				if (this.isImageFile(fileType)) {
+			
+			// 预览图片文件
+			async previewImageFile(filePath) {
+				return new Promise((resolve, reject) => {
 					uni.previewImage({
 						urls: [filePath],
 						current: 0,
 						success: () => {
-							uni.hideLoading()
 							console.log('✅ 图片预览成功')
+							resolve()
 						},
 						fail: (error) => {
-							uni.hideLoading()
 							console.error('❌ 图片预览失败:', error)
+							reject(new Error('图片预览失败'))
+						}
+					})
+				})
+			},
+			
+			// 预览文档文件（PDF、Word、Excel、PPT）
+			async previewDocumentFile(filePath, fileExt, fileName) {
+				return new Promise((resolve, reject) => {
+					// 显示加载提示
+					uni.showLoading({
+						title: '加载文件中...',
+						mask: true
+					})
+					
+					// 下载文件
+					uni.downloadFile({
+						url: filePath,
+						header: {
+							'Content-Type': 'application/octet-stream'
+						},
+						success: (res) => {
+							uni.hideLoading()
+							console.log('✅ 文件下载成功:', res)
+							
+							if (res.statusCode === 200) {
+								// 获取对应的文件类型
+								const fileType = WECHAT_FILE_TYPES[fileExt] || 'pdf'
+								
+								// 打开文档
+								uni.openDocument({
+									filePath: res.tempFilePath,
+									fileType: fileType,
+									showMenu: true, // 显示菜单，用户可以保存
+									success: () => {
+										console.log('✅ 文档打开成功')
+										resolve()
+									},
+									fail: (err) => {
+										console.error('❌ 文档打开失败:', err)
+										reject(new Error(`${fileExt.toUpperCase()}文件打开失败`))
+									}
+								})
+							} else {
+								reject(new Error(`下载失败，状态码: ${res.statusCode}`))
+							}
+						},
+						fail: (err) => {
+							uni.hideLoading()
+							console.error('❌ 下载失败:', err)
+							reject(new Error(`下载请求失败: ${err.errMsg}`))
+						}
+					})
+				})
+			},
+			
+			// 处理其他文件类型
+			async handleOtherFile(file, fileExt) {
+				return new Promise((resolve, reject) => {
+					uni.showModal({
+						title: '文件预览',
+						content: `${fileExt.toUpperCase()}文件无法在线预览，是否下载文件？`,
+						confirmText: '下载',
+						cancelText: '取消',
+						success: (res) => {
+							if (res.confirm) {
+								this.downloadOtherFile(file.path, file.name)
+								resolve()
+							} else {
+								reject(new Error('用户取消操作'))
+							}
+						},
+						fail: () => {
+							reject(new Error('操作失败'))
+						}
+					})
+				})
+			},
+			
+			// 下载其他文件
+			downloadOtherFile(filePath, fileName) {
+				uni.showLoading({
+					title: '下载中...',
+					mask: true
+				})
+				
+				// 对于本地文件，直接保存
+				if (filePath.startsWith('wxfile://')) {
+					uni.saveFile({
+						tempFilePath: filePath,
+						success: (res) => {
+							uni.hideLoading()
 							uni.showToast({
-								title: '图片预览失败',
-								icon: 'none'
+								title: '文件已保存',
+								icon: 'success',
+								duration: 2000
 							})
+							console.log('✅ 文件保存成功:', res.savedFilePath)
+						},
+						fail: (err) => {
+							uni.hideLoading()
+							uni.showToast({
+								title: '保存失败',
+								icon: 'none',
+								duration: 2000
+							})
+							console.error('❌ 文件保存失败:', err)
 						}
 					})
 				} else {
-					// 其他文件类型使用 openDocument
-					uni.openDocument({
-						filePath: filePath,
-						success: () => {
+					// 对于网络文件，需要先下载
+					uni.downloadFile({
+						url: filePath,
+						success: (downloadRes) => {
 							uni.hideLoading()
-							console.log('✅ 文档打开成功')
-						},
-						fail: (error) => {
-							uni.hideLoading()
-							console.error('❌ 文档打开失败:', error)
-							
-							// 简化错误处理
-							if (error.errMsg.includes('file not found')) {
-								uni.showToast({
-									title: '文件不存在',
-									icon: 'none'
+							if (downloadRes.statusCode === 200) {
+								uni.saveFile({
+									tempFilePath: downloadRes.tempFilePath,
+									success: (saveRes) => {
+										uni.showToast({
+											title: '文件已保存',
+											icon: 'success',
+											duration: 2000
+										})
+									},
+									fail: (saveErr) => {
+										uni.showToast({
+											title: '保存失败',
+											icon: 'none',
+											duration: 2000
+										})
+									}
 								})
 							} else {
 								uni.showToast({
-									title: '暂不支持预览此文件类型',
-									icon: 'none'
+									title: '下载失败',
+									icon: 'none',
+									duration: 2000
 								})
 							}
+						},
+						fail: (downloadErr) => {
+							uni.hideLoading()
+							uni.showToast({
+								title: '下载失败',
+								icon: 'none',
+								duration: 2000
+							})
 						}
 					})
 				}
 			},
-
-			// 判断是否为图片文件
-			isImageFile(fileType) {
-				const imageTypes = [
-					'image/jpeg', 'image/jpg', 'image/png', 
-					'image/gif', 'image/bmp', 'image/webp'
-				]
-				return imageTypes.includes(fileType) || fileType === 'image'
+			
+			// 获取错误信息
+			getErrorMessage(error) {
+				const msg = error.message || error.errMsg || '预览失败'
+				
+				if (msg.includes('404')) {
+					return '文件不存在或已被删除'
+				} else if (msg.includes('网络') || msg.includes('connect') || msg.includes('download')) {
+					return '网络连接失败，请检查网络设置'
+				} else if (msg.includes('不支持') || msg.includes('不支持的文件类型')) {
+					return '文件格式不支持在线预览'
+				} else if (msg.includes('用户取消')) {
+					return '' // 用户取消操作不显示错误
+				} else {
+					return `预览失败: ${msg}`
+				}
 			},
 			
-			// 关闭预览
-			closePreview() {
-				this.showPreview = false
-				this.previewUrl = ''
-				this.previewFileName = ''
-				this.previewFileType = ''
-			},
-			
-			// 下载文件
-			downloadFile() {
-				if (!this.previewUrl) return
-				
-				const link = document.createElement('a')
-				link.href = this.previewUrl
-				link.download = this.previewFileName
-				document.body.appendChild(link)
-				link.click()
-				document.body.removeChild(link)
-				
-				uni.showToast({
-					title: '文件下载中...',
-					icon: 'none'
-				})
+			// 显示错误提示
+			showError(message) {
+				if (message) {
+					this.errorMessage = message
+					this.$refs.errorPopup.open()
+				}
 			},
 			
 			// 删除文件
@@ -682,7 +764,8 @@
 							this.fileList.splice(index, 1)
 							uni.showToast({
 								title: '删除成功',
-								icon: 'success'
+								icon: 'success',
+								duration: 1500
 							})
 						}
 					}
@@ -865,7 +948,7 @@
 					// 3. 使用上传的文件URL
 					const mainFileUrl = fileUrls[0]
 					
-					// 4. 更新设计方案信息 - 移除status字段
+					// 4. 更新设计方案信息
 					const updateData = {
 						designSchemeId: this.schemeId,
 						fileUrl: mainFileUrl,
@@ -963,4 +1046,738 @@
 	}
 </script>
 
-<style scoped>	/* 全局样式优化 */	.container {		min-height: 100vh;		background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ec 100%);	}		/* 顶部导航栏样式优化 */	.header-section {		position: sticky;		top: 0;		z-index: 999;		background: rgba(255, 255, 255, 0.95);		backdrop-filter: blur(20px);		padding: 32rpx 32rpx 24rpx;		border-bottom: 1rpx solid rgba(225, 228, 232, 0.8);		display: flex;		align-items: center;		box-shadow: 0 2rpx 20rpx rgba(0, 0, 0, 0.08);	}		.header-back {		flex-shrink: 0;	}		.back-btn {		display: flex;		align-items: center;		padding: 16rpx 24rpx;		border-radius: 12rpx;		transition: all 0.3s ease;		background: rgba(24, 144, 255, 0.1);	}		.back-btn:active {		background: rgba(24, 144, 255, 0.2);		transform: scale(0.95);	}		.back-icon {		font-size: 48rpx;		color: #1890ff;		line-height: 1;		font-weight: bold;	}		.back-text {		font-size: 28rpx;		color: #1890ff;		margin-left: 8rpx;		font-weight: 500;	}		.header-title {		flex: 1;		text-align: center;		font-size: 36rpx;		font-weight: 600;		color: #1f2329;		margin-right: 120rpx;	}		/* 内容区域样式优化 */	.content {		height: calc(100vh - 120rpx);		padding: 24rpx;	}		/* 卡片样式优化 */	.card {		background: #fff;		border-radius: 24rpx;		margin-bottom: 24rpx;		overflow: hidden;		box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.06);		border: 1rpx solid rgba(225, 228, 232, 0.6);		transition: all 0.3s ease;	}		.card:hover {		box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);		transform: translateY(-2rpx);	}		.card-header {		display: flex;		align-items: center;		padding: 32rpx 32rpx 24rpx;		border-bottom: 1rpx solid rgba(240, 240, 240, 0.8);		background: linear-gradient(135deg, #fafbfc 0%, #f6f8fa 100%);	}		.card-icon {		font-size: 36rpx;		margin-right: 16rpx;		background: linear-gradient(135deg, #1890ff, #36cfc9);		-webkit-background-clip: text;		-webkit-text-fill-color: transparent;	}		.card-title {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;	}		.card-subtitle {		font-size: 24rpx;		color: #8f959e;		margin-left: auto;		background: rgba(24, 144, 255, 0.1);		padding: 8rpx 16rpx;		border-radius: 20rpx;		font-weight: 500;	}		.card-body {		padding: 32rpx;	}		/* 表单组样式优化 */	.form-group {		margin-bottom: 32rpx;		position: relative;	}		.form-group:last-child {		margin-bottom: 0;	}		.form-label {		font-size: 28rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 16rpx;		display: flex;		align-items: center;	}		.form-label.required::before {		content: '*';		color: #ff4d4f;		margin-right: 8rpx;		font-size: 32rpx;	}		.form-input {		height: 96rpx;		padding: 0 24rpx;		background: #f8f9fa;		border: 2rpx solid #e1e4e8;		border-radius: 16rpx;		font-size: 28rpx;		color: #1f2329;		transition: all 0.3s ease;		font-weight: 500;	}		.form-input:focus {		border-color: #1890ff;		background: #fff;		box-shadow: 0 0 0 4rpx rgba(24, 144, 255, 0.1);	}		.placeholder {		color: #8f959e;		font-size: 28rpx;		font-weight: 400;	}		.input-counter {		position: absolute;		right: 24rpx;		bottom: 24rpx;		font-size: 24rpx;		color: #8f959e;		font-weight: 500;	}		/* 信息行样式优化 */	.info-row {		display: flex;		justify-content: space-between;		gap: 32rpx;	}		.info-item {		flex: 1;	}		.info-label {		font-size: 28rpx;		color: #8f959e;		margin-bottom: 16rpx;		font-weight: 500;	}		.info-value {		font-size: 28rpx;		color: #1f2329;		font-weight: 600;	}		.info-value.tag {		display: inline-block;		padding: 12rpx 20rpx;		background: linear-gradient(135deg, #e6f7ff, #bae7ff);		color: #1890ff;		border-radius: 12rpx;		font-size: 24rpx;		font-weight: 600;		border: 1rpx solid rgba(24, 144, 255, 0.2);	}		/* 上传提示样式优化 */	.upload-tips {		background: linear-gradient(135deg, #f0f8ff, #e6f7ff);		border: 1rpx solid #d0e8ff;		border-radius: 16rpx;		padding: 24rpx;		margin-bottom: 24rpx;		position: relative;		overflow: hidden;	}		.upload-tips::before {		content: '';		position: absolute;		top: 0;		left: 0;		width: 8rpx;		height: 100%;		background: linear-gradient(135deg, #1890ff, #36cfc9);	}		.tips-content {		display: flex;		align-items: flex-start;	}		.tips-icon {		font-size: 28rpx;		margin-right: 12rpx;		margin-top: 4rpx;	}		.tips-text {		font-size: 26rpx;		color: #1890ff;		line-height: 1.5;		flex: 1;		font-weight: 500;	}		/* 文件上传区域优化 */	.file-upload-area {		border: 3rpx dashed #d0d7de;		border-radius: 24rpx;		background: #fafbfc;		transition: all 0.3s ease;		cursor: pointer;		overflow: hidden;		margin-bottom: 24rpx;		position: relative;	}		.file-upload-area:active {		border-color: #1890ff;		background: #f0f8ff;		transform: scale(0.98);		box-shadow: 0 8rpx 32rpx rgba(24, 144, 255, 0.2);	}		.upload-content {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 80rpx 40rpx;		text-align: center;	}		.upload-icon {		margin-bottom: 24rpx;		width: 120rpx;		height: 120rpx;		border-radius: 50%;		background: linear-gradient(135deg, #e6f7ff, #bae7ff);		display: flex;		align-items: center;		justify-content: center;	}		.upload-icon-img {		width: 60rpx;		height: 60rpx;	}		.upload-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 16rpx;	}		.upload-desc {		font-size: 26rpx;		color: #8f959e;		margin-bottom: 8rpx;		font-weight: 500;	}		.upload-count {		font-size: 24rpx;		color: #1890ff;		font-weight: 600;	}		/* 文件预览区域优化 */	.file-preview {		margin-top: 8rpx;	}		.file-list {		display: flex;		flex-direction: column;		gap: 16rpx;	}		.file-item {		background: #f8f9fa;		border-radius: 20rpx;		padding: 32rpx;		border: 1rpx solid rgba(225, 228, 232, 0.6);		transition: all 0.3s ease;	}		.file-item:hover {		background: #fff;		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);		transform: translateY(-2rpx);	}		.file-wrapper {		display: flex;		align-items: center;		gap: 24rpx;	}		.file-icon {		width: 100rpx;		height: 100rpx;		border-radius: 16rpx;		display: flex;		align-items: center;		justify-content: center;		font-size: 40rpx;		flex-shrink: 0;		box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);	}		.file-type-image {		background: linear-gradient(135deg, #ff4d4f, #ff7875);	}		.file-type-document {		background: linear-gradient(135deg, #1890ff, #36cfc9);	}		.file-type-archive {		background: linear-gradient(135deg, #52c41a, #73d13d);	}		.file-type-other {		background: linear-gradient(135deg, #722ed1, #9254de);	}		.file-info {		flex: 1;		min-width: 0;	}		.file-name {		font-size: 28rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 8rpx;		overflow: hidden;		text-overflow: ellipsis;		white-space: nowrap;	}		.file-meta {		display: flex;		align-items: center;		gap: 16rpx;		margin-bottom: 12rpx;	}		.file-size {		font-size: 24rpx;		color: #8f959e;		font-weight: 500;	}		.file-type {		font-size: 22rpx;		color: #fff;		background: rgba(24, 144, 255, 0.8);		padding: 4rpx 12rpx;		border-radius: 12rpx;		font-weight: 500;	}		.progress-container {		display: flex;		align-items: center;		gap: 16rpx;	}		.progress-bar {		flex: 1;		height: 8rpx;		background: #e1e4e8;		border-radius: 4rpx;		overflow: hidden;	}		.progress-fill {		height: 100%;		background: linear-gradient(135deg, #52c41a, #73d13d);		transition: width 0.3s ease;		border-radius: 4rpx;	}		.progress-text {		font-size: 22rpx;		color: #52c41a;		font-weight: 600;		min-width: 60rpx;	}		.file-status {		margin-top: 8rpx;	}		.status-badge {		display: inline-flex;		align-items: center;		gap: 8rpx;		padding: 8rpx 16rpx;		border-radius: 20rpx;		font-size: 24rpx;		font-weight: 600;	}		.status-badge.success {		background: linear-gradient(135deg, #f6ffed, #d9f7be);		color: #52c41a;		border: 1rpx solid rgba(82, 196, 26, 0.3);	}		.status-badge.ready {		background: linear-gradient(135deg, #f0f8ff, #e6f7ff);		color: #1890ff;		border: 1rpx solid rgba(24, 144, 255, 0.3);	}		.status-icon {		font-size: 20rpx;	}		.file-actions {		display: flex;		gap: 12rpx;		flex-shrink: 0;	}		.btn-action {		display: flex;		flex-direction: column;		align-items: center;		gap: 4rpx;		padding: 16rpx;		border: none;		background: transparent;		border-radius: 12rpx;		transition: all 0.3s ease;		min-width: 80rpx;	}		.btn-action:active {		transform: scale(0.9);	}		.btn-action.preview:active {		background: rgba(24, 144, 255, 0.1);	}		.btn-action.delete:active {		background: rgba(255, 77, 79, 0.1);	}		.btn-icon {		font-size: 24rpx;		margin-bottom: 4rpx;	}		.btn-text {		font-size: 20rpx;		color: #8f959e;		font-weight: 500;	}		/* 上传数量提示优化 */	.upload-count-tip {		text-align: center;		margin-top: 24rpx;		padding: 20rpx;		background: linear-gradient(135deg, #f6ffed, #d9f7be);		border-radius: 16rpx;		border: 1rpx solid rgba(82, 196, 26, 0.3);	}		.count-text {		font-size: 26rpx;		color: #52c41a;		font-weight: 600;	}		/* 文本域样式优化 */	.form-textarea {		width: 100%;		height: 240rpx;		padding: 24rpx;		background: #f8f9fa;		border: 2rpx solid #e1e4e8;		border-radius: 16rpx;		font-size: 28rpx;		color: #1f2329;		line-height: 1.5;		transition: all 0.3s ease;		box-sizing: border-box;		font-weight: 500;	}		.form-textarea:focus {		border-color: #1890ff;		background: #fff;		box-shadow: 0 0 0 4rpx rgba(24, 144, 255, 0.1);	}		.textarea-placeholder {		color: #8f959e;		font-size: 28rpx;		font-weight: 400;	}		.textarea-counter {		text-align: right;		font-size: 24rpx;		color: #8f959e;		margin-top: 16rpx;		font-weight: 500;	}		/* 底部操作区域优化 */	.bottom-actions {		position: sticky;		bottom: 0;		background: rgba(255, 255, 255, 0.95);		backdrop-filter: blur(20px);		padding: 24rpx 32rpx 48rpx;		border-top: 1rpx solid rgba(225, 228, 232, 0.8);		margin-top: 24rpx;		box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.08);	}		.action-buttons {		display: flex;		gap: 24rpx;	}		.btn {		flex: 1;		height: 96rpx;		border: none;		border-radius: 20rpx;		font-size: 32rpx;		font-weight: 600;		display: flex;		align-items: center;		justify-content: center;		transition: all 0.3s ease;		position: relative;		overflow: hidden;	}		.btn::before {		content: '';		position: absolute;		top: 0;		left: -100%;		width: 100%;		height: 100%;		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);		transition: left 0.5s ease;	}		.btn:active::before {		left: 100%;	}		.btn:active {		transform: scale(0.98);	}		.btn-cancel {		background: #fff;		color: #1f2329;		border: 2rpx solid #e1e4e8;		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);	}		.btn-cancel:active {		background: #f8f9fa;		border-color: #d0d7de;	}		.btn-submit {		background: linear-gradient(135deg, #1890ff, #36cfc9);		color: #fff;		box-shadow: 0 4rpx 20rpx rgba(24, 144, 255, 0.3);	}		.btn-submit.btn-disabled {		background: linear-gradient(135deg, #c2c8d1, #d0d7de);		color: #fff;		transform: none;		box-shadow: none;	}		.btn-submit:not(.btn-disabled):active {		background: linear-gradient(135deg, #0d7ae5, #2db8b3);		box-shadow: 0 2rpx 12rpx rgba(24, 144, 255, 0.4);	}		.btn-loading {		display: flex;		align-items: center;		justify-content: center;		margin-right: 16rpx;	}		.loading-spinner {		width: 32rpx;		height: 32rpx;		border: 3rpx solid transparent;		border-top: 3rpx solid #fff;		border-radius: 50%;		animation: spin 1s linear infinite;	}		.loading-spinner.large {		width: 64rpx;		height: 64rpx;		border-width: 4rpx;		margin-bottom: 24rpx;		border-top-color: #1890ff;	}		@keyframes spin {		0% { transform: rotate(0deg); }		100% { transform: rotate(360deg); }	}		.btn-text {		font-size: 32rpx;		font-weight: 600;	}		/* 全局加载遮罩优化 */	.global-loading {		position: fixed;		top: 0;		left: 0;		right: 0;		bottom: 0;		background: rgba(0, 0, 0, 0.6);		backdrop-filter: blur(10px);		z-index: 9999;		display: flex;		align-items: center;		justify-content: center;	}		.loading-modal {		background: #fff;		border-radius: 24rpx;		padding: 64rpx 48rpx;		text-align: center;		max-width: 500rpx;		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);		border: 1rpx solid rgba(225, 228, 232, 0.8);	}		.loading-content {		display: flex;		flex-direction: column;		align-items: center;	}		.loading-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 16rpx;	}		.loading-subtext {		font-size: 26rpx;		color: #8f959e;		margin-bottom: 8rpx;		font-weight: 500;	}		.loading-progress {		font-size: 24rpx;		color: #1890ff;		font-weight: 600;		background: rgba(24, 144, 255, 0.1);		padding: 8rpx 16rpx;		border-radius: 20rpx;		margin-top: 8rpx;	}		/* 预览弹窗样式 */	.preview-modal {		position: fixed;		top: 0;		left: 0;		right: 0;		bottom: 0;		z-index: 9999;		display: flex;		align-items: center;		justify-content: center;	}		.preview-overlay {		position: absolute;		top: 0;		left: 0;		right: 0;		bottom: 0;		background: rgba(0, 0, 0, 0.8);		backdrop-filter: blur(10px);	}		.preview-content {		position: relative;		background: #fff;		border-radius: 20rpx;		width: 90vw;		height: 80vh;		display: flex;		flex-direction: column;		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);		overflow: hidden;	}		.preview-header {		display: flex;		align-items: center;		justify-content: space-between;		padding: 32rpx;		border-bottom: 1rpx solid #e1e4e8;		background: #fafbfc;	}		.preview-title {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		flex: 1;		overflow: hidden;		text-overflow: ellipsis;		white-space: nowrap;	}		.preview-actions {		display: flex;		align-items: center;		gap: 16rpx;	}		.btn-download, .btn-close {		padding: 16rpx 24rpx;		border: none;		border-radius: 12rpx;		background: #1890ff;		color: #fff;		font-size: 26rpx;		display: flex;		align-items: center;		gap: 8rpx;		transition: all 0.3s ease;	}		.btn-download:active, .btn-close:active {		transform: scale(0.95);		background: #0d7ae5;	}		.btn-close {		background: #8f959e;	}		.btn-close:active {		background: #6a737d;	}		.preview-body {		flex: 1;		display: flex;		align-items: center;		justify-content: center;		overflow: hidden;	}		.preview-image {		width: 100%;		height: 100%;		object-fit: contain;	}		.preview-iframe {		width: 100%;		height: 100%;		border: none;	}		.preview-unsupported {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 80rpx;		text-align: center;	}		.unsupported-icon {		font-size: 120rpx;		margin-bottom: 32rpx;	}		.unsupported-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 16rpx;	}		.unsupported-desc {		font-size: 28rpx;		color: #8f959e;		margin-bottom: 48rpx;	}		.btn-download-large {		padding: 24rpx 48rpx;		border: none;		border-radius: 16rpx;		background: linear-gradient(135deg, #1890ff, #36cfc9);		color: #fff;		font-size: 32rpx;		font-weight: 600;		display: flex;		align-items: center;		gap: 16rpx;		transition: all 0.3s ease;	}		.btn-download-large:active {		transform: scale(0.95);		background: linear-gradient(135deg, #0d7ae5, #2db8b3);	}</style>
+<style scoped>
+	/* 全局样式优化 */
+	.container {
+		min-height: 100vh;
+		background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ec 100%);
+	}
+	
+	/* 顶部导航栏样式优化 */
+	.header-section {
+		position: sticky;
+		top: 0;
+		z-index: 999;
+		background: rgba(255, 255, 255, 0.95);
+		backdrop-filter: blur(20px);
+		padding: 32rpx 32rpx 24rpx;
+		border-bottom: 1rpx solid rgba(225, 228, 232, 0.8);
+		display: flex;
+		align-items: center;
+		box-shadow: 0 2rpx 20rpx rgba(0, 0, 0, 0.08);
+	}
+	
+	.header-back {
+		flex-shrink: 0;
+	}
+	
+	.back-btn {
+		display: flex;
+		align-items: center;
+		padding: 16rpx 24rpx;
+		border-radius: 12rpx;
+		transition: all 0.3s ease;
+		background: rgba(24, 144, 255, 0.1);
+	}
+	
+	.back-btn:active {
+		background: rgba(24, 144, 255, 0.2);
+		transform: scale(0.95);
+	}
+	
+	.back-icon {
+		font-size: 48rpx;
+		color: #1890ff;
+		line-height: 1;
+		font-weight: bold;
+	}
+	
+	.back-text {
+		font-size: 28rpx;
+		color: #1890ff;
+		margin-left: 8rpx;
+		font-weight: 500;
+	}
+	
+	.header-title {
+		flex: 1;
+		text-align: center;
+		font-size: 36rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-right: 120rpx;
+	}
+	
+	/* 内容区域样式优化 */
+	.content {
+		height: calc(100vh - 120rpx);
+		padding: 24rpx;
+	}
+	
+	/* 卡片样式优化 */
+	.card {
+		background: #fff;
+		border-radius: 24rpx;
+		margin-bottom: 24rpx;
+		overflow: hidden;
+		box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.06);
+		border: 1rpx solid rgba(225, 228, 232, 0.6);
+		transition: all 0.3s ease;
+	}
+	
+	.card:hover {
+		box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+		transform: translateY(-2rpx);
+	}
+	
+	.card-header {
+		display: flex;
+		align-items: center;
+		padding: 32rpx 32rpx 24rpx;
+		border-bottom: 1rpx solid rgba(240, 240, 240, 0.8);
+		background: linear-gradient(135deg, #fafbfc 0%, #f6f8fa 100%);
+	}
+	
+	.card-icon {
+		font-size: 36rpx;
+		margin-right: 16rpx;
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+	}
+	
+	.card-title {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #1f2329;
+	}
+	
+	.card-subtitle {
+		font-size: 24rpx;
+		color: #8f959e;
+		margin-left: auto;
+		background: rgba(24, 144, 255, 0.1);
+		padding: 8rpx 16rpx;
+		border-radius: 20rpx;
+		font-weight: 500;
+	}
+	
+	.card-body {
+		padding: 32rpx;
+	}
+	
+	/* 表单组样式优化 */
+	.form-group {
+		margin-bottom: 32rpx;
+		position: relative;
+	}
+	
+	.form-group:last-child {
+		margin-bottom: 0;
+	}
+	
+	.form-label {
+		font-size: 28rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 16rpx;
+		display: flex;
+		align-items: center;
+	}
+	
+	.form-label.required::before {
+		content: '*';
+		color: #ff4d4f;
+		margin-right: 8rpx;
+		font-size: 32rpx;
+	}
+	
+	.form-input {
+		height: 96rpx;
+		padding: 0 24rpx;
+		background: #f8f9fa;
+		border: 2rpx solid #e1e4e8;
+		border-radius: 16rpx;
+		font-size: 28rpx;
+		color: #1f2329;
+		transition: all 0.3s ease;
+		font-weight: 500;
+	}
+	
+	.form-input:focus {
+		border-color: #1890ff;
+		background: #fff;
+		box-shadow: 0 0 0 4rpx rgba(24, 144, 255, 0.1);
+	}
+	
+	.placeholder {
+		color: #8f959e;
+		font-size: 28rpx;
+		font-weight: 400;
+	}
+	
+	.input-counter {
+		position: absolute;
+		right: 24rpx;
+		bottom: 24rpx;
+		font-size: 24rpx;
+		color: #8f959e;
+		font-weight: 500;
+	}
+	
+	/* 信息行样式优化 */
+	.info-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 32rpx;
+	}
+	
+	.info-item {
+		flex: 1;
+	}
+	
+	.info-label {
+		font-size: 28rpx;
+		color: #8f959e;
+		margin-bottom: 16rpx;
+		font-weight: 500;
+	}
+	
+	.info-value {
+		font-size: 28rpx;
+		color: #1f2329;
+		font-weight: 600;
+	}
+	
+	.info-value.tag {
+		display: inline-block;
+		padding: 12rpx 20rpx;
+		background: linear-gradient(135deg, #e6f7ff, #bae7ff);
+		color: #1890ff;
+		border-radius: 12rpx;
+		font-size: 24rpx;
+		font-weight: 600;
+		border: 1rpx solid rgba(24, 144, 255, 0.2);
+	}
+	
+	/* 上传提示样式优化 */
+	.upload-tips {
+		background: linear-gradient(135deg, #f0f8ff, #e6f7ff);
+		border: 1rpx solid #d0e8ff;
+		border-radius: 16rpx;
+		padding: 24rpx;
+		margin-bottom: 24rpx;
+		position: relative;
+		overflow: hidden;
+	}
+	
+	.upload-tips::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 8rpx;
+		height: 100%;
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+	}
+	
+	.tips-content {
+		display: flex;
+		align-items: flex-start;
+	}
+	
+	.tips-icon {
+		font-size: 28rpx;
+		margin-right: 12rpx;
+		margin-top: 4rpx;
+	}
+	
+	.tips-text {
+		font-size: 26rpx;
+		color: #1890ff;
+		line-height: 1.5;
+		flex: 1;
+		font-weight: 500;
+	}
+	
+	/* 文件上传区域优化 */
+	.file-upload-area {
+		border: 3rpx dashed #d0d7de;
+		border-radius: 24rpx;
+		background: #fafbfc;
+		transition: all 0.3s ease;
+		cursor: pointer;
+		overflow: hidden;
+		margin-bottom: 24rpx;
+		position: relative;
+	}
+	
+	.file-upload-area:active {
+		border-color: #1890ff;
+		background: #f0f8ff;
+		transform: scale(0.98);
+		box-shadow: 0 8rpx 32rpx rgba(24, 144, 255, 0.2);
+	}
+	
+	.upload-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 80rpx 40rpx;
+		text-align: center;
+	}
+	
+	.upload-icon {
+		margin-bottom: 24rpx;
+		width: 120rpx;
+		height: 120rpx;
+		border-radius: 50%;
+		background: linear-gradient(135deg, #e6f7ff, #bae7ff);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.upload-icon-img {
+		width: 60rpx;
+		height: 60rpx;
+	}
+	
+	.upload-text {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 16rpx;
+	}
+	
+	.upload-desc {
+		font-size: 26rpx;
+		color: #8f959e;
+		margin-bottom: 8rpx;
+		font-weight: 500;
+	}
+	
+	.upload-count {
+		font-size: 24rpx;
+		color: #1890ff;
+		font-weight: 600;
+	}
+	
+	/* 文件预览区域优化 */
+	.file-preview {
+		margin-top: 8rpx;
+	}
+	
+	.file-list {
+		display: flex;
+		flex-direction: column;
+		gap: 16rpx;
+	}
+	
+	.file-item {
+		background: #f8f9fa;
+		border-radius: 20rpx;
+		padding: 32rpx;
+		border: 1rpx solid rgba(225, 228, 232, 0.6);
+		transition: all 0.3s ease;
+	}
+	
+	.file-item:hover {
+		background: #fff;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+		transform: translateY(-2rpx);
+	}
+	
+	.file-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 24rpx;
+	}
+	
+	.file-icon {
+		width: 100rpx;
+		height: 100rpx;
+		border-radius: 16rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 40rpx;
+		flex-shrink: 0;
+		box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+	}
+	
+	.file-type-image {
+		background: linear-gradient(135deg, #ff4d4f, #ff7875);
+	}
+	
+	.file-type-document {
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+	}
+	
+	.file-type-archive {
+		background: linear-gradient(135deg, #52c41a, #73d13d);
+	}
+	
+	.file-type-other {
+		background: linear-gradient(135deg, #722ed1, #9254de);
+	}
+	
+	.file-info {
+		flex: 1;
+		min-width: 0;
+	}
+	
+	.file-name {
+		font-size: 28rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 8rpx;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	
+	.file-meta {
+		display: flex;
+		align-items: center;
+		gap: 16rpx;
+		margin-bottom: 12rpx;
+	}
+	
+	.file-size {
+		font-size: 24rpx;
+		color: #8f959e;
+		font-weight: 500;
+	}
+	
+	.file-type {
+		font-size: 22rpx;
+		color: #fff;
+		background: rgba(24, 144, 255, 0.8);
+		padding: 4rpx 12rpx;
+		border-radius: 12rpx;
+		font-weight: 500;
+	}
+	
+	.progress-container {
+		display: flex;
+		align-items: center;
+		gap: 16rpx;
+	}
+	
+	.progress-bar {
+		flex: 1;
+		height: 8rpx;
+		background: #e1e4e8;
+		border-radius: 4rpx;
+		overflow: hidden;
+	}
+	
+	.progress-fill {
+		height: 100%;
+		background: linear-gradient(135deg, #52c41a, #73d13d);
+		transition: width 0.3s ease;
+		border-radius: 4rpx;
+	}
+	
+	.progress-text {
+		font-size: 22rpx;
+		color: #52c41a;
+		font-weight: 600;
+		min-width: 60rpx;
+	}
+	
+	.file-status {
+		margin-top: 8rpx;
+	}
+	
+	.status-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 8rpx;
+		padding: 8rpx 16rpx;
+		border-radius: 20rpx;
+		font-size: 24rpx;
+		font-weight: 600;
+	}
+	
+	.status-badge.success {
+		background: linear-gradient(135deg, #f6ffed, #d9f7be);
+		color: #52c41a;
+		border: 1rpx solid rgba(82, 196, 26, 0.3);
+	}
+	
+	.status-badge.ready {
+		background: linear-gradient(135deg, #f0f8ff, #e6f7ff);
+		color: #1890ff;
+		border: 1rpx solid rgba(24, 144, 255, 0.3);
+	}
+	
+	.status-icon {
+		font-size: 20rpx;
+	}
+	
+	.file-actions {
+		display: flex;
+		gap: 12rpx;
+		flex-shrink: 0;
+	}
+	
+	.btn-action {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4rpx;
+		padding: 16rpx;
+		border: none;
+		background: transparent;
+		border-radius: 12rpx;
+		transition: all 0.3s ease;
+		min-width: 80rpx;
+	}
+	
+	.btn-action:active {
+		transform: scale(0.9);
+	}
+	
+	.btn-action.preview:active {
+		background: rgba(24, 144, 255, 0.1);
+	}
+	
+	.btn-action.delete:active {
+		background: rgba(255, 77, 79, 0.1);
+	}
+	
+	.btn-icon {
+		font-size: 24rpx;
+		margin-bottom: 4rpx;
+	}
+	
+	.btn-text {
+		font-size: 20rpx;
+		color: #8f959e;
+		font-weight: 500;
+	}
+	
+	/* 上传数量提示优化 */
+	.upload-count-tip {
+		text-align: center;
+		margin-top: 24rpx;
+		padding: 20rpx;
+		background: linear-gradient(135deg, #f6ffed, #d9f7be);
+		border-radius: 16rpx;
+		border: 1rpx solid rgba(82, 196, 26, 0.3);
+	}
+	
+	.count-text {
+		font-size: 26rpx;
+		color: #52c41a;
+		font-weight: 600;
+	}
+	
+	/* 文本域样式优化 */
+	.form-textarea {
+		width: 100%;
+		height: 240rpx;
+		padding: 24rpx;
+		background: #f8f9fa;
+		border: 2rpx solid #e1e4e8;
+		border-radius: 16rpx;
+		font-size: 28rpx;
+		color: #1f2329;
+		line-height: 1.5;
+		transition: all 0.3s ease;
+		box-sizing: border-box;
+		font-weight: 500;
+	}
+	
+	.form-textarea:focus {
+		border-color: #1890ff;
+		background: #fff;
+		box-shadow: 0 0 0 4rpx rgba(24, 144, 255, 0.1);
+	}
+	
+	.textarea-placeholder {
+		color: #8f959e;
+		font-size: 28rpx;
+		font-weight: 400;
+	}
+	
+	.textarea-counter {
+		text-align: right;
+		font-size: 24rpx;
+		color: #8f959e;
+		margin-top: 16rpx;
+		font-weight: 500;
+	}
+	
+	/* 底部操作区域优化 */
+	.bottom-actions {
+		position: sticky;
+		bottom: 0;
+		background: rgba(255, 255, 255, 0.95);
+		backdrop-filter: blur(20px);
+		padding: 24rpx 32rpx 48rpx;
+		border-top: 1rpx solid rgba(225, 228, 232, 0.8);
+		margin-top: 24rpx;
+		box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.08);
+	}
+	
+	.action-buttons {
+		display: flex;
+		gap: 24rpx;
+	}
+	
+	.btn {
+		flex: 1;
+		height: 96rpx;
+		border: none;
+		border-radius: 20rpx;
+		font-size: 32rpx;
+		font-weight: 600;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.3s ease;
+		position: relative;
+		overflow: hidden;
+	}
+	
+	.btn::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: -100%;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+		transition: left 0.5s ease;
+	}
+	
+	.btn:active::before {
+		left: 100%;
+	}
+	
+	.btn:active {
+		transform: scale(0.98);
+	}
+	
+	.btn-cancel {
+		background: #fff;
+		color: #1f2329;
+		border: 2rpx solid #e1e4e8;
+		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+	}
+	
+	.btn-cancel:active {
+		background: #f8f9fa;
+		border-color: #d0d7de;
+	}
+	
+	.btn-submit {
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+		color: #fff;
+		box-shadow: 0 4rpx 20rpx rgba(24, 144, 255, 0.3);
+	}
+	
+	.btn-submit.btn-disabled {
+		background: linear-gradient(135deg, #c2c8d1, #d0d7de);
+		color: #fff;
+		transform: none;
+		box-shadow: none;
+	}
+	
+	.btn-submit:not(.btn-disabled):active {
+		background: linear-gradient(135deg, #0d7ae5, #2db8b3);
+		box-shadow: 0 2rpx 12rpx rgba(24, 144, 255, 0.4);
+	}
+	
+	.btn-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-right: 16rpx;
+	}
+	
+	.loading-spinner {
+		width: 32rpx;
+		height: 32rpx;
+		border: 3rpx solid transparent;
+		border-top: 3rpx solid #fff;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
+	
+	.loading-spinner.large {
+		width: 64rpx;
+		height: 64rpx;
+		border-width: 4rpx;
+		border-top-color: #1890ff;
+	}
+	
+	@keyframes spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
+	}
+	
+	.btn-text {
+		font-size: 32rpx;
+		font-weight: 600;
+	}
+	
+	/* 全局加载遮罩优化 */
+	.global-loading {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(10px);
+		z-index: 9999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.loading-modal {
+		background: #fff;
+		border-radius: 24rpx;
+		padding: 64rpx 48rpx;
+		text-align: center;
+		max-width: 500rpx;
+		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+		border: 1rpx solid rgba(225, 228, 232, 0.8);
+	}
+	
+	.loading-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+	
+	.loading-text {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 16rpx;
+	}
+	
+	.loading-subtext {
+		font-size: 26rpx;
+		color: #8f959e;
+		margin-bottom: 8rpx;
+		font-weight: 500;
+	}
+	
+	.loading-progress {
+		font-size: 24rpx;
+		color: #1890ff;
+		font-weight: 600;
+		background: rgba(24, 144, 255, 0.1);
+		padding: 8rpx 16rpx;
+		border-radius: 20rpx;
+		margin-top: 8rpx;
+	}
+</style>
