@@ -293,6 +293,7 @@
 <script>
 import * as productApi from '@/api/product.js';
 import * as mediaApi from '@/api/media.js';
+import * as shopApi from '@/api/shop.js';
 
 export default {
   data() {
@@ -332,7 +333,10 @@ export default {
       currentProductSkus: [], // 当前商品的SKU列表
       singleStockValue: '', // 单规格商品的库存值
       batchStockValue: '', // 批量设置的库存值
-      stockLoading: false // 库存保存加载状态
+      stockLoading: false, // 库存保存加载状态
+      currentShopId: null,
+      currentShopInfo: null,
+      shopLoading: false
     }
   },
   
@@ -377,6 +381,54 @@ export default {
   },
   
   methods: {
+    async loadCurrentShop() {
+      if (this.shopLoading) return;
+      this.shopLoading = true;
+      try {
+        const res = await shopApi.getMyShop();
+        if (res && res.code === 200 && res.data) {
+          this.currentShopInfo = res.data;
+          this.currentShopId = res.data.shopId || res.data.id;
+        } else {
+          this.currentShopInfo = null;
+          this.currentShopId = null;
+          uni.showToast({
+            title: (res && res.msg) || '未查询到商家信息',
+            icon: 'none'
+          });
+        }
+      } catch (error) {
+        console.error('获取商家信息失败:', error);
+        this.currentShopInfo = null;
+        this.currentShopId = null;
+        uni.showToast({
+          title: '获取商家信息失败',
+          icon: 'none'
+        });
+      } finally {
+        this.shopLoading = false;
+      }
+    },
+
+    extractProductShopId(product) {
+      if (!product) return null;
+      return product.shopId || product.shop_id || (product.originalData && (product.originalData.shopId || product.originalData.shop_id)) || null;
+    },
+
+    isProductBelongsToCurrentShop(product) {
+      if (!product || !this.currentShopId) return false;
+      const productShopId = this.extractProductShopId(product);
+      if (productShopId !== null && productShopId !== undefined) {
+        return Number(productShopId) === Number(this.currentShopId);
+      }
+      const createdBy = product.createdBy || product.created_by || (product.originalData && (product.originalData.createdBy || product.originalData.created_by));
+      const shopUserId = this.currentShopInfo && (this.currentShopInfo.userId || this.currentShopInfo.user_id);
+      if (createdBy != null && shopUserId != null) {
+        return Number(createdBy) === Number(shopUserId);
+      }
+      return false;
+    },
+
     // 获取商品ID（统一方法）
     getProductId(product) {
       if (!product) return null;
@@ -675,6 +727,18 @@ export default {
     // 加载商品列表
     async loadProducts() {
       if (this.loading) return;
+      if (!this.currentShopId) {
+        if (!this.shopLoading) {
+          uni.showToast({
+            title: '请先完善商家信息',
+            icon: 'none'
+          });
+        }
+        this.loadMoreStatus = 'noMore';
+        this.refreshing = false;
+        uni.stopPullDownRefresh();
+        return;
+      }
       
       this.loading = true;
       try {
@@ -699,12 +763,13 @@ export default {
         
         if (res.code === 200) {
           const productList = res.data || [];
-          this.allProducts = productList;
+          const shopProducts = productList.filter(item => this.isProductBelongsToCurrentShop(item));
+          this.allProducts = shopProducts;
           
           // 前端分页
           const startIndex = (this.pageParams.pageNum - 1) * this.pageParams.pageSize;
           const endIndex = startIndex + this.pageParams.pageSize;
-          const pagedProducts = productList.slice(startIndex, endIndex);
+          const pagedProducts = shopProducts.slice(startIndex, endIndex);
           
           // 并行加载每个商品的SKU信息和图片
           await Promise.all([
@@ -718,7 +783,7 @@ export default {
             this.products = [...this.products, ...this.formatProductData(pagedProducts)];
           }
           
-          this.pageParams.total = productList.length;
+          this.pageParams.total = shopProducts.length;
           
           // 更新加载状态
           if (this.products.length >= this.pageParams.total) {
@@ -886,18 +951,22 @@ export default {
         await this.loadProducts();
         return;
       }
+      if (!this.currentShopId) {
+        return;
+      }
       
       this.loading = true;
       try {
         const res = await productApi.getProductSpusByCategory(this.selectedCategoryId);
         if (res.code === 200) {
           const productList = res.data || [];
-          this.allProducts = productList;
+          const shopProducts = productList.filter(item => this.isProductBelongsToCurrentShop(item));
+          this.allProducts = shopProducts;
           
           // 前端分页
           const startIndex = (this.pageParams.pageNum - 1) * this.pageParams.pageSize;
           const endIndex = startIndex + this.pageParams.pageSize;
-          const pagedProducts = productList.slice(startIndex, endIndex);
+          const pagedProducts = shopProducts.slice(startIndex, endIndex);
           
           // 并行加载每个商品的SKU信息和图片
           await Promise.all([
@@ -911,7 +980,7 @@ export default {
             this.products = [...this.products, ...this.formatProductData(pagedProducts)];
           }
           
-          this.pageParams.total = productList.length;
+          this.pageParams.total = shopProducts.length;
           
           // 更新加载状态
           if (this.products.length >= this.pageParams.total) {
@@ -958,6 +1027,8 @@ export default {
           ? String(product.productStatus) 
           : (product.status !== undefined ? String(product.status) : '0')
         
+        const extractedShopId = this.extractProductShopId(product);
+        const normalizedShopId = extractedShopId != null ? Number(extractedShopId) : null;
         return {
             id: numericId,
             spuId: numericId,
@@ -973,7 +1044,9 @@ export default {
           imageUrl: product.imageUrl,
           coverImage: product.coverImage,
           imageList: product.imageList || [],
-            skuList: this.productSkusMap.get(numericId) || [],
+          skuList: this.productSkusMap.get(numericId) || [],
+          shopId: normalizedShopId,
+          createdBy: product.createdBy || product.created_by || (product.originalData && (product.originalData.createdBy || product.originalData.created_by)),
           originalData: product
         }
       })
@@ -1539,14 +1612,21 @@ export default {
     }
   },
   
-  onLoad() {
+  async onLoad() {
     console.log('商品管理页面加载');
-    this.loadProducts();
-    this.loadCategories();
+    await this.loadCurrentShop();
+    if (this.currentShopId) {
+      this.loadProducts();
+      this.loadCategories();
+    }
   },
   
-  onShow() {
+  async onShow() {
     console.log('商品管理页面显示，刷新数据');
+    await this.loadCurrentShop();
+    if (!this.currentShopId) {
+      return;
+    }
     this.pageParams.pageNum = 1;
     this.productSkusMap.clear();
     this.productImagesMap.clear();
