@@ -21,10 +21,10 @@
             <text class="rating-text">{{ shop.rating.toFixed(1) }}</text>
           </view>
           <view class="shop-status-row">
-            <text class="shop-status" :class="getShopStatusClass()">
+            <text class="shop-status" :class="shopStatusClass">
               {{ getShopStatusText() }}
             </text>
-            <text class="online-status" :class="getOnlineStatusClass()">
+            <text class="online-status" :class="onlineStatusClass">
               {{ getOnlineStatusText() }}
             </text>
           </view>
@@ -151,6 +151,17 @@ export default {
       setTimeout(() => {
         uni.navigateBack()
       }, 1500)
+    }
+  },
+  computed: {
+    shopStatusClass() {
+      if (!this.shop) return ''
+      return this.shop.shopStatus === 1 ? 'status-normal' : 'status-disabled'
+    },
+    onlineStatusClass() {
+      if (!this.shop) return ''
+      const status = this.shop.onlineStatus || '0'
+      return `online-${status}`
     }
   },
   methods: {

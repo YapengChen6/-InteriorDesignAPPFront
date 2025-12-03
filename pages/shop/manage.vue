@@ -26,7 +26,7 @@
             <uni-icons type="star-filled" size="16" color="#ffa500"></uni-icons>
             <text class="rating-text">{{ shop.rating.toFixed(1) }}</text>
           </view>
-          <text class="shop-status" :class="getShopStatusClass()">
+          <text class="shop-status" :class="shopStatusClass">
             {{ getShopStatusText() }}
           </text>
         </view>
@@ -186,6 +186,12 @@ export default {
   onShow() {
     // 页面显示时刷新数据
     this.loadShopInfo()
+  },
+  computed: {
+    shopStatusClass() {
+      if (!this.shop) return ''
+      return this.shop.shopStatus === 1 ? 'status-normal' : 'status-disabled'
+    }
   },
   methods: {
     async loadShopInfo() {

@@ -244,12 +244,6 @@
     }
   },
   {
-    "path": "pages/shop/cart",
-    "style": {
-      "navigationBarTitleText": "购物车"
-    }
-  },
-  {
     "path": "pages/shop/checkout",
     "style": {
       "navigationBarTitleText": "结算页面"
@@ -277,12 +271,7 @@
     "style": {
       "navigationBarTitleText": "商家详情"
     }
-  }, {
-    "path": "pages/shop/manage",
-    "style": {
-      "navigationBarTitleText": "店铺管理"
-    }
-  },
+  }, 
   {
     "path": "pages/post/order",
     "style": {
