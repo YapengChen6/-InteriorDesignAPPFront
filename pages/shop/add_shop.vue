@@ -1576,51 +1576,51 @@ export default {
       } finally {
         this.loading = false
       }
-    },
-    
-    // 检查用户角色
-    async checkUserRole() {
-      try {
-        this.checkingRole = true
-        const res = await getCurrentRole()
+  },
+  
+  // 检查用户角色
+  async checkUserRole() {
+    try {
+      this.checkingRole = true
+      const res = await getCurrentRole()
+      
+      if (res && res.code === 200) {
+        const roleType = res.data?.roleType || res.data?.role || 'user'
+        this.isMaterialSupplier = roleType === 'material_supplier'
         
-        if (res && res.code === 200) {
-          const roleType = res.data?.roleType || res.data?.role || 'user'
-          this.isMaterialSupplier = roleType === 'material_supplier'
-          
-          if (!this.isMaterialSupplier) {
-            console.log('当前用户不是材料商，角色类型:', roleType)
-          } else {
-            console.log('当前用户是材料商，允许上传商品')
-          }
+        if (!this.isMaterialSupplier) {
+          console.log('当前用户不是材料商，角色类型:', roleType)
         } else {
-          // 如果获取角色失败，默认不允许
-          this.isMaterialSupplier = false
-          console.warn('获取用户角色失败:', res?.msg || '未知错误')
+          console.log('当前用户是材料商，允许上传商品')
         }
-      } catch (error) {
-        console.error('检查用户角色失败:', error)
+      } else {
+        // 如果获取角色失败，默认不允许
         this.isMaterialSupplier = false
-        uni.showToast({
-          title: '获取用户信息失败',
-          icon: 'none'
-        })
-      } finally {
-        this.checkingRole = false
-        this.roleChecked = true
+        console.warn('获取用户角色失败:', res?.msg || '未知错误')
       }
-    },
-    
-    // 跳转到商家入驻页面
-    goToMerchantJoin() {
-      uni.navigateTo({
-        url: '/pages/join/ShopJoin1'
+    } catch (error) {
+      console.error('检查用户角色失败:', error)
+      this.isMaterialSupplier = false
+      uni.showToast({
+        title: '获取用户信息失败',
+        icon: 'none'
       })
-    },
-    
-    // 返回上一页
-    goBack() {
-      uni.navigateBack()
+    } finally {
+      this.checkingRole = false
+      this.roleChecked = true
+    }
+  },
+  
+  // 跳转到商家入驻页面
+  goToMerchantJoin() {
+    uni.navigateTo({
+      url: '/pages/join/ShopJoin1'
+    })
+  },
+  
+  // 返回上一页
+  goBack() {
+    uni.navigateBack()
     }
   },
   

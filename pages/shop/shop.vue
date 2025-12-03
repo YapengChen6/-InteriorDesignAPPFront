@@ -99,11 +99,11 @@
     >
       <view class="grid-container">
         <template v-for="(product, index) in filteredProducts">
-          <view 
-            v-if="product"
-            class="product-card" 
-            :key="product.id || product.productSpuId || product.spuId || index"
-          >
+        <view 
+            v-if="product && getProductId(product)"
+          class="product-card" 
+            :key="getProductId(product) || index"
+        >
           <!-- 商品图片 -->
           <view class="card-media">
             <image 
@@ -127,17 +127,17 @@
             <view class="price-section">
               <text class="market-price">￥{{ formatPrice(product.marketPrice) }}</text>
             </view>
-            <text class="product-stock">总库存: {{ calculateTotalStock(product) }}</text>
+            <text class="product-stock" @click.stop="goToStockManagement(product)">总库存: {{ calculateTotalStock(product) }}</text>
             <text class="spec-type">规格类型: {{ getSpecTypeText(product.specType) }}</text>
             <view 
               class="sku-summary" 
-              v-if="product && product.id && productSkuSummary[product.id] && productSkuSummary[product.id].length"
+              v-if="product && getProductId(product) && productSkuSummary[getProductId(product)] && productSkuSummary[getProductId(product)].length"
             >
               <text class="sku-summary-title">SKU：</text>
               <view class="sku-summary-chips">
                 <text
                   class="sku-chip"
-                  v-for="(specText, skuIndex) in productSkuSummary[product.id]"
+                  v-for="(specText, skuIndex) in productSkuSummary[getProductId(product)]"
                   :key="skuIndex"
                 >
                   {{ specText }}
@@ -152,7 +152,7 @@
               <uni-icons type="eye" size="14" color="#909399"></uni-icons>
               详情
             </button>
-            <button class="stock-btn" @click="openStockManagement(product)" :disabled="actionLoading">
+            <button class="stock-btn" @click="goToStockManagement(product)" :disabled="actionLoading">
               <uni-icons type="shop" size="14" color="#409EFF"></uni-icons>
               库存
             </button>
@@ -169,7 +169,7 @@
               删除
             </button>
           </view>
-          </view>
+        </view>
         </template>
       </view>
 
@@ -338,17 +338,19 @@ export default {
   
   computed: {
     filteredProducts() {
-      // 先过滤掉 null 或 undefined 的产品
-      let filtered = this.products.filter(product => product != null);
+      // 先过滤掉 null 或 undefined 的产品，并确保有 id
+      let filtered = this.products.filter(product => {
+        return product != null && (product.id || product.productSpuId || product.spuId)
+      });
       
       // 搜索过滤
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase();
         filtered = filtered.filter(product => 
           product && product.productName && (
-            product.productName.toLowerCase().includes(query) || 
-            (product.categoryPath && product.categoryPath.toLowerCase().includes(query)) ||
-            (product.productDetail && product.productDetail.toLowerCase().includes(query))
+          product.productName.toLowerCase().includes(query) || 
+          (product.categoryPath && product.categoryPath.toLowerCase().includes(query)) ||
+          (product.productDetail && product.productDetail.toLowerCase().includes(query))
           )
         );
       }
@@ -375,9 +377,16 @@ export default {
   },
   
   methods: {
+    // 获取商品ID（统一方法）
+    getProductId(product) {
+      if (!product) return null;
+      return product.id || product.productSpuId || product.spuId || null;
+    },
+    
     // 获取商品图片
     getProductImage(product) {
-      const productId = product.id || product.productSpuId || product.spuId;
+      if (!product) return '/static/images/default-product.png';
+      const productId = this.getProductId(product);
       
       // 优先从加载的图片列表中获取
       if (productId && this.productImagesMap.has(productId)) {
@@ -468,13 +477,20 @@ export default {
 
     // 计算总库存（从SKU汇总）
     calculateTotalStock(product) {
-      if (this.productSkusMap.has(product.id)) {
-        const skus = this.productSkusMap.get(product.id);
+      if (!product) return 0;
+      
+      const productId = this.getProductId(product);
+      if (!productId) return 0;
+      
+      if (this.productSkusMap.has(productId)) {
+        const skus = this.productSkusMap.get(productId);
+        if (skus && Array.isArray(skus)) {
         return skus.reduce((total, sku) => {
           // 兼容不同的库存字段名
           const stock = sku.stock || sku.stockQuantity || sku.quantity || 0;
           return total + (Number(stock) || 0);
         }, 0);
+        }
       }
       // 如果没有SKU，返回SPU的库存（如果有的话）
       return product.stock || product.stockQuantity || 0;
@@ -1229,7 +1245,32 @@ export default {
       }
     },
 
-    // 打开库存管理弹窗
+    // 跳转到库存管理页面
+    goToStockManagement(product) {
+      if (!product) {
+        uni.showToast({
+          title: '商品信息不完整',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      const productId = this.getProductId(product);
+      if (!productId) {
+        uni.showToast({
+          title: '商品ID不存在',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      // 跳转到库存管理页面，传递商品ID和基本信息
+      uni.navigateTo({
+        url: `/pages/shop/stock-management?productId=${productId}&productName=${encodeURIComponent(product.productName || '')}`
+      });
+    },
+    
+    // 打开库存管理弹窗（保留，可能其他地方用到）
     async openStockManagement(product) {
       if (!product || !product.id) {
         uni.showToast({
@@ -1707,8 +1748,10 @@ export default {
         .product-stock {
           display: block;
           font-size: 24rpx;
-          color: #909399;
+          color: #409EFF;
           margin-bottom: 4rpx;
+          cursor: pointer;
+          text-decoration: underline;
         }
         
         .spec-type {
@@ -1796,8 +1839,8 @@ export default {
         .stock-btn {
           color: #409EFF;
           background: #ecf5ff;
-        }
       }
+    }
     }
   }
 
