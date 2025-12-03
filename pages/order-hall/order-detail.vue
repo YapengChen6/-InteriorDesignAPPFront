@@ -175,7 +175,7 @@
 
 <script>
 import { projectService } from '@/api/project.js'
-import { getUserProfile } from '@/api/users.js'
+import { getUserProfile, getUserById } from '@/api/users.js'  // 修改这里：同时导入两个方法
 import { isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 
 export default {
@@ -420,7 +420,7 @@ export default {
 			}
 		},
 		
-		// 加载当前用户信息
+		// 加载当前用户信息 - 保留使用原来的方法
 		async loadCurrentUserInfo() {
 			try {
 				// 检查是否有token
@@ -432,7 +432,7 @@ export default {
 				
 				console.log('👤 开始获取当前用户信息...')
 				
-				// 调用API获取用户信息
+				// 调用原来的API获取当前登录用户信息 - 不需要参数
 				const userRes = await getUserProfile()
 				
 				if (userRes.code === 200) {
@@ -489,7 +489,7 @@ export default {
 			}
 		},
 		
-		// 加载发布者详细信息
+		// 加载发布者详细信息 - 使用新的getUserById方法
 		async loadPublisherInfo(userId) {
 			if (!userId) {
 				console.log('没有用户ID，使用默认发布者信息')
@@ -499,7 +499,7 @@ export default {
 			
 			try {
 				console.log('正在获取发布者信息，用户ID:', userId)
-				const userInfo = await getUserProfile(userId)
+				const userInfo = await getUserById(userId) // 使用新的方法
 				console.log('发布者信息:', userInfo)
 				
 				// 格式化用户信息
@@ -688,7 +688,6 @@ export default {
 	}
 }
 </script>
-
 <style scoped>
 .order-detail-container {
 	min-height: 100vh;

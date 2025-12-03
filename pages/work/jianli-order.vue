@@ -58,19 +58,19 @@
 			</view>
 			
 			<!-- 空状态 -->
-			<view v-if="!loading && orderList.length === 0" class="empty-state">
+			<view v-if="!loading && filteredOrders.length === 0" class="empty-state">
 				<view class="empty-icon">🎨</view>
 				<view class="empty-text">暂无订单</view>
 				<view class="empty-desc">您还没有接到的订单</view>
 			</view>
 			
 			<!-- 加载状态 -->
-			<view v-if="loading && orderList.length === 0" class="loading-state">
+			<view v-if="loading && filteredOrders.length === 0" class="loading-state">
 				<text class="loading-text">加载中...</text>
 			</view>
 			
 			<!-- 订单项 -->
-			<view class="order-item" v-for="order in orderList" :key="order.orderId">
+			<view class="order-item" v-for="order in filteredOrders" :key="order.orderId">
 				<view class="order-header">
 					<view class="order-info">
 						<text class="order-number">订单号：DD{{ order.orderId }}</text>
@@ -96,7 +96,7 @@
 					</view>
 					
 					<!-- 显示发布人（客户）信息 -->
-					<view class="designer-info" v-if="order.userId">
+					<view class="designer-info" v-if="order.userId && order.publisherInfo && order.publisherInfo.name">
 						<view class="designer-avatar">
 							<image :src="order.publisherInfo.avatar" mode="aspectFill" />
 						</view>
@@ -111,6 +111,11 @@
 					</view>
 					
 					<!-- 未获取客户信息 -->
+					<view class="no-designer" v-else-if="order.userId && order.publisherInfo">
+						<text class="no-designer-text">{{ order.publisherInfo.name || '' }}</text>
+					</view>
+					
+					<!-- 完全未获取客户信息 -->
 					<view class="no-designer" v-else>
 						<text class="no-designer-text">暂未获取客户信息</text>
 					</view>
@@ -185,13 +190,13 @@
 			</view>
 			
 			<!-- 加载更多 -->
-			<view v-if="loading && orderList.length > 0" class="load-more">
+			<view v-if="loading && filteredOrders.length > 0" class="load-more">
 				<text class="load-more-text">加载中...</text>
 			</view>
-			<view v-if="hasMore && orderList.length > 0" class="load-more">
+			<view v-if="hasMore && filteredOrders.length > 0" class="load-more">
 				<text class="load-more-text">上拉加载更多</text>
 			</view>
-			<view v-if="!hasMore && orderList.length > 0" class="load-more">
+			<view v-if="!hasMore && filteredOrders.length > 0" class="load-more">
 				<text class="load-more-text">没有更多数据了</text>
 			</view>
 		</scroll-view>
@@ -201,7 +206,7 @@
 <script>
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
-	import { getUserProfile, getCurrentRole } from '@/api/users.js'
+	import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'  // 导入 getUserById
 	// 新增：导入施工阶段API
 	import { orderStageService } from '@/api/orderStage.js'
 	// 新增：导入对话辅助工具（与设计师页面相同）
@@ -269,9 +274,38 @@
 				}
 			}
 		},
+		computed: {
+			// 过滤后的订单列表 - 只显示contractorId与当前用户相同的订单
+			filteredOrders() {
+				// 首先过滤出contractorId与当前用户ID相同的订单
+				const myOrders = this.orderList.filter(order => {
+					const currentUserIdStr = String(this.userInfo.userId);
+					const contractorIdStr = String(order.contractorId);
+					
+					console.log('🔍 订单过滤比较:', {
+						orderId: order.orderId,
+						currentUserId: currentUserIdStr,
+						contractorId: contractorIdStr,
+						是否匹配: contractorIdStr === currentUserIdStr
+					});
+					
+					return contractorIdStr === currentUserIdStr;
+				});
+				
+				// 然后根据状态筛选
+				if (this.activeStatus === '') {
+					return myOrders;
+				}
+				
+				// 根据状态筛选订单
+				return myOrders.filter(order => {
+					return String(order.status) === this.activeStatus;
+				});
+			}
+		},
 		onLoad() {
 			console.log('🚀 设计师订单页面加载');
-			this.loadUserInfo();
+			this.loadCurrentUserInfo();
 		},
 		onShow() {
 			console.log('🔄 设计师订单页面显示，刷新数据');
@@ -396,14 +430,14 @@
 				return message;
 			},
 
-			// 加载用户信息 - 优化版，确保用户信息正确存储
-			async loadUserInfo() {
+			// 加载当前用户信息 - 使用原来的 getUserProfile() 方法
+			async loadCurrentUserInfo() {
 				try {
-					console.log('👤 开始获取设计师信息...');
+					console.log('👤 开始获取当前用户信息（使用 getUserProfile）...');
 					
 					// 同时获取用户基本信息和角色信息
 					const [userRes, roleRes] = await Promise.all([
-						getUserProfile(),
+						getUserProfile(),  // 使用原来的方法获取当前用户信息
 						getCurrentRole()
 					]);
 					
@@ -419,32 +453,32 @@
 							this.userInfo.roleName = '设计师';
 						}
 						
-						console.log('👤 用户信息加载完成:', {
+						console.log('👤 当前用户信息加载完成:', {
 							userId: this.userInfo.userId,
 							name: this.userInfo.name,
 							role: this.userInfo.role,
 							roleName: this.userInfo.roleName
 						});
 						
-						// 确保用户信息存储到缓存 - 关键步骤
-						this.ensureUserInfoInStorage(true);
+						// 确保用户信息存储到缓存
+						this.ensureUserInfoInStorage();
 						
 						this.loadOrderList();
 					} else {
-						console.error('获取设计师信息失败:', userRes.msg);
-						this.handleApiError(userRes.msg, '获取设计师信息失败');
+						console.error('获取当前用户信息失败:', userRes.msg);
+						this.handleApiError(userRes.msg, '获取用户信息失败');
 					}
 				} catch (error) {
-					console.error('❌ 获取设计师信息失败:', error);
-					this.handleApiError(error, '获取设计师信息失败');
+					console.error('❌ 获取当前用户信息失败:', error);
+					this.handleApiError(error, '获取用户信息失败');
 				}
 			},
 			
-			// 确保用户信息存储到缓存 - 修复版
-			ensureUserInfoInStorage(forceRefresh = false) {
+			// 确保用户信息存储到缓存
+			ensureUserInfoInStorage() {
 				try {
-					// 如果强制刷新或用户信息发生变化
-					if (forceRefresh || (this.userInfo && this.userInfo.userId)) {
+					// 如果用户信息存在，存储到缓存
+					if (this.userInfo && this.userInfo.userId) {
 						// 存储完整用户信息
 						uni.setStorageSync('userInfo', this.userInfo);
 						
@@ -539,7 +573,8 @@
 						
 						if (order.userId) {
 							try {
-								publisherInfo = await this.getPublisherInfo(order.userId) || {}
+								// 使用 getUserById 方法获取其他用户信息
+								publisherInfo = await this.getUserInfoById(order.userId) || {}
 							} catch (error) {
 								console.error(`获取订单 ${order.orderId} 的发布人信息失败:`, error)
 							}
@@ -588,6 +623,71 @@
 				} finally {
 					this.loading = false
 					this.refreshing = false
+				}
+			},
+			
+			// 获取其他用户信息的方法 - 只能使用 getUserById(userId)
+			async getUserInfoById(userId) {
+				if (!userId) {
+					console.warn('用户ID为空');
+					return {
+						name: '',
+						phone: '',
+						avatar: '/static/images/default-avatar.png',
+						role: ''
+					};
+				}
+				
+				try {
+					console.log('👤 使用 getUserById 获取用户信息，用户ID:', userId);
+					
+					// 只能使用 getUserById 方法获取其他用户信息
+					const result = await getUserById(userId);
+					console.log('✅ getUserById 原始结果:', result);
+					
+					// 解析API响应
+					let userData = null;
+					
+					// 处理不同的响应格式
+					if (result && typeof result === 'object') {
+						// 标准格式：{code: 200, data: {...}}
+						if (result.code === 200) {
+							userData = result.data || {};
+						}
+						// 非标准格式：直接是用户数据
+						else if (!result.code && (result.name || result.phone || result.avatar)) {
+							userData = result;
+						}
+						// 其他格式：尝试从可能的位置获取数据
+						else if (result.data) {
+							userData = result.data;
+						}
+					}
+					
+					if (!userData) {
+						console.warn('⚠️ 无法从响应中解析用户数据，使用默认值');
+						userData = {};
+					}
+					
+					console.log('✅ 解析后的用户数据:', userData);
+					
+					// 根据示例数据结构调整字段映射
+					return {
+						name: userData.nickName || userData.name || userData.nickname || userData.username || '',
+						phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '',
+						avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png',
+						role: userData.role || userData.userType || ''
+					};
+					
+				} catch (error) {
+					console.error('❌ 使用 getUserById 获取用户信息失败:', error);
+					// 返回默认用户信息（空值，避免显示"未知用户"）
+					return {
+						name: '',
+						phone: '',
+						avatar: '/static/images/default-avatar.png',
+						role: ''
+					};
 				}
 			},
 			
@@ -804,39 +904,6 @@
 				});
 			},
 			
-			// 根据用户ID获取发布人信息
-			async getPublisherInfo(userId) {
-				if (!userId) {
-					return null
-				}
-				
-				try {
-					console.log('👤 获取发布人信息，用户ID:', userId)
-					const publisherInfo = await getUserProfile(userId)
-					console.log('✅ 发布人信息获取成功:', publisherInfo)
-					
-					let publisherData = publisherInfo
-					if (publisherInfo && publisherInfo.data) {
-						publisherData = publisherInfo.data
-					}
-					
-					return {
-						name: publisherData.name || publisherData.nickname || '未知用户',
-						phone: publisherData.phone || publisherData.mobile || '暂无联系方式',
-						avatar: publisherData.avatar || '/static/images/default-avatar.png',
-						role: '客户'
-					}
-				} catch (error) {
-					console.error('❌ 获取发布人信息失败:', error)
-					return {
-						name: '客户',
-						phone: '暂无联系方式',
-						avatar: '/static/images/default-avatar.png',
-						role: '客户'
-					}
-				}
-			},
-			
 			// 切换订单状态
 			changeStatus(status) {
 				this.activeStatus = status
@@ -883,18 +950,26 @@
 				}
 			},
 			
-			// 更新状态统计
+			// 更新状态统计（只统计contractorId与当前用户相同的订单）
 			updateStatusCount() {
+				// 重置统计
 				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0 }
 				
-				this.orderList.forEach(order => {
+				// 只统计contractorId与当前用户ID相同的订单
+				const currentUserIdStr = String(this.userInfo.userId);
+				const myOrders = this.orderList.filter(order => {
+					const contractorIdStr = String(order.contractorId);
+					return contractorIdStr === currentUserIdStr;
+				});
+				
+				myOrders.forEach(order => {
 					const status = order.status.toString()
 					if (this.statusCount[status] !== undefined) {
 						this.statusCount[status]++
 					}
 				})
 				
-				console.log('📊 设计师订单状态统计:', this.statusCount)
+				console.log('📊 设计师订单状态统计（我的订单）:', this.statusCount)
 			},
 			
 			// 加载更多
@@ -918,10 +993,7 @@
 				console.log('🔥 开始联系客户，订单信息:', order);
 				
 				// 确保用户信息在缓存中
-				if (!this.ensureUserInfoInStorage()) {
-					console.warn('⚠️ 用户信息缓存不完整，重新获取...');
-					await this.loadUserInfo();
-				}
+				this.ensureUserInfoInStorage();
 				
 				// 检查登录状态（与设计师页面完全相同）
 				if (!isUserLoggedIn()) {
@@ -943,26 +1015,29 @@
 				let customerInfo = order.publisherInfo;
 				if (!customerInfo || !customerInfo.name) {
 					try {
-						customerInfo = await this.getPublisherInfo(order.userId);
-						if (!customerInfo) {
-							customerInfo = {
-								name: '客户',
-								avatar: ''
-							};
+						customerInfo = await this.getUserInfoById(order.userId);
+						if (!customerInfo || !customerInfo.name) {
+							console.error('❌ 获取客户信息失败或客户信息为空:', customerInfo);
+							uni.showToast({
+								title: '客户信息不存在',
+								icon: 'none'
+							});
+							return;
 						}
 					} catch (error) {
 						console.error('❌ 获取客户信息失败:', error);
-						customerInfo = {
-							name: '客户',
-							avatar: ''
-						};
+						uni.showToast({
+							title: '获取客户信息失败',
+							icon: 'error'
+						});
+						return;
 					}
 				}
 				
 				// 使用与设计师页面完全相同的调用方式
 				await createConversationAndNavigate(
 					order.userId,
-					customerInfo.name || '客户',
+					customerInfo.name,
 					customerInfo.avatar || ''
 				);
 			},

@@ -79,6 +79,14 @@ export function searchUsers(query) {
   })
 }
 
+// 获取指定用户信息
+export function getUserById(userId) {
+  return request({
+    url: `/api/users/${userId}`,
+    method: 'get'
+  })
+}
+
 // 身份切换相关API
 
 // 切换用户身份
@@ -188,6 +196,7 @@ export default {
   uploadAvatar,
   logout,
   searchUsers,
+  getUserById,
   
   // 认证相关
   sendCode,
