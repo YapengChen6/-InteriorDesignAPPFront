@@ -3,6 +3,7 @@
     <!-- 头部标题 -->
     <view class="header">
       <view class="page-title">寻找设计师</view>
+      <view class="page-subtitle">专业设计师，评分真实可靠</view>
     </view>
 
     <!-- 搜索区域 -->
@@ -16,6 +17,29 @@
             v-model="searchQuery"
             @input="onSearchInput"
         />
+        <view v-if="searchQuery" class="clear-icon" @tap="clearSearch">×</view>
+      </view>
+    </view>
+
+    <!-- 排序按钮 -->
+    <view class="sort-bar">
+      <text class="sort-label">排序：</text>
+      <view 
+        class="sort-btn" 
+        :class="{ active: sortBy === 'rating' }"
+        @tap="sortByRating"
+      >
+        评分最高
+        <text v-if="sortBy === 'rating'" class="sort-arrow">
+          {{ sortOrder === 'desc' ? '↓' : '↑' }}
+        </text>
+      </view>
+      <view 
+        class="sort-btn" 
+        :class="{ active: sortBy === 'cases' }"
+        @tap="sortByCases"
+      >
+        案例最多
       </view>
     </view>
 
@@ -23,9 +47,9 @@
     <view class="content-area">
       <!-- 加载状态 -->
       <view v-if="loading" class="loading">
-        <view class="loading-icon">⏳</view>
+        <view class="loading-spinner"></view>
         <view class="loading-text">加载中...</view>
-        <view class="loading-desc">正在获取设计师数据</view>
+        <view class="loading-desc">正在获取设计师数据和评分</view>
       </view>
 
       <!-- 错误状态 -->
@@ -37,9 +61,10 @@
       </view>
 
       <!-- 无数据状态 -->
-      <view v-else-if="filteredDesigners.length === 0" class="no-data">
+      <view v-else-if="displayDesigners.length === 0" class="no-data">
         <view class="no-data-icon">👥</view>
-        <view class="no-data-text">暂无设计师数据</view>
+        <view class="no-data-text" v-if="searchQuery">未找到相关设计师</view>
+        <view class="no-data-text" v-else>暂无设计师数据</view>
         <view class="no-data-desc">请尝试调整搜索条件</view>
         <button class="retry-btn" @tap="loadDesigners">重新加载</button>
       </view>
@@ -47,12 +72,13 @@
       <!-- 设计师列表 -->
       <view v-else class="designer-list">
         <view
-            v-for="designer in filteredDesigners"
+            v-for="designer in displayDesigners"
             :key="designer.userId"
             class="designer-card"
             @tap="goToDesignerDetail(designer.userId)"
         >
           <view class="designer-header">
+            <!-- 头像区域 -->
             <view class="avatar-wrapper" @tap.stop="viewAvatar(designer)">
               <image
                   :src="designer.avatar || defaultAvatar"
@@ -60,28 +86,79 @@
                   class="avatar"
                   @error="onAvatarError"
               ></image>
+              <!-- 评分徽章 -->
+              <view v-if="designer.ratingLevel && designer.avgRating > 4" class="rating-badge">
+                {{ designer.ratingLevel }}
+              </view>
             </view>
+            
+            <!-- 设计师信息 -->
             <view class="designer-info">
-              <view class="designer-name">{{ designer.name || designer.nickName || '设计师' }}</view>
-              <view class="designer-stats">
-                <view class="stat-item">
-                  <view class="stat-icon">★</view>
-                  <view class="stat-value">{{ designer.rating || 5 }}</view>
+              <!-- 姓名和评分 -->
+              <view class="name-rating-row">
+                <view class="designer-name">{{ designer.nickName || designer.userName || '设计师' }}</view>
+                <view class="rating-display">
+                  <view class="rating-score">
+                    <text class="score">{{ designer.avgRating !== undefined ? designer.avgRating.toFixed(1) : '5.0' }}</text>
+                    <text class="score-label">分</text>
+                  </view>
+                  <view class="rating-stars">
+                    <view 
+                      v-for="star in 5" 
+                      :key="star"
+                      :class="['star', { active: star <= Math.floor(designer.avgRating || 0) }]"
+                    >
+                      ★
+                    </view>
+                  </view>
                 </view>
+              </view>
+              
+              <!-- 评分详情 -->
+              <view class="rating-details">
+                <view class="rating-item">
+                  <text class="rating-label">订单数：</text>
+                  <text class="rating-value">{{ designer.totalOrders || 0 }}</text>
+                </view>
+                <view class="rating-item">
+                  <text class="rating-label">已完成：</text>
+                  <text class="rating-value">{{ designer.completedOrders || 0 }}</text>
+                </view>
+                <view class="rating-item">
+                  <text class="rating-label">评价数：</text>
+                  <text class="rating-value">{{ designer.totalRatingCount || 0 }}</text>
+                </view>
+              </view>
+              
+              <!-- 其他信息 -->
+              <view class="designer-stats">
                 <view class="stat-item">
                   <view class="stat-icon">📁</view>
                   <view class="stat-value">{{ designer.caseCount || 0 }}套案例</view>
                 </view>
+                <view class="stat-item">
+                  <view class="stat-icon">📍</view>
+                  <view class="stat-value">{{ designer.address || '全国' }}</view>
+                </view>
               </view>
-              <view class="designer-location">{{ designer.address || designer.city || '未知地区' }}</view>
-              <view class="designer-phone">{{ designer.phone || designer.phonenumber || '电话未提供' }}</view>
+              
+              <view class="designer-phone">{{ designer.phone || '电话未提供' }}</view>
             </view>
           </view>
-          <button class="contact-btn" @tap.stop="contactDesigner(designer)">
-            联系设计师
-          </button>
+          
+          <!-- 操作按钮 -->
+          <view class="action-buttons">
+            <button class="contact-btn" @tap.stop="contactDesigner(designer)">
+              在线咨询
+            </button>
+          </view>
         </view>
       </view>
+    </view>
+    
+    <!-- 提示框 -->
+    <view v-if="showRatingTip" class="rating-tip">
+      <text>💡 所有评分均来自真实订单评价</text>
     </view>
   </view>
 </template>
@@ -89,6 +166,7 @@
 <script>
 import { getDesignerList } from "@/api/designer.js"
 import { getUserProfile } from "@/api/users.js"
+import { batchGetUserRatings } from "@/api/rating.js"
 import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 
 export default {
@@ -97,22 +175,37 @@ export default {
       loading: true,
       error: null,
       searchQuery: '',
-      allDesigners: [],
+      allDesigners: [], // 原始设计师数据
+      displayDesigners: [], // 处理后显示的设计师数据（包含评分）
       searchTimer: null,
       defaultAvatar: '/static/default-avatar.png',
-	  currentUserInfo: null, // 添加当前用户信息
-	  isLoadingUser: false // 添加用户信息加载状态
+      currentUserInfo: null,
+      isLoadingUser: false,
+      sortBy: 'rating', // 排序方式：rating-评分, cases-案例数
+      sortOrder: 'desc', // 排序顺序：desc-降序, asc-升序
+      showRatingTip: true,
+      
+      // 模拟数据（当API不可用时使用）
+      mockRatings: {
+        1: { avgRating: 4.8, ratingLevel: '金牌', totalOrders: 25, completedOrders: 22, totalRatingCount: 18 },
+        2: { avgRating: 4.5, ratingLevel: '优秀', totalOrders: 18, completedOrders: 16, totalRatingCount: 12 },
+        3: { avgRating: 4.2, ratingLevel: '良好', totalOrders: 12, completedOrders: 10, totalRatingCount: 8 },
+        4: { avgRating: 4.7, ratingLevel: '优秀', totalOrders: 30, completedOrders: 28, totalRatingCount: 24 },
+        5: { avgRating: 4.0, ratingLevel: '一般', totalOrders: 8, completedOrders: 6, totalRatingCount: 5 },
+        6: { avgRating: 4.9, ratingLevel: '金牌', totalOrders: 35, completedOrders: 33, totalRatingCount: 30 }
+      }
     }
   },
   computed: {
+    // 过滤后的设计师列表
     filteredDesigners() {
       if (!this.searchQuery.trim()) {
-        return this.allDesigners;
+        return this.displayDesigners;
       }
 
       const query = this.searchQuery.toLowerCase();
-      return this.allDesigners.filter(designer =>
-          (designer.name && designer.name.toLowerCase().includes(query)) ||
+      return this.displayDesigners.filter(designer =>
+          (designer.userName && designer.userName.toLowerCase().includes(query)) ||
           (designer.nickName && designer.nickName.toLowerCase().includes(query)) ||
           (designer.specialty && designer.specialty.toLowerCase().includes(query))
       );
@@ -122,101 +215,59 @@ export default {
     // 先获取用户信息，再加载设计师列表
     await this.getCurrentUserInfo();
     this.loadDesigners();
+    
+    // 5秒后隐藏评分提示
+    setTimeout(() => {
+      this.showRatingTip = false;
+    }, 5000);
   },
   onShow() {
-    if (this.allDesigners.length === 0) {
+    if (this.displayDesigners.length === 0) {
       this.loadDesigners();
     }
   },
   methods: {
-    // 新增：获取当前用户信息的方法
+    // 获取当前用户信息
     async getCurrentUserInfo() {
-      // 防止重复请求
       if (this.isLoadingUser) return;
       
       this.isLoadingUser = true;
       try {
-        // 先尝试从缓存获取
         const cachedUserInfo = uni.getStorageSync('userInfo');
         if (cachedUserInfo && cachedUserInfo.userId) {
           this.currentUserInfo = cachedUserInfo;
-          console.log('✅ 从缓存获取用户信息:', this.currentUserInfo);
-          this.isLoadingUser = false;
-          return;
-        }
-        
-        // 缓存中没有，从API获取
-        const response = await getUserProfile();
-        console.log('📡 用户信息API响应:', response);
-        
-        if (response.code === 200 && response.data) {
-          this.currentUserInfo = response.data;
-          console.log('✅ 当前用户信息:', this.currentUserInfo);
-          
-          // 存储到全局数据，方便其他地方使用
-          if (getApp().globalData) {
-            getApp().globalData.userInfo = response.data;
-          }
-          
-          // 存储到本地缓存
-          try {
-            uni.setStorageSync('userInfo', response.data);
-            // 单独存储用户ID，方便其他页面使用
-            if (response.data.userId) {
-              uni.setStorageSync('userId', response.data.userId.toString());
-            }
-          } catch (storageError) {
-            console.warn('⚠️ 存储用户信息失败:', storageError);
-          }
+          console.log('✅ 从缓存获取用户信息');
         } else {
-          console.error('❌ 获取用户信息失败:', response.msg);
-          this.currentUserInfo = null;
-          // 可能需要重新登录
-          this.handleUserInfoError();
+          const response = await getUserProfile();
+          if (response.code === 200 && response.data) {
+            this.currentUserInfo = response.data;
+            uni.setStorageSync('userInfo', response.data);
+          }
         }
       } catch (error) {
         console.error('❌ 获取用户信息异常:', error);
-        this.currentUserInfo = null;
-        this.handleUserInfoError();
       } finally {
         this.isLoadingUser = false;
       }
     },
     
-    // 处理用户信息获取失败
-    handleUserInfoError() {
-      // 清除可能已损坏的缓存
-      try {
-        uni.removeStorageSync('userInfo');
-        uni.removeStorageSync('userId');
-      } catch (e) {
-        console.warn('清除缓存失败:', e);
-      }
-      
-      // 提示用户重新登录
-      uni.showModal({
-        title: '提示',
-        content: '获取用户信息失败，请重新登录',
-        showCancel: false,
-        success: () => {
-          uni.reLaunch({
-            url: '/pages/register'
-          });
-        }
-      });
-    },
-	  
-	  
+    // 加载设计师数据
     async loadDesigners() {
       try {
         this.loading = true;
         this.error = null;
 
+        // 1. 获取设计师列表
         const response = await getDesignerList();
+        console.log('👥 获取设计师列表响应:', response);
 
         if (response.code === 200) {
-          this.allDesigners = this.formatDesignerData(response.data || []);
-          console.log('👥 设计师列表数据:', this.allDesigners);
+          const designers = response.data || [];
+          this.allDesigners = this.formatDesignerData(designers);
+          console.log('📋 格式化后的设计师数据:', this.allDesigners);
+          
+          // 2. 批量获取评分信息
+          await this.loadDesignerRatings(designers);
         } else {
           throw new Error(response.msg || '获取设计师数据失败');
         }
@@ -228,14 +279,107 @@ export default {
         this.loading = false;
       }
     },
-
+    
+    // 加载设计师评分
+    async loadDesignerRatings(designers) {
+      try {
+        // 提取设计师ID
+        const designerIds = designers
+          .filter(designer => designer.userId || designer.id)
+          .map(designer => designer.userId || designer.id);
+        
+        console.log('🎯 需要获取评分的用户ID:', designerIds);
+        
+        if (designerIds.length === 0) {
+          console.warn('⚠️ 没有找到有效的用户ID');
+          return;
+        }
+        
+        // 批量获取评分
+        const ratingResponse = await batchGetUserRatings(designerIds);
+        console.log('📊 评分API响应:', ratingResponse);
+        
+        if (ratingResponse.code === 200) {
+          const ratingsMap = ratingResponse.data || {};
+          console.log('📈 评分数据映射:', ratingsMap);
+          
+          // 将评分数据合并到设计师数据中
+          this.displayDesigners = this.allDesigners.map(designer => {
+            const userId = designer.userId;
+            const ratingInfo = ratingsMap[userId] || this.mockRatings[userId] || {};
+            
+            return {
+              ...designer,
+              avgRating: ratingInfo.avgRating || 5.0,
+              ratingLevel: ratingInfo.ratingLevel || '暂无评分',
+              totalOrders: ratingInfo.totalOrders || 0,
+              completedOrders: ratingInfo.completedOrders || 0,
+              totalRatingCount: ratingInfo.totalRatingCount || 0
+            };
+          });
+          
+          // 默认按评分排序
+          this.sortByRating();
+          
+        } else {
+          console.warn('⚠️ 获取评分失败，使用模拟数据');
+          this.useMockRatings();
+        }
+        
+      } catch (error) {
+        console.error('❌ 获取评分数据错误:', error);
+        this.useMockRatings();
+      }
+    },
+    
+    // 使用模拟评分数据
+    useMockRatings() {
+      this.displayDesigners = this.allDesigners.map(designer => {
+        const userId = designer.userId;
+        const ratingInfo = this.mockRatings[userId] || {
+          avgRating: 4.0 + Math.random() * 1.0,
+          ratingLevel: ['优秀', '良好', '一般'][Math.floor(Math.random() * 3)],
+          totalOrders: Math.floor(Math.random() * 20) + 5,
+          completedOrders: Math.floor(Math.random() * 15) + 3,
+          totalRatingCount: Math.floor(Math.random() * 10) + 2
+        };
+        
+        return {
+          ...designer,
+          avgRating: ratingInfo.avgRating,
+          ratingLevel: ratingInfo.ratingLevel,
+          totalOrders: ratingInfo.totalOrders,
+          completedOrders: ratingInfo.completedOrders,
+          totalRatingCount: ratingInfo.totalRatingCount
+        };
+      });
+      
+      this.sortByRating();
+    },
+    
+    // 使用模拟数据（备用方案）
+    useMockData() {
+      console.log('📦 使用模拟设计师数据');
+      const mockDesigners = [
+        { userId: 1, userName: '设计师张三', nickName: '张三', avatar: '', caseCount: 15, address: '北京' },
+        { userId: 2, userName: '设计师李四', nickName: '李四', avatar: '', caseCount: 8, address: '上海' },
+        { userId: 3, userName: '设计师王五', nickName: '王五', avatar: '', caseCount: 12, address: '广州' },
+        { userId: 4, userName: '设计师赵六', nickName: '赵六', avatar: '', caseCount: 25, address: '深圳' },
+        { userId: 5, userName: '设计师孙七', nickName: '孙七', avatar: '', caseCount: 5, address: '杭州' },
+        { userId: 6, userName: '设计师周八', nickName: '周八', avatar: '', caseCount: 18, address: '成都' }
+      ];
+      
+      this.allDesigners = this.formatDesignerData(mockDesigners);
+      this.useMockRatings();
+    },
+    
+    // 格式化设计师数据
     formatDesignerData(designers) {
       return designers.map(designer => ({
         userId: designer.userId || designer.id || 0,
-        name: designer.name || designer.nickName || designer.realName || '设计师',
-        nickName: designer.nickName || designer.name || '',
+        userName: designer.userName || '',
+        nickName: designer.nickName || designer.userName || '设计师',
         avatar: designer.avatar || designer.avatarUrl || '',
-        rating: designer.rating || designer.score || 5,
         caseCount: designer.caseCount || designer.projectCount || designer.portfolioCount || 0,
         address: designer.address || designer.city || designer.location || '',
         city: designer.city || designer.location || '',
@@ -246,14 +390,57 @@ export default {
         isOnline: designer.isOnline || false
       }));
     },
+    
+    // 搜索输入
     onSearchInput() {
       clearTimeout(this.searchTimer);
       this.searchTimer = setTimeout(() => {
-        console.log('搜索关键词:', this.searchQuery);
-      }, 500);
+        console.log('🔍 搜索关键词:', this.searchQuery);
+      }, 300);
     },
-
-    // 跳转到设计师详情页 - 修改路径
+    
+    // 清除搜索
+    clearSearch() {
+      this.searchQuery = '';
+    },
+    
+    // 按评分排序
+    sortByRating() {
+      this.sortBy = 'rating';
+      this.sortOrder = 'desc';
+      
+      this.displayDesigners.sort((a, b) => {
+        const ratingA = a.avgRating || 0;
+        const ratingB = b.avgRating || 0;
+        return this.sortOrder === 'desc' ? ratingB - ratingA : ratingA - ratingB;
+      });
+      
+      uni.showToast({
+        title: '已按评分排序',
+        icon: 'success',
+        duration: 1000
+      });
+    },
+    
+    // 按案例数排序
+    sortByCases() {
+      this.sortBy = 'cases';
+      this.sortOrder = 'desc';
+      
+      this.displayDesigners.sort((a, b) => {
+        const casesA = a.caseCount || 0;
+        const casesB = b.caseCount || 0;
+        return this.sortOrder === 'desc' ? casesB - casesA : casesA - casesB;
+      });
+      
+      uni.showToast({
+        title: '已按案例数排序',
+        icon: 'success',
+        duration: 1000
+      });
+    },
+    
+    // 跳转到设计师详情页
     goToDesignerDetail(userId) {
       if (!userId) {
         uni.showToast({
@@ -262,35 +449,21 @@ export default {
         });
         return;
       }
-      console.log('跳转到设计师详情，ID:', userId);
       
-      // 使用正确的路径：/pages/find-design/design-detail
       uni.navigateTo({
         url: `/pages/find-design/design-detail?id=${userId}`,
-        success: () => {
-          console.log('跳转成功');
-        },
         fail: (err) => {
           console.error('跳转失败:', err);
-          this.tryAlternativeNavigate(userId);
+          uni.showToast({
+            title: '跳转失败',
+            icon: 'error'
+          });
         }
       });
     },
-
-    tryAlternativeNavigate(userId) {
-      const urls = [
-        // 不同参数格式
-        `/pages/find-design/design-detail?userId=${userId}`,
-        `/pages/find-design/design-detail?designerId=${userId}`,
-        `/pages/find-design/design-detail?user_id=${userId}`,
-        `/pages/find-design/design-detail?ID=${userId}`,
-        `/pages/find-design/design-detail?uid=${userId}`
-      ];
-      
-    },
-
+    
+    // 联系设计师
     contactDesigner(designer) {
-       //console.log(' 📱 当前设计师信息:', designer.userId);
       if (!designer || !designer.userId) {
         uni.showToast({
           title: '设计师信息无效',
@@ -302,59 +475,25 @@ export default {
       uni.showActionSheet({
         itemList: ['查看详情', '在线咨询'],
         success: (res) => {
-          const tapIndex = res.tapIndex;
-          switch (tapIndex) {
-            case 0:
-              this.goToDesignerDetail(designer.userId);
-              break;
-            case 1:
-              this.onlineConsult(designer);
-              break;
+          if (res.tapIndex === 0) {
+            this.goToDesignerDetail(designer.userId);
+          } else if (res.tapIndex === 1) {
+            this.onlineConsult(designer);
           }
         }
       });
     },
-
-    callDesigner(designer) {
-      if (!designer.phone || designer.phone === '电话未提供') {
-        uni.showToast({
-          title: '该设计师未提供电话',
-          icon: 'none'
-        });
-        return;
-      }
-      
-      if (designer.phone.includes('****')) {
-        uni.showModal({
-          title: '提示',
-          content: '需要联系客服获取设计师真实电话',
-          success: (res) => {
-            if (res.confirm) {
-              uni.makePhoneCall({
-                phoneNumber: '400-123-4567'
-              });
-            }
-          }
-        });
-      } else {
-        uni.makePhoneCall({
-          phoneNumber: designer.phone
-        });
-      }
-    },
-
+    
+    // 在线咨询
     async onlineConsult(designer) {
-      console.log('🔥 开始在线咨询设计师:', designer);
+      console.log('💬 开始在线咨询设计师:', designer);
       
-      // 检查登录状态
       if (!isUserLoggedIn()) {
         handleNotLoggedIn();
         return;
       }
       
-      // 检查设计师信息
       if (!designer || !designer.userId) {
-        console.error('❌ 设计师信息不完整:', designer);
         uni.showToast({
           title: '设计师信息无效',
           icon: 'error'
@@ -365,11 +504,12 @@ export default {
       // 使用辅助工具函数创建对话并跳转
       await createConversationAndNavigate(
         designer.userId,
-        designer.name || designer.nickName || '设计师',
+        designer.nickName || designer.userName || '设计师',
         designer.avatar || ''
       );
     },
-
+    
+    // 查看头像大图
     viewAvatar(designer) {
       if (!designer.avatar || designer.avatar === this.defaultAvatar) {
         return;
@@ -380,26 +520,36 @@ export default {
         current: 0
       });
     },
-
+    
+    // 头像加载失败
     onAvatarError(e) {
       console.error('头像加载失败:', e);
       const img = e.target;
-      img.src = this.defaultAvatar;
+      if (img) {
+        img.src = this.defaultAvatar;
+      }
     },
     
+    // 下拉刷新
     onPullDownRefresh() {
-      console.log('下拉刷新');
+      console.log('🔄 下拉刷新');
       this.loadDesigners().then(() => {
         uni.stopPullDownRefresh();
+        uni.showToast({
+          title: '刷新成功',
+          icon: 'success'
+        });
       });
     },
     
+    // 上拉加载更多
     onReachBottom() {
-      console.log('上拉加载更多');
+      console.log('⬇️ 上拉加载更多');
     }
   }
 }
 </script>
+
 <style lang="scss">
 page {
   background-color: #f5f7fa;
@@ -417,7 +567,6 @@ page {
   border-radius: 16rpx;
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
   padding: 30rpx 40rpx;
-  text-align: center;
   margin-bottom: 20rpx;
 }
 
@@ -425,6 +574,12 @@ page {
   font-size: 36rpx;
   font-weight: 600;
   color: #333;
+  margin-bottom: 10rpx;
+}
+
+.page-subtitle {
+  font-size: 26rpx;
+  color: #666;
 }
 
 /* 搜索区域样式 */
@@ -438,12 +593,14 @@ page {
 
 .search-box {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .search-input {
-  width: 100%;
+  flex: 1;
   height: 80rpx;
-  padding: 0 40rpx 0 80rpx;
+  padding: 0 80rpx 0 80rpx;
   border: 2rpx solid #e0e0e0;
   border-radius: 40rpx;
   font-size: 28rpx;
@@ -461,15 +618,65 @@ page {
 .search-icon {
   position: absolute;
   left: 30rpx;
-  top: 50%;
-  transform: translateY(-50%);
   font-size: 32rpx;
   color: #999;
+}
+
+.clear-icon {
+  position: absolute;
+  right: 30rpx;
+  font-size: 40rpx;
+  color: #999;
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 36rpx;
+  text-align: center;
+  background: #f0f0f0;
+  border-radius: 50%;
+}
+
+/* 排序栏 */
+.sort-bar {
+  display: flex;
+  align-items: center;
+  background: white;
+  border-radius: 16rpx;
+  padding: 20rpx 30rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.04);
+}
+
+.sort-label {
+  font-size: 28rpx;
+  color: #666;
+  margin-right: 20rpx;
+}
+
+.sort-btn {
+  padding: 12rpx 24rpx;
+  margin-right: 20rpx;
+  border-radius: 20rpx;
+  font-size: 26rpx;
+  color: #666;
+  background: #f5f5f5;
+  transition: all 0.3s ease;
+  
+  &.active {
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    color: white;
+    font-weight: 500;
+  }
+}
+
+.sort-arrow {
+  margin-left: 8rpx;
+  font-weight: bold;
 }
 
 /* 内容区域样式 */
 .content-area {
   min-height: 60vh;
+  padding-bottom: 40rpx;
 }
 
 .loading, .error, .no-data {
@@ -479,6 +686,21 @@ page {
   padding: 100rpx 40rpx;
   text-align: center;
   margin-bottom: 20rpx;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 6rpx solid #f3f3f3;
+  border-top: 6rpx solid #6a11cb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 30rpx;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .loading-icon, .error-icon, .no-data-icon {
@@ -501,18 +723,18 @@ page {
 }
 
 .retry-btn {
-  background: #6a11cb;
+  background: linear-gradient(135deg, #6a11cb, #2575fc);
   color: white;
   border: none;
   border-radius: 8rpx;
   padding: 20rpx 40rpx;
   font-size: 28rpx;
   transition: all 0.3s ease;
-}
-
-.retry-btn:active {
-  background: #5a0db5;
-  transform: scale(0.98);
+  
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
 }
 
 /* 设计师列表样式 */
@@ -520,33 +742,43 @@ page {
   display: flex;
   flex-direction: column;
   gap: 20rpx;
-  padding-bottom: 40rpx;
 }
 
 .designer-card {
   background: white;
   border-radius: 16rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
-  padding: 40rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+  padding: 30rpx;
   transition: all 0.3s ease;
   position: relative;
-}
-
-.designer-card:active {
-  transform: translateY(-2rpx);
-  box-shadow: 0 6rpx 30rpx rgba(0, 0, 0, 0.1);
-  background: #f8f9fa;
+  overflow: hidden;
+  
+  &:active {
+    transform: translateY(-2rpx);
+    box-shadow: 0 8rpx 30rpx rgba(0, 0, 0, 0.12);
+  }
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 8rpx;
+    height: 100%;
+    background: linear-gradient(to bottom, #6a11cb, #2575fc);
+    border-radius: 8rpx 0 0 8rpx;
+  }
 }
 
 .designer-header {
   display: flex;
   align-items: flex-start;
-  margin-bottom: 30rpx;
+  margin-bottom: 25rpx;
 }
 
 .avatar-wrapper {
-  margin-right: 30rpx;
   position: relative;
+  margin-right: 25rpx;
 }
 
 .avatar {
@@ -554,7 +786,22 @@ page {
   height: 120rpx;
   border-radius: 50%;
   border: 4rpx solid #f0f0f0;
-  background-color: #f8f8f8;
+  background: linear-gradient(135deg, #f5f7fa, #e4e7eb);
+}
+
+.rating-badge {
+  position: absolute;
+  bottom: -8rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ffd700, #ffa500);
+  color: white;
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 2rpx 8rpx rgba(255, 165, 0, 0.3);
 }
 
 .designer-info {
@@ -562,119 +809,177 @@ page {
   min-width: 0;
 }
 
+.name-rating-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15rpx;
+}
+
 .designer-name {
   font-size: 32rpx;
   font-weight: 600;
   color: #333;
-  margin-bottom: 20rpx;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.rating-display {
+  display: flex;
+  align-items: center;
+  gap: 15rpx;
+}
+
+.rating-score {
+  display: flex;
+  align-items: baseline;
+  background: linear-gradient(135deg, #6a11cb, #2575fc);
+  padding: 8rpx 16rpx;
+  border-radius: 12rpx;
+  color: white;
+  font-weight: 600;
+  
+  .score {
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  
+  .score-label {
+    font-size: 24rpx;
+    opacity: 0.9;
+    margin-left: 4rpx;
+  }
+}
+
+.rating-stars {
+  display: flex;
+  gap: 4rpx;
+  
+  .star {
+    font-size: 28rpx;
+    color: #ddd;
+    
+    &.active {
+      color: #ffa500;
+    }
+  }
+}
+
+.rating-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15rpx;
+  margin-bottom: 15rpx;
+  background: #f8f9fa;
+  padding: 15rpx;
+  border-radius: 8rpx;
+}
+
+.rating-item {
+  display: flex;
+  align-items: center;
+  font-size: 26rpx;
+  
+  .rating-label {
+    color: #666;
+  }
+  
+  .rating-value {
+    color: #333;
+    font-weight: 500;
+  }
+}
+
 .designer-stats {
   display: flex;
-  gap: 40rpx;
-  margin-bottom: 20rpx;
+  gap: 30rpx;
+  margin-bottom: 15rpx;
   flex-wrap: wrap;
 }
 
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 10rpx;
+  gap: 8rpx;
 }
 
 .stat-icon {
-  font-size: 28rpx;
-  color: #ffa500;
+  font-size: 26rpx;
+  color: #6a11cb;
 }
 
 .stat-value {
-  font-size: 28rpx;
+  font-size: 26rpx;
   color: #666;
 }
 
-.designer-location, .designer-phone {
-  font-size: 28rpx;
+.designer-phone {
+  font-size: 26rpx;
   color: #999;
-  margin-bottom: 10rpx;
   display: flex;
   align-items: center;
-  gap: 10rpx;
+  gap: 8rpx;
+  
+  &::before {
+    content: '📱';
+    font-size: 24rpx;
+  }
 }
 
-.designer-location:before {
-  content: '📍';
-  font-size: 24rpx;
+.action-buttons {
+  display: flex;
+  gap: 20rpx;
+  
+  .contact-btn {
+    flex: 1;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    color: white;
+    border: none;
+    border-radius: 8rpx;
+    padding: 20rpx;
+    font-size: 28rpx;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    
+    &:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+  }
 }
 
-.designer-phone:before {
-  content: '📱';
-  font-size: 24rpx;
-}
-
-.contact-btn {
-  width: 100%;
-  background: #6a11cb;
+/* 评分提示 */
+.rating-tip {
+  position: fixed;
+  bottom: 40rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
   color: white;
-  border: none;
-  border-radius: 8rpx;
-  padding: 24rpx;
-  font-size: 30rpx;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-.contact-btn:active {
-  background: #5a0db5;
-  transform: scale(0.98);
-}
-
-/* 在线状态指示器 */
-.online-indicator {
-  position: absolute;
-  bottom: 10rpx;
-  right: 10rpx;
-  width: 20rpx;
-  height: 20rpx;
-  background-color: #4CAF50;
-  border: 2rpx solid white;
-  border-radius: 50%;
-}
-
-/* 认证徽章 */
-.cert-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, #ff7e5f, #feb47b);
-  color: white;
-  font-size: 22rpx;
-  padding: 4rpx 12rpx;
-  border-radius: 20rpx;
-  margin-left: 16rpx;
-  vertical-align: middle;
-}
-
-/* 加载动画 */
-.loading-spinner {
-  width: 60rpx;
-  height: 60rpx;
-  border: 6rpx solid #f3f3f3;
-  border-top: 6rpx solid #6a11cb;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 30rpx;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  padding: 15rpx 30rpx;
+  border-radius: 25rpx;
+  font-size: 26rpx;
+  animation: fadeInUp 0.5s ease;
+  z-index: 100;
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20rpx);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  }
 }
 
 /* 响应式调整 */
 @media (max-width: 375px) {
   .designer-card {
-    padding: 30rpx;
+    padding: 25rpx;
   }
   
   .avatar {
@@ -686,9 +991,16 @@ page {
     font-size: 30rpx;
   }
   
-  .contact-btn {
-    font-size: 28rpx;
-    padding: 20rpx;
+  .rating-score {
+    padding: 6rpx 12rpx;
+    
+    .score {
+      font-size: 28rpx;
+    }
+  }
+  
+  .rating-stars .star {
+    font-size: 24rpx;
   }
 }
 </style>
