@@ -148,9 +148,6 @@
 								<view class="designer-name">{{ designerInfo.name }}</view>
 								<view class="designer-role">{{ designerInfo.role || '设计师' }}</view>
 							</view>
-							<view class="contact-btn" @click="contactDesigner">
-								联系设计师
-							</view>
 						</view>
 					</view>
 				</view>

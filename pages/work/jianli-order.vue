@@ -204,6 +204,8 @@
 	import { getUserProfile, getCurrentRole } from '@/api/users.js'
 	// 新增：导入施工阶段API
 	import { orderStageService } from '@/api/orderStage.js'
+	// 新增：导入对话辅助工具（与设计师页面相同）
+	import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 	
 	export default {
 		data() {
@@ -394,7 +396,7 @@
 				return message;
 			},
 
-			// 加载用户信息
+			// 加载用户信息 - 优化版，确保用户信息正确存储
 			async loadUserInfo() {
 				try {
 					console.log('👤 开始获取设计师信息...');
@@ -424,6 +426,9 @@
 							roleName: this.userInfo.roleName
 						});
 						
+						// 确保用户信息存储到缓存 - 关键步骤
+						this.ensureUserInfoInStorage(true);
+						
 						this.loadOrderList();
 					} else {
 						console.error('获取设计师信息失败:', userRes.msg);
@@ -432,6 +437,51 @@
 				} catch (error) {
 					console.error('❌ 获取设计师信息失败:', error);
 					this.handleApiError(error, '获取设计师信息失败');
+				}
+			},
+			
+			// 确保用户信息存储到缓存 - 修复版
+			ensureUserInfoInStorage(forceRefresh = false) {
+				try {
+					// 如果强制刷新或用户信息发生变化
+					if (forceRefresh || (this.userInfo && this.userInfo.userId)) {
+						// 存储完整用户信息
+						uni.setStorageSync('userInfo', this.userInfo);
+						
+						// 单独存储用户ID（确保是字符串）
+						if (this.userInfo.userId) {
+							const userIdStr = String(this.userInfo.userId);
+							uni.setStorageSync('userId', userIdStr);
+							console.log('✅ 存储用户ID到缓存:', userIdStr);
+						}
+						
+						// 存储到全局数据
+						if (getApp().globalData) {
+							getApp().globalData.userInfo = this.userInfo;
+						}
+						
+						console.log('✅ 用户信息已更新到缓存:', {
+							userId: this.userInfo.userId,
+							name: this.userInfo.name
+						});
+						
+						return true;
+					}
+					
+					// 检查缓存是否存在
+					const cachedUserInfo = uni.getStorageSync('userInfo');
+					const cachedUserId = uni.getStorageSync('userId');
+					
+					if (!cachedUserInfo || !cachedUserId) {
+						console.warn('⚠️ 缓存中用户信息不完整');
+						return false;
+					}
+					
+					return true;
+					
+				} catch (storageError) {
+					console.error('❌ 存储用户信息失败:', storageError);
+					return false;
 				}
 			},
 			
@@ -863,65 +913,58 @@
 				this.loadOrderList()
 			},
 			
-			// 联系订单相关方（设计师/监理师 -> 客户）
-			contactOrderParty(order) {
-				try {
-					// 当前用户ID（设计师/监理师）
-					const currentUserId = this.userInfo.userId;
-					
-					if (!currentUserId) {
-						uni.showToast({
-							title: '用户信息获取失败',
-							icon: 'none'
-						});
-						return;
-					}
-					
-					console.log('👤 当前用户信息（设计师/监理师）:', {
-						userId: currentUserId,
-						role: this.userInfo.role,
-						roleName: this.userInfo.roleName
-					});
-					
-					console.log('📋 订单信息:', {
-						orderId: order.orderId,
-						userId: order.userId, // 订单中的客户ID
-						type: order.type
-					});
-					
-					// 确定对方ID（客户ID）
-					const otherUserId = order.userId || '';
-					
-					if (!otherUserId) {
-						uni.showToast({
-							title: '客户信息不存在',
-							icon: 'none'
-						});
-						return;
-					}
-					
-					// conversationId始终是当前用户ID
-					const conversationId = currentUserId;
-					
-					console.log('💬 聊天跳转参数:', {
-						conversationId: conversationId,
-						otherUserId: otherUserId,
-						userRole: this.userInfo.role,
-						orderId: order.orderId
-					});
-					
-					// 跳转到聊天详情页面
-					uni.navigateTo({
-						url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}&orderId=${order.orderId}`
-					});
-					
-				} catch (error) {
-					console.error('❌ 跳转聊天页面失败:', error);
-					uni.showToast({
-						title: '跳转失败，请重试',
-						icon: 'none'
-					});
+			// 联系订单相关方（设计师/监理师 -> 客户）- 与设计师页面完全相同的逻辑
+			async contactOrderParty(order) {
+				console.log('🔥 开始联系客户，订单信息:', order);
+				
+				// 确保用户信息在缓存中
+				if (!this.ensureUserInfoInStorage()) {
+					console.warn('⚠️ 用户信息缓存不完整，重新获取...');
+					await this.loadUserInfo();
 				}
+				
+				// 检查登录状态（与设计师页面完全相同）
+				if (!isUserLoggedIn()) {
+					handleNotLoggedIn();
+					return;
+				}
+				
+				// 检查订单信息
+				if (!order || !order.userId) {
+					console.error('❌ 订单信息不完整:', order);
+					uni.showToast({
+						title: '订单信息无效',
+						icon: 'error'
+					});
+					return;
+				}
+				
+				// 获取客户信息
+				let customerInfo = order.publisherInfo;
+				if (!customerInfo || !customerInfo.name) {
+					try {
+						customerInfo = await this.getPublisherInfo(order.userId);
+						if (!customerInfo) {
+							customerInfo = {
+								name: '客户',
+								avatar: ''
+							};
+						}
+					} catch (error) {
+						console.error('❌ 获取客户信息失败:', error);
+						customerInfo = {
+							name: '客户',
+							avatar: ''
+						};
+					}
+				}
+				
+				// 使用与设计师页面完全相同的调用方式
+				await createConversationAndNavigate(
+					order.userId,
+					customerInfo.name || '客户',
+					customerInfo.avatar || ''
+				);
 			},
 			
 			// 取消订单

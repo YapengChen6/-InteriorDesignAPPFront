@@ -56,7 +56,7 @@
 					<view class="upload-tips">
 						<view class="tips-content">
 							<text class="tips-icon">💡</text>
-							<text class="tips-text">支持图片(JPG/PNG)、文档(PDF/DOC/DOCX)、压缩包等格式，文件不超过20MB，只能上传1个文件</text>
+							<text class="tips-text">支持图片(JPG/PNG)、文档(PDF)格式，文件不超过10MB，只能上传1个文件</text>
 						</view>
 					</view>
 					
@@ -68,7 +68,7 @@
 							</view>
 							<view class="upload-text">点击上传方案文件</view>
 							<view class="upload-desc">单个文件不超过20MB</view>
-							<view class="upload-count">支持图片、文档、压缩包格式</view>
+							<view class="upload-count">支持图片、文档格式</view>
 						</view>
 					</view>
 

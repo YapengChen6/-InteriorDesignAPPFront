@@ -136,7 +136,8 @@
 		<!-- 底部操作栏 - 简化版本 -->
 		<view class="bottom-actions">
 			<view class="action-buttons">
-				<button class="btn contact-btn" @click="contactPublisher">联系用户</button>
+				<!-- 修改：使用 onlineConsult 方法 -->
+				<button class="btn contact-btn" @click="onlineConsult">联系用户</button>
 				<button class="btn accept-btn" @click="acceptOrder">接取订单</button>
 			</view>
 		</view>
@@ -175,6 +176,7 @@
 <script>
 import { projectService } from '@/api/project.js'
 import { getUserProfile } from '@/api/users.js'
+import { isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 
 export default {
 	data() {
@@ -342,6 +344,82 @@ export default {
 	},
 	
 	methods: {
+		// 在线咨询方法（替换原有的contactPublisher）
+		async onlineConsult() {
+			console.log('🔥 开始在线咨询，项目ID:', this.projectId);
+			
+			// 检查登录状态
+			if (!isUserLoggedIn()) {
+				handleNotLoggedIn();
+				return;
+			}
+			
+			// 检查项目信息
+			if (!this.projectDetail || !this.projectDetail.userId) {
+				console.error('❌ 项目信息不完整:', this.projectDetail);
+				uni.showToast({
+					title: '项目信息无效',
+					icon: 'error'
+				});
+				return;
+			}
+			
+			// 获取对方用户ID（项目发布者）
+			const otherUserId = this.projectDetail.userId || 
+							  this.projectDetail.createBy || 
+							  (this.publisherInfo && this.publisherInfo.userId);
+			
+			if (!otherUserId) {
+				uni.showToast({
+					title: '用户信息不存在',
+					icon: 'none'
+				});
+				return;
+			}
+			
+			// 检查是否是联系自己
+			if (otherUserId === this.currentUserInfo.userId) {
+				uni.showToast({
+					title: '不能联系自己',
+					icon: 'none'
+				});
+				return;
+			}
+			
+			// 显示加载中
+			uni.showLoading({
+				title: '创建对话中...',
+				mask: true
+			});
+			
+			try {
+				// 获取发布者详细信息
+				const publisherName = this.publisherName;
+				const publisherAvatar = this.publisherAvatar;
+				
+				console.log('💬 准备创建对话:', {
+					currentUserId: this.currentUserInfo.userId,
+					otherUserId,
+					publisherName,
+					projectId: this.projectId
+				});
+				
+				// 跳转到聊天详情页面
+				uni.navigateTo({
+					url: `/pages/chat/chatDetail?conversationId=${this.currentUserInfo.userId}&otherUserId=${otherUserId}&projectId=${this.projectId}&otherUserName=${publisherName}&otherUserAvatar=${publisherAvatar}`
+				});
+				
+			} catch (error) {
+				console.error('❌ 创建对话失败:', error);
+				uni.showToast({
+					title: '创建对话失败，请重试',
+					icon: 'error'
+				});
+			} finally {
+				uni.hideLoading();
+			}
+		},
+		
 		// 加载当前用户信息
 		async loadCurrentUserInfo() {
 			try {
@@ -496,62 +574,6 @@ export default {
 				}
 			} catch (error) {
 				console.error('加载发布者统计信息失败:', error)
-			}
-		},
-		
-		// 联系发布者 - 跳转到聊天页面
-		contactPublisher() {
-			try {
-				// 获取当前用户ID
-				const currentUserId = this.currentUserInfo.userId
-				
-				if (!currentUserId) {
-					uni.showModal({
-						title: '提示',
-						content: '请先登录后再联系用户',
-						confirmText: '去登录',
-						success: (res) => {
-							if (res.confirm) {
-								uni.navigateTo({
-									url: '/pages/login/login'
-								})
-							}
-						}
-					})
-					return
-				}
-				
-				// 获取对方用户ID（项目发布者）
-				const otherUserId = this.projectDetail.userId || 
-								  this.projectDetail.createBy || 
-								  (this.publisherInfo && this.publisherInfo.userId)
-				
-				if (!otherUserId) {
-					uni.showToast({
-						title: '用户信息不存在',
-						icon: 'none'
-					})
-					return
-				}
-				
-				console.log('💬 聊天跳转参数:', {
-					conversationId: currentUserId,
-					otherUserId: otherUserId,
-					projectId: this.projectId,
-					currentUserRole: this.currentUserInfo.role
-				})
-				
-				// 跳转到聊天详情页面
-				uni.navigateTo({
-					url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${otherUserId}&projectId=${this.projectId}`
-				})
-				
-			} catch (error) {
-				console.error('❌ 跳转聊天页面失败:', error)
-				uni.showToast({
-					title: '跳转失败，请重试',
-					icon: 'none'
-				})
 			}
 		},
 		

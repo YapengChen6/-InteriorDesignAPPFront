@@ -123,8 +123,9 @@
 							<text class="designer-role">客户</text>
 							<text class="designer-phone">电话: {{ order.publisherInfo.phone }}</text>
 						</view>
-						<view class="contact-btn" @click.stop="contactOrderParty(order)">
-							联系
+						<!-- 替换为 onlineConsult 方法 -->
+						<view class="contact-btn" @click.stop="onlineConsult(order)">
+							在线咨询
 						</view>
 					</view>
 					
@@ -218,6 +219,7 @@
 	import { projectService } from '@/api/project.js'
 	import { getUserProfile, getCurrentRole } from '@/api/users.js'
 	import { getDesignSchemeList, saveNullScheme } from '@/api/designScheme.js'
+	import { isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 	
 	// 方案类型常量
 	const SCHEME_TYPE = {
@@ -1106,64 +1108,83 @@
 				this.loadOrderList()
 			},
 			
-			// 联系订单相关方（设计师 -> 客户）
-			contactOrderParty(order) {
+			// 在线咨询方法（替换原有的contactOrderParty）
+			async onlineConsult(order) {
+				console.log('🔥 开始在线咨询，订单:', order);
+				
+				// 检查登录状态
+				if (!isUserLoggedIn()) {
+					handleNotLoggedIn();
+					return;
+				}
+				
+				// 检查订单信息
+				if (!order || !order.userId) {
+					console.error('❌ 订单信息不完整:', order);
+					uni.showToast({
+						title: '订单信息无效',
+						icon: 'error'
+					});
+					return;
+				}
+				
+				// 检查是否是联系自己
+				if (order.userId === this.userInfo.userId) {
+					uni.showToast({
+						title: '不能联系自己',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				// 显示加载中
+				uni.showLoading({
+					title: '创建对话中...',
+					mask: true
+				});
+				
 				try {
-					// 当前用户ID（设计师）
-					const currentUserId = this.userInfo.userId;
-					
-					if (!currentUserId) {
-						uni.showToast({
-							title: '用户信息获取失败',
-							icon: 'none'
-						});
-						return;
-					}
-					
-					console.log('👤 当前用户信息（设计师）:', {
-						userId: currentUserId,
-						role: this.userInfo.role,
-						roleName: this.userInfo.roleName
+					// 这里需要根据你的conversationHelper.js中的函数来调整
+					// 假设你有一个类似的函数来创建对话
+					await this.createOrderConversation(
+						order.userId,
+						order.publisherInfo.name || '客户',
+						order.publisherInfo.avatar || '',
+						order.orderId
+					);
+				} catch (error) {
+					console.error('❌ 创建对话失败:', error);
+					uni.showToast({
+						title: '创建对话失败，请重试',
+						icon: 'error'
+					});
+				} finally {
+					uni.hideLoading();
+				}
+			},
+			
+			// 创建订单对话的方法
+			async createOrderConversation(otherUserId, otherUserName, otherUserAvatar, orderId) {
+				try {
+					console.log('💬 创建订单对话:', {
+						currentUserId: this.userInfo.userId,
+						otherUserId,
+						otherUserName,
+						orderId
 					});
 					
-					console.log('📋 订单信息:', {
-						orderId: order.orderId,
-						userId: order.userId, // 订单中的客户ID
-						type: order.type
-					});
+					// 这里应该调用你的对话创建API
+					// 假设你有一个创建对话的函数
+					// const result = await createConversation(this.userInfo.userId, otherUserId, orderId);
 					
-					// 确定对方ID（客户ID）
-					const otherUserId = order.userId || '';
-					
-					if (!otherUserId) {
-						uni.showToast({
-							title: '客户信息不存在',
-							icon: 'none'
-						});
-						return;
-					}
-					
-					// conversationId始终是当前用户ID
-					const conversationId = currentUserId;
-					
-					console.log('💬 聊天跳转参数:', {
-						conversationId: conversationId,
-						otherUserId: otherUserId,
-						userRole: this.userInfo.role,
-						orderId: order.orderId
-					});
-					
-					// 跳转到聊天详情页面
+					// 跳转到聊天页面
 					uni.navigateTo({
-						url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}&orderId=${order.orderId}`
+						url: `/pages/chat/chatDetail?conversationId=${this.userInfo.userId}&otherUserId=${otherUserId}&orderId=${orderId}`
 					});
 					
 				} catch (error) {
-					console.error('❌ 跳转聊天页面失败:', error);
-					uni.showToast({
-						title: '跳转失败，请重试',
-						icon: 'none'
-					});
+					console.error('❌ 创建订单对话失败:', error);
+					throw error;
 				}
 			},
 			
@@ -1217,51 +1238,49 @@
 	.back-btn {
 		display: flex;
 		align-items: center;
-		padding: 10rpx 20rpx;
+		padding: 12rpx 24rpx;
 		margin-right: 20rpx;
-		background-color: #f5f5f5;
-		border-radius: 20rpx;
+		background-color: #f8f9fa;
+		border-radius: 24rpx;
+		border: 1rpx solid #e9ecef;
+		transition: all 0.3s ease;
+	}
+	
+	.back-btn:active {
+		background-color: #e9ecef;
+		transform: scale(0.98);
 	}
 	
 	.back-icon {
 		font-size: 32rpx;
 		margin-right: 10rpx;
+		color: #6c757d;
 	}
 	
 	.back-text {
 		font-size: 28rpx;
-		color: #333;
+		color: #495057;
+		font-weight: 500;
 	}
 	
 	.header-section {
 		display: flex;
-		justify-content: flex-start;
+		justify-content: space-between;
 		align-items: center;
-		padding: 30rpx;
-		background: white;
-		border-bottom: 1rpx solid #eee;
+		padding: 30rpx 32rpx;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.1);
+		position: relative;
+		z-index: 10;
 	}
 	
 	.header-title {
 		font-size: 36rpx;
-		font-weight: bold;
-		color: #333;
+		font-weight: 700;
+		color: white;
+		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 		flex: 1;
 		text-align: center;
-		margin-right: 120rpx; /* 为右侧按钮留出空间 */
-	}
-	
-	/* 其他样式保持不变 */
-	.status-waiting-payment {
-		color: #ff6b35;
-		background-color: #fff0e6;
-		border: 1px solid #ff6b35;
-	}
-	
-	.container {
-		padding: 0;
-		background-color: #f5f5f5;
-		min-height: 100vh;
 	}
 	
 	.header-actions {
@@ -1270,16 +1289,35 @@
 	}
 	
 	.action-item {
-		padding: 10rpx;
+		width: 60rpx;
+		height: 60rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 50%;
+		margin-left: 20rpx;
+		transition: all 0.3s ease;
+	}
+	
+	.action-item:active {
+		background: rgba(255, 255, 255, 0.3);
+		transform: scale(0.95);
 	}
 	
 	.action-icon {
-		font-size: 40rpx;
+		font-size: 34rpx;
+		color: white;
 	}
 	
+	/* 订单状态筛选 */
 	.status-filter {
 		background: white;
-		padding: 20rpx 0;
+		padding: 24rpx 0;
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
 	}
 	
 	.filter-scroll {
@@ -1288,103 +1326,138 @@
 	
 	.filter-list {
 		display: inline-flex;
-		padding: 0 30rpx;
+		padding: 0 32rpx;
 	}
 	
 	.filter-item {
 		position: relative;
-		padding: 20rpx 30rpx;
-		margin-right: 40rpx;
+		padding: 16rpx 32rpx;
+		margin-right: 20rpx;
 		font-size: 28rpx;
-		color: #666;
+		color: #6c757d;
+		background: #f8f9fa;
+		border-radius: 25rpx;
+		transition: all 0.3s ease;
+		border: 1rpx solid transparent;
+	}
+	
+	.filter-item:last-child {
+		margin-right: 0;
 	}
 	
 	.filter-item.active {
-		color: #007AFF;
-		font-weight: bold;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		color: white;
+		font-weight: 600;
+		border-color: #5a67d8;
+		box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.2);
 	}
 	
-	.filter-item.active::after {
-		content: '';
-		position: absolute;
-		bottom: 10rpx;
-		left: 50%;
-		transform: translateX(-50%);
-		width: 40rpx;
-		height: 4rpx;
-		background: #007AFF;
-		border-radius: 2rpx;
+	.filter-item:not(.active):active {
+		background: #e9ecef;
+		transform: translateY(-2rpx);
 	}
 	
 	.count-badge {
 		position: absolute;
-		top: 10rpx;
-		right: 10rpx;
-		background: #FF3B30;
+		top: -8rpx;
+		right: -8rpx;
+		background: #ff6b6b;
 		color: white;
 		font-size: 20rpx;
-		padding: 4rpx 8rpx;
+		padding: 4rpx 10rpx;
 		border-radius: 20rpx;
-		min-width: 24rpx;
+		min-width: 28rpx;
 		text-align: center;
+		font-weight: 600;
+		box-shadow: 0 2rpx 6rpx rgba(255, 107, 107, 0.3);
+	}
+	
+	/* 订单列表容器 */
+	.container {
+		padding: 0;
+		background-color: #f5f7fa;
+		min-height: 100vh;
 	}
 	
 	.order-list {
-		height: calc(100vh - 200rpx);
-		padding: 20rpx;
+		height: calc(100vh - 240rpx);
+		padding: 24rpx;
 	}
 	
 	.refresh-container {
 		text-align: center;
-		padding: 20rpx;
+		padding: 30rpx;
+		background: white;
+		border-radius: 16rpx;
+		margin-bottom: 20rpx;
 	}
 	
 	.refresh-text {
 		font-size: 28rpx;
-		color: #999;
+		color: #6c757d;
+		font-weight: 500;
 	}
 	
+	/* 空状态和加载状态 */
 	.empty-state, .loading-state {
 		text-align: center;
-		padding: 100rpx 0;
+		padding: 120rpx 40rpx;
+		background: white;
+		border-radius: 20rpx;
+		margin-top: 40rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
 	}
 	
 	.empty-icon {
-		font-size: 120rpx;
+		font-size: 100rpx;
 		margin-bottom: 30rpx;
+		color: #adb5bd;
+		opacity: 0.7;
 	}
 	
 	.empty-text {
-		font-size: 32rpx;
-		color: #999;
+		font-size: 34rpx;
+		color: #495057;
 		margin-bottom: 20rpx;
+		font-weight: 600;
 	}
 	
 	.empty-desc {
 		font-size: 28rpx;
-		color: #ccc;
+		color: #adb5bd;
+		line-height: 1.5;
 	}
 	
 	.loading-text {
 		font-size: 28rpx;
-		color: #999;
+		color: #6c757d;
+		font-weight: 500;
 	}
 	
+	/* 订单项样式 */
 	.order-item {
 		background: white;
-		border-radius: 16rpx;
-		margin-bottom: 20rpx;
-		padding: 30rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05);
+		border-radius: 20rpx;
+		margin-bottom: 24rpx;
+		padding: 32rpx;
+		box-shadow: 0 6rpx 24rpx rgba(0, 0, 0, 0.06);
+		transition: all 0.3s ease;
+		border: 1rpx solid #e9ecef;
+	}
+	
+	.order-item:active {
+		transform: translateY(-2rpx);
+		box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
 	}
 	
 	.order-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 20rpx;
-		padding-bottom: 20rpx;
-		border-bottom: 1rpx solid #f0f0f0;
+		margin-bottom: 24rpx;
+		padding-bottom: 24rpx;
+		border-bottom: 1rpx solid #f1f3f5;
 	}
 	
 	.order-info {
@@ -1394,89 +1467,126 @@
 	.order-number {
 		display: block;
 		font-size: 26rpx;
-		color: #666;
-		margin-bottom: 10rpx;
+		color: #495057;
+		font-weight: 500;
+		margin-bottom: 8rpx;
 	}
 	
 	.order-time {
 		font-size: 24rpx;
-		color: #999;
+		color: #adb5bd;
 	}
 	
+	/* 订单状态样式 */
 	.order-status {
 		font-size: 26rpx;
-		font-weight: bold;
-		padding: 8rpx 16rpx;
+		font-weight: 600;
+		padding: 8rpx 20rpx;
 		border-radius: 20rpx;
+		text-align: center;
+		min-width: 120rpx;
 	}
 	
 	.status-pending {
-		background: #FFF6E6;
-		color: #FF9500;
+		background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+		color: #ff8f00;
+		border: 1rpx solid #ffd54f;
 	}
 	
 	.status-progress {
-		background: #E6F7FF;
-		color: #007AFF;
+		background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+		color: #1976d2;
+		border: 1rpx solid #64b5f6;
+	}
+	
+	.status-waiting-payment {
+		background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+		color: #d32f2f;
+		border: 1rpx solid #ef9a9a;
 	}
 	
 	.status-completed {
-		background: #E6FFED;
-		color: #52C41A;
+		background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+		color: #388e3c;
+		border: 1rpx solid #81c784;
 	}
 	
 	.status-canceled {
-		background: #FFF2F0;
-		color: #FF4D4F;
+		background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+		color: #757575;
+		border: 1rpx solid #bdbdbd;
 	}
 	
+	/* 订单内容 */
 	.order-content {
-		margin-bottom: 20rpx;
+		margin-bottom: 24rpx;
 	}
 	
 	.project-title {
 		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 10rpx;
+		font-weight: 700;
+		color: #212529;
+		margin-bottom: 12rpx;
+		line-height: 1.4;
 	}
 	
 	.project-desc {
 		font-size: 28rpx;
-		color: #666;
-		margin-bottom: 15rpx;
-		line-height: 1.4;
+		color: #495057;
+		margin-bottom: 20rpx;
+		line-height: 1.5;
 	}
 	
 	.project-tags {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10rpx;
+		gap: 12rpx;
 	}
 	
 	.tag {
 		font-size: 24rpx;
-		color: #999;
-		background: #f5f5f5;
-		padding: 6rpx 12rpx;
-		border-radius: 12rpx;
+		color: #6c757d;
+		background: #f8f9fa;
+		padding: 8rpx 16rpx;
+		border-radius: 16rpx;
+		border: 1rpx solid #e9ecef;
+		font-weight: 500;
 	}
 	
+	.tag:nth-child(odd) {
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+	}
+	
+	.tag:nth-child(even) {
+		background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+		color: #1976d2;
+		border-color: #bbdefb;
+	}
+	
+	/* 设计师（客户）信息 */
 	.designer-info {
 		display: flex;
 		align-items: center;
-		margin-top: 20rpx;
-		padding: 20rpx;
-		background: #f9f9f9;
-		border-radius: 12rpx;
+		margin-top: 28rpx;
+		padding: 24rpx;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		border-radius: 16rpx;
+		border: 1rpx solid #dee2e6;
+		transition: all 0.3s ease;
+	}
+	
+	.designer-info:active {
+		background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
 	}
 	
 	.designer-avatar {
-		width: 80rpx;
-		height: 80rpx;
+		width: 88rpx;
+		height: 88rpx;
 		border-radius: 50%;
 		overflow: hidden;
-		margin-right: 20rpx;
+		margin-right: 24rpx;
+		border: 3rpx solid white;
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
 	}
 	
 	.designer-avatar image {
@@ -1490,101 +1600,163 @@
 	
 	.designer-name {
 		display: block;
-		font-size: 28rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 5rpx;
+		font-size: 30rpx;
+		font-weight: 600;
+		color: #212529;
+		margin-bottom: 6rpx;
 	}
 	
 	.designer-role {
+		display: inline-block;
 		font-size: 24rpx;
-		color: #007AFF;
-		margin-bottom: 5rpx;
+		color: #1976d2;
+		background: rgba(25, 118, 210, 0.1);
+		padding: 4rpx 12rpx;
+		border-radius: 12rpx;
+		margin-bottom: 8rpx;
+		font-weight: 500;
 	}
 	
 	.designer-phone {
+		display: block;
 		font-size: 24rpx;
-		color: #666;
+		color: #6c757d;
 	}
 	
+	/* 联系按钮样式 */
 	.contact-btn {
 		font-size: 26rpx;
-		color: #007AFF;
-		padding: 10rpx 20rpx;
-		border: 1rpx solid #007AFF;
+		color: white;
+		padding: 14rpx 28rpx;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		border-radius: 20rpx;
+		font-weight: 600;
+		border: none;
+		box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.2);
+		transition: all 0.3s ease;
+		white-space: nowrap;
+	}
+	
+	.contact-btn:active {
+		transform: scale(0.98);
+		box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.3);
 	}
 	
 	.no-designer {
 		text-align: center;
-		padding: 20rpx;
-		background: #f9f9f9;
-		border-radius: 12rpx;
-		margin-top: 20rpx;
+		padding: 30rpx;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		border-radius: 16rpx;
+		margin-top: 28rpx;
+		border: 1rpx dashed #adb5bd;
 	}
 	
 	.no-designer-text {
 		font-size: 26rpx;
-		color: #999;
+		color: #adb5bd;
+		font-weight: 500;
 	}
 	
+	/* 订单底部 */
 	.order-footer {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding-top: 20rpx;
-		border-top: 1rpx solid #f0f0f0;
+		padding-top: 24rpx;
+		border-top: 1rpx solid #f1f3f5;
 	}
 	
 	.order-amount {
-		font-size: 28rpx;
+		font-size: 30rpx;
 	}
 	
 	.amount-label {
-		color: #666;
+		color: #495057;
+		font-weight: 500;
 	}
 	
 	.amount-value {
-		color: #FF6B35;
-		font-weight: bold;
+		color: #ff6b35;
+		font-weight: 700;
+		text-shadow: 0 2rpx 4rpx rgba(255, 107, 53, 0.1);
 	}
 	
 	.order-actions {
 		display: flex;
-		gap: 15rpx;
+		gap: 16rpx;
 	}
 	
 	.btn {
-		padding: 12rpx 24rpx;
+		padding: 14rpx 28rpx;
 		font-size: 26rpx;
 		border-radius: 20rpx;
 		border: none;
+		font-weight: 600;
+		transition: all 0.3s ease;
+	}
+	
+	.btn:active {
+		transform: scale(0.98);
 	}
 	
 	.btn.primary {
-		background: #007AFF;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		color: white;
+		box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.2);
+	}
+	
+	.btn.primary:active {
+		box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.3);
 	}
 	
 	.btn.secondary {
-		background: #f5f5f5;
-		color: #666;
-		border: 1rpx solid #ddd;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		color: #495057;
+		border: 1rpx solid #dee2e6;
 	}
 	
-	.status-text {
-		font-size: 26rpx;
-		color: #666;
-		padding: 12rpx 0;
+	.btn.secondary:active {
+		background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
 	}
 	
+	/* 加载更多 */
 	.load-more {
 		text-align: center;
-		padding: 30rpx;
+		padding: 40rpx 20rpx;
 	}
 	
 	.load-more-text {
 		font-size: 26rpx;
-		color: #999;
+		color: #adb5bd;
+		font-weight: 500;
+	}
+	
+	/* 响应式调整 */
+	@media (max-width: 375px) {
+		.header-title {
+			font-size: 32rpx;
+		}
+		
+		.order-item {
+			padding: 24rpx;
+		}
+		
+		.project-title {
+			font-size: 30rpx;
+		}
+		
+		.designer-info {
+			padding: 20rpx;
+		}
+		
+		.designer-avatar {
+			width: 80rpx;
+			height: 80rpx;
+		}
+		
+		.btn {
+			padding: 12rpx 24rpx;
+			font-size: 24rpx;
+		}
 	}
 </style>
