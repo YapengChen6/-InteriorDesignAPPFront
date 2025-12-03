@@ -30,21 +30,41 @@
         <view class="supervisor-info">
           <view class="supervisor-name">{{ supervisor.name || '匿名监工' }}</view>
           <view class="supervisor-rating">
-            <view class="stars">★★★★★</view>
-            <view class="rating-text">{{ supervisor.rating || 5.0 }}</view>
+            <!-- 星级显示 -->
+            <view class="stars">
+              <view 
+                class="star-filled" 
+                :style="{ width: getStarWidth(supervisor.rating) }"
+              >
+                ★★★★★
+              </view>
+              <view class="star-empty">★★★★★</view>
+            </view>
+            <view class="rating-info">
+              <view class="rating-score">{{ formatRating(supervisor.rating) }}</view>
+              <view class="rating-details">
+                <text class="rating-level">{{ supervisor.ratingLevel }}</text>
+                <text class="rating-count" v-if="supervisor.ratingCount > 0">
+                  ({{ supervisor.ratingCount }}条评价)
+                </text>
+                <text class="rating-count" v-else>
+                  (暂无评价)
+                </text>
+              </view>
+            </view>
           </view>
           <view class="supervisor-details">
             <view class="detail-item">
               <view class="detail-icon">📁</view>
-              <view>{{ supervisor.caseCount || 0 }}个案例</view>
+              <view>案例: {{ supervisor.caseCount || 0 }}个</view>
+            </view>
+            <view class="detail-item">
+              <view class="detail-icon">✅</view>
+              <view>完成: {{ supervisor.completedOrders || 0 }}单</view>
             </view>
             <view class="detail-item">
               <view class="detail-icon">📍</view>
-              <view>{{ supervisor.address || supervisor.city||'未知地区' }}</view>
-            </view>
-            <view class="detail-item">
-              <view class="detail-icon">📞</view>
-              <view>{{ formatPhone(supervisor.phone) }}</view>
+              <view>{{ supervisor.address || supervisor.city || '未知地区' }}</view>
             </view>
           </view>
         </view>
@@ -74,6 +94,8 @@
 import { getSupervisorList, contactSupervisor } from '@/api/supervisorpublic'
 import { getUserProfile } from "@/api/users.js"
 import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
+import { getUserRatingDetail } from '@/api/rating' // 修改导入
+
 export default {
   name: 'SupervisorList',
   data() {
@@ -82,10 +104,10 @@ export default {
       supervisors: [],
       loading: false,
       searchTimer: null,
-	  searchTimer: null,
-	  defaultAvatar: '/static/default-avatar.png',
-	  currentUserInfo: null, // 添加当前用户信息
-	  isLoadingUser: false // 添加用户信息加载状态
+      defaultAvatar: '/static/default-avatar.png',
+      currentUserInfo: null,
+      isLoadingUser: false,
+      isFetchingRatings: false // 新增：防止重复请求评分
     }
   },
   
@@ -102,39 +124,30 @@ export default {
   },
   
   methods: {
-    // 新增：获取当前用户信息的方法
+    // 获取当前用户信息
     async getCurrentUserInfo() {
-      // 防止重复请求
       if (this.isLoadingUser) return;
       
       this.isLoadingUser = true;
       try {
-        // 先尝试从缓存获取
         const cachedUserInfo = uni.getStorageSync('userInfo');
         if (cachedUserInfo && cachedUserInfo.userId) {
           this.currentUserInfo = cachedUserInfo;
-          console.log('✅ 从缓存获取用户信息:', this.currentUserInfo);
           this.isLoadingUser = false;
           return;
         }
         
-        // 缓存中没有，从API获取
         const response = await getUserProfile();
-        console.log('📡 用户信息API响应:', response);
         
         if (response.code === 200 && response.data) {
           this.currentUserInfo = response.data;
-          console.log('✅ 当前用户信息:', this.currentUserInfo);
           
-          // 存储到全局数据，方便其他地方使用
           if (getApp().globalData) {
             getApp().globalData.userInfo = response.data;
           }
           
-          // 存储到本地缓存
           try {
             uni.setStorageSync('userInfo', response.data);
-            // 单独存储用户ID，方便其他页面使用
             if (response.data.userId) {
               uni.setStorageSync('userId', response.data.userId.toString());
             }
@@ -144,7 +157,6 @@ export default {
         } else {
           console.error('❌ 获取用户信息失败:', response.msg);
           this.currentUserInfo = null;
-          // 可能需要重新登录
           this.handleUserInfoError();
         }
       } catch (error) {
@@ -158,7 +170,6 @@ export default {
     
     // 处理用户信息获取失败
     handleUserInfoError() {
-      // 清除可能已损坏的缓存
       try {
         uni.removeStorageSync('userInfo');
         uni.removeStorageSync('userId');
@@ -166,7 +177,6 @@ export default {
         console.warn('清除缓存失败:', e);
       }
       
-      // 提示用户重新登录
       uni.showModal({
         title: '提示',
         content: '获取用户信息失败，请重新登录',
@@ -178,6 +188,7 @@ export default {
         }
       });
     },
+    
     // 加载监工列表
     async loadSupervisors() {
       this.loading = true
@@ -186,23 +197,11 @@ export default {
         const response = await getSupervisorList(this.searchKeyword)
         
         if (response.code === 200) {
-          // 使用真实的后端数据，确保监工数据有必要的字段
-          this.supervisors = (response.data || []).map(supervisor => ({
-            userId: supervisor.userId,
-            id: supervisor.userId, // 确保有id字段用于详情页
-            name: supervisor.name || '匿名监工',
-            rating: supervisor.rating || 5.0,
-            caseCount: supervisor.caseCount || 0,
-            city: supervisor.city || '未知地区',
-            phone: supervisor.phone,
-            // 添加详情页需要的其他字段，如果后端没有返回，使用默认值
-            experience: supervisor.experience || '5年',
-            location: supervisor.location || supervisor.city || '未知地区',
-            certificates: supervisor.certificates || ['监理资格证书'],
-            specialty: supervisor.specialty || '住宅工程监理',
-            description: supervisor.description || '资深监理工程师，拥有丰富的施工现场管理经验。',
-            projects: supervisor.projects || supervisor.caseCount || 0
-          }))
+          const supervisors = response.data || []
+          console.log('📋 获取监工列表:', supervisors)
+          
+          // 批量获取监工评分
+          await this.loadSupervisorRatings(supervisors)
         } else {
           console.error('获取监工列表失败:', response.msg)
           this.supervisors = []
@@ -223,6 +222,175 @@ export default {
       }
     },
     
+    // 批量获取监工评分 - 针对新的API数据结构
+    async loadSupervisorRatings(supervisors) {
+      if (!supervisors || supervisors.length === 0) {
+        this.supervisors = []
+        return
+      }
+      
+      console.log('🔍 开始获取监工评分，共', supervisors.length, '个监工')
+      
+      // 防止重复请求
+      if (this.isFetchingRatings) {
+        console.log('⏳ 评分请求正在进行中，跳过')
+        this.mapSupervisorsWithDefaultRating(supervisors)
+        return
+      }
+      
+      this.isFetchingRatings = true
+      
+      try {
+        // 使用Promise.all并行获取评分，但限制并发数量
+        const batchSize = 3 // 每次并发请求3个
+        const allRatingResults = []
+        
+        for (let i = 0; i < supervisors.length; i += batchSize) {
+          const batch = supervisors.slice(i, i + batchSize)
+          console.log(`🔄 处理第${Math.floor(i/batchSize)+1}批监工:`, batch.map(s => s.userId))
+          
+          const batchPromises = batch.map(supervisor => 
+            this.getSupervisorRating(supervisor).catch(error => {
+              console.error(`❌ 监工 ${supervisor.userId} 评分获取失败:`, error)
+              return {
+                userId: supervisor.userId,
+                supervisor: supervisor,
+                success: false
+              }
+            })
+          )
+          
+          const batchResults = await Promise.all(batchPromises)
+          allRatingResults.push(...batchResults)
+          
+          // 短暂延迟，避免请求过于频繁
+          if (i + batchSize < supervisors.length) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
+        }
+        
+        console.log('✅ 所有评分结果:', allRatingResults)
+        
+        // 处理评分结果，更新监工列表
+        this.supervisors = allRatingResults.map(result => {
+          const supervisor = result.supervisor
+          
+          if (result.success) {
+            // 成功获取评分
+            return {
+              userId: supervisor.userId,
+              id: supervisor.userId,
+              name: supervisor.name || result.nickName || '匿名监工',
+              rating: result.rating || 5.0,
+              ratingCount: result.ratingCount || 0,
+              ratingLevel: result.ratingLevel || '良好',
+              completedOrders: result.completedOrders || 0,
+              totalOrders: result.totalOrders || 0,
+              caseCount: supervisor.caseCount || result.totalOrders || 0,
+              city: supervisor.city || '未知地区',
+              phone: supervisor.phone,
+              experience: supervisor.experience || '5年',
+              location: supervisor.location || supervisor.city || '未知地区',
+              certificates: supervisor.certificates || ['监理资格证书'],
+              specialty: supervisor.specialty || '住宅工程监理',
+              description: supervisor.description || '资深监理工程师，拥有丰富的施工现场管理经验。',
+              projects: supervisor.projects || supervisor.caseCount || 0
+            }
+          } else {
+            // 获取评分失败，使用默认值
+            return {
+              userId: supervisor.userId,
+              id: supervisor.userId,
+              name: supervisor.name || '匿名监工',
+              rating: supervisor.rating || 5.0,
+              ratingCount: 0,
+              ratingLevel: '良好',
+              completedOrders: 0,
+              totalOrders: 0,
+              caseCount: supervisor.caseCount || 0,
+              city: supervisor.city || '未知地区',
+              phone: supervisor.phone,
+              experience: supervisor.experience || '5年',
+              location: supervisor.location || supervisor.city || '未知地区',
+              certificates: supervisor.certificates || ['监理资格证书'],
+              specialty: supervisor.specialty || '住宅工程监理',
+              description: supervisor.description || '资深监理工程师，拥有丰富的施工现场管理经验。',
+              projects: supervisor.projects || supervisor.caseCount || 0
+            }
+          }
+        })
+        
+        console.log('✅ 最终监工列表:', this.supervisors)
+        
+      } catch (error) {
+        console.error('❌ 批量获取监工评分失败:', error)
+        // 发生异常时使用默认评分
+        this.mapSupervisorsWithDefaultRating(supervisors)
+      } finally {
+        this.isFetchingRatings = false
+      }
+    },
+    
+    // 获取单个监工的评分
+    async getSupervisorRating(supervisor) {
+      console.log(`📡 获取监工 ${supervisor.userId} (${supervisor.name}) 的评分...`)
+      
+      try {
+        // 调用getUserRatingDetail接口
+        const ratingResponse = await getUserRatingDetail({
+          userId: supervisor.userId,
+          onlyCompleted: true // 只计算已完成订单
+        })
+        
+        console.log(`📊 监工 ${supervisor.userId} 评分响应:`, ratingResponse)
+        
+        if (ratingResponse.code === 200 && ratingResponse.data) {
+          const ratingData = ratingResponse.data
+          
+          return {
+            userId: supervisor.userId,
+            supervisor: supervisor,
+            success: true,
+            rating: ratingData.avgRating || 5.0,
+            ratingCount: ratingData.totalRatingCount || ratingData.reviewedOrders || 0,
+            totalOrders: ratingData.totalOrders || 0,
+            completedOrders: ratingData.completedOrders || 0,
+            ratingLevel: ratingData.ratingLevel || '良好',
+            nickName: ratingData.nickName
+          }
+        } else {
+          console.warn(`⚠️ 监工 ${supervisor.userId} 评分数据格式异常:`, ratingResponse)
+          throw new Error(ratingResponse.msg || '评分数据格式异常')
+        }
+      } catch (error) {
+        console.error(`❌ 获取监工 ${supervisor.userId} 评分失败:`, error)
+        throw error
+      }
+    },
+    
+    // 使用默认评分映射监工
+    mapSupervisorsWithDefaultRating(supervisors) {
+      this.supervisors = supervisors.map(supervisor => ({
+        userId: supervisor.userId,
+        id: supervisor.userId,
+        name: supervisor.name || '匿名监工',
+        rating: supervisor.rating || 5.0,
+        ratingCount: 0,
+        ratingLevel: '良好',
+        completedOrders: 0,
+        totalOrders: 0,
+        caseCount: supervisor.caseCount || 0,
+        city: supervisor.city || '未知地区',
+        phone: supervisor.phone,
+        experience: supervisor.experience || '5年',
+        location: supervisor.location || supervisor.city || '未知地区',
+        certificates: supervisor.certificates || ['监理资格证书'],
+        specialty: supervisor.specialty || '住宅工程监理',
+        description: supervisor.description || '资深监理工程师，拥有丰富的施工现场管理经验。',
+        projects: supervisor.projects || supervisor.caseCount || 0
+      }))
+    },
+    
     // 处理搜索
     handleSearch() {
       if (this.searchTimer) {
@@ -236,7 +404,7 @@ export default {
     
     // 跳转到监工详情页
     goToSupervisorDetail(supervisor) {
-	  console.log('跳转到监工详情，监工ID:', supervisor.userId, '监工数据:', supervisor)
+      console.log('跳转到监工详情，监工ID:', supervisor.userId, '监工数据:', supervisor)
       uni.navigateTo({
         url: `/pages/find-supervisor/supervisor-detail?supervisorId=${supervisor.userId || supervisor.id}`
       })
@@ -244,7 +412,6 @@ export default {
     
     // 联系监工
     async contactSupervisor(supervisorId) {
-      // 找到对应的监理信息
       const supervisor = this.supervisors.find(s => s.userId === supervisorId);
       
       if (!supervisor) {
@@ -274,13 +441,11 @@ export default {
     async onlineConsult(supervisor) {
       console.log('🔥 开始在线咨询监理:', supervisor);
       
-      // 检查登录状态
       if (!isUserLoggedIn()) {
         handleNotLoggedIn();
         return;
       }
       
-      // 检查监理信息
       if (!supervisor || !supervisor.userId) {
         console.error('❌ 监理信息不完整:', supervisor);
         uni.showToast({
@@ -290,13 +455,13 @@ export default {
         return;
       }
       
-      // 使用辅助工具函数创建对话并跳转
       await createConversationAndNavigate(
         supervisor.userId,
         supervisor.name || '监理',
         supervisor.avatar || ''
       );
     },
+    
     // 格式化手机号
     formatPhone(phone) {
       if (!phone) return '电话未提供'
@@ -306,6 +471,20 @@ export default {
       }
       
       return phone
+    },
+    
+    // 格式化评分显示
+    formatRating(rating) {
+      if (!rating && rating !== 0) return '5.0'
+      return typeof rating === 'number' ? rating.toFixed(1) : rating
+    },
+    
+    // 计算星级显示宽度
+    getStarWidth(rating) {
+      const ratingValue = parseFloat(rating) || 5.0
+      // 5星制，计算百分比
+      const percentage = (ratingValue / 5) * 100
+      return `${percentage}%`
     }
   }
 }
@@ -404,27 +583,71 @@ export default {
   color: #333;
 }
 
+/* 评分样式 */
 .supervisor-rating {
   display: flex;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
+  gap: 20rpx;
 }
 
 .stars {
-  color: #ffc107;
-  margin-right: 16rpx;
-  font-size: 28rpx;
+  position: relative;
+  color: #e0e0e0;
+  font-size: 30rpx;
+  line-height: 1;
+  width: 150rpx;
 }
 
-.rating-text {
-  color: #666;
-  font-size: 28rpx;
+.star-filled {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: #ffc107;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.star-empty {
+  color: #e0e0e0;
+}
+
+.rating-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.rating-score {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #ff8c00;
+  line-height: 1.2;
+}
+
+.rating-details {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 4rpx;
+}
+
+.rating-level {
+  font-size: 24rpx;
+  color: #52c41a;
+  background: rgba(82, 196, 26, 0.1);
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+}
+
+.rating-count {
+  font-size: 24rpx;
+  color: #999;
 }
 
 .supervisor-details {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
 .detail-item {
@@ -432,11 +655,11 @@ export default {
   align-items: center;
   font-size: 26rpx;
   color: #666;
+  gap: 8rpx;
 }
 
 .detail-icon {
-  margin-right: 12rpx;
-  font-size: 24rpx;
+  font-size: 26rpx;
 }
 
 .card-actions {
@@ -518,6 +741,12 @@ export default {
     flex-direction: column;
     align-items: flex-start;
     gap: 24rpx;
+  }
+  
+  .supervisor-rating {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12rpx;
   }
   
   .card-actions {
