@@ -872,7 +872,8 @@ export default {
         console.log('🔍 开始上传文件:', file.name)
         const uploadRes = await uploadFile(file.path || file.tempFilePath, {
           conversationId: this.conversationId,
-          description: `聊天文件-${file.name}`
+          description: `聊天文件-${file.name}`,
+          fileName: file.name  // 传递原始文件名，确保后端能获取正确的扩展名
         })
         console.log('🔍 上传响应:', uploadRes)
         

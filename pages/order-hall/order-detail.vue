@@ -191,6 +191,13 @@ export default {
 			// 发布者统计信息
 			publisherStats: null,
 			
+			// 当前用户信息
+			currentUserInfo: {
+				userId: null,
+				name: '',
+				avatar: ''
+			},
+			
 			// 加载状态
 			loading: false,
 			error: false,
@@ -315,9 +322,12 @@ export default {
 		}
 	},
 	
-	onLoad(options) {
+	async onLoad(options) {
 		if (options.id) {
 			this.projectId = options.id
+			// 先获取当前用户信息
+			await this.loadCurrentUserInfo()
+			// 再加载项目详情
 			this.loadProjectDetail()
 		} else {
 			this.error = true
@@ -332,6 +342,39 @@ export default {
 	},
 	
 	methods: {
+		// 加载当前用户信息
+		async loadCurrentUserInfo() {
+			try {
+				// 检查是否有token
+				const token = uni.getStorageSync('token')
+				if (!token) {
+					console.log('用户未登录')
+					return
+				}
+				
+				console.log('👤 开始获取当前用户信息...')
+				
+				// 调用API获取用户信息
+				const userRes = await getUserProfile()
+				
+				if (userRes.code === 200) {
+					this.currentUserInfo = {
+						userId: userRes.data.userId,
+						name: userRes.data.name || userRes.data.nickName || '用户',
+						avatar: userRes.data.avatar || '/static/images/default-avatar.png',
+						role: userRes.data.currentRoleType || 'user'
+					}
+					
+					console.log('✅ 当前用户信息加载完成:', this.currentUserInfo)
+				} else {
+					console.error('获取用户信息失败:', userRes.msg)
+				}
+				
+			} catch (error) {
+				console.error('❌ 获取当前用户信息失败:', error)
+			}
+		},
+		
 		// 加载项目详情
 		async loadProjectDetail() {
 			this.loading = true
@@ -456,16 +499,57 @@ export default {
 			}
 		},
 		
-		// 联系发布者
+		// 联系发布者 - 跳转到聊天页面
 		contactPublisher() {
-			const phone = this.getPublisherPhone()
-			if (phone) {
-				uni.makePhoneCall({
-					phoneNumber: phone
+			try {
+				// 获取当前用户ID
+				const currentUserId = this.currentUserInfo.userId
+				
+				if (!currentUserId) {
+					uni.showModal({
+						title: '提示',
+						content: '请先登录后再联系用户',
+						confirmText: '去登录',
+						success: (res) => {
+							if (res.confirm) {
+								uni.navigateTo({
+									url: '/pages/login/login'
+								})
+							}
+						}
+					})
+					return
+				}
+				
+				// 获取对方用户ID（项目发布者）
+				const otherUserId = this.projectDetail.userId || 
+								  this.projectDetail.createBy || 
+								  (this.publisherInfo && this.publisherInfo.userId)
+				
+				if (!otherUserId) {
+					uni.showToast({
+						title: '用户信息不存在',
+						icon: 'none'
+					})
+					return
+				}
+				
+				console.log('💬 聊天跳转参数:', {
+					conversationId: currentUserId,
+					otherUserId: otherUserId,
+					projectId: this.projectId,
+					currentUserRole: this.currentUserInfo.role
 				})
-			} else {
+				
+				// 跳转到聊天详情页面
+				uni.navigateTo({
+					url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${otherUserId}&projectId=${this.projectId}`
+				})
+				
+			} catch (error) {
+				console.error('❌ 跳转聊天页面失败:', error)
 				uni.showToast({
-					title: '暂无联系电话',
+					title: '跳转失败，请重试',
 					icon: 'none'
 				})
 			}

@@ -1,13 +1,13 @@
 <template>
-  <div class="supervisor-container">
+  <view class="supervisor-container">
     <!-- 顶部标题 -->
-    <div class="page-header">
+    <view class="page-header">
       <h1 class="page-title">寻找监工</h1>
-    </div>
+    </view>
     
     <!-- 搜索区域 -->
-    <div class="search-section">
-      <div class="search-box">
+    <view class="search-section">
+      <view class="search-box">
         <input 
           v-model="searchKeyword" 
           type="text" 
@@ -15,63 +15,64 @@
           placeholder="输入监工姓名搜索" 
           @input="handleSearch"
         />
-        <div class="search-icon">🔍</div>
-      </div>
-    </div>
+        <view class="search-icon">🔍</view>
+      </view>
+    </view>
     
     <!-- 监工列表 -->
-    <div class="supervisor-list">
-      <div 
+    <view class="supervisor-list">
+      <view 
         v-for="supervisor in supervisors" 
         :key="supervisor.userId" 
         class="supervisor-card"
+        @click="goToSupervisorDetail(supervisor)"
       >
-        <div class="supervisor-info">
-          <div class="supervisor-name">{{ supervisor.name || '匿名监工' }}</div>
-          <div class="supervisor-rating">
-            <span class="stars">★★★★★</span>
-            <span class="rating-text">5.0</span>
-          </div>
-          <div class="supervisor-details">
-            <div class="detail-item">
-              <span class="detail-icon">📁</span>
-              <span>{{ supervisor.caseCount || 0 }}个案例</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-icon">📍</span>
-              <span>{{ supervisor.city || '未知地区' }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-icon">📞</span>
-              <span>{{ formatPhone(supervisor.phone) }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="card-actions">
-          <button class="contact-btn" @click="contactSupervisor(supervisor.userId)">
+        <view class="supervisor-info">
+          <view class="supervisor-name">{{ supervisor.name || '匿名监工' }}</view>
+          <view class="supervisor-rating">
+            <view class="stars">★★★★★</view>
+            <view class="rating-text">{{ supervisor.rating || 5.0 }}</view>
+          </view>
+          <view class="supervisor-details">
+            <view class="detail-item">
+              <view class="detail-icon">📁</view>
+              <view>{{ supervisor.caseCount || 0 }}个案例</view>
+            </view>
+            <view class="detail-item">
+              <view class="detail-icon">📍</view>
+              <view>{{ supervisor.address || supervisor.city||'未知地区' }}</view>
+            </view>
+            <view class="detail-item">
+              <view class="detail-icon">📞</view>
+              <view>{{ formatPhone(supervisor.phone) }}</view>
+            </view>
+          </view>
+        </view>
+        <view class="card-actions">
+          <button class="contact-btn" @click.stop="contactSupervisor(supervisor.userId)">
             联系监工
           </button>
-        </div>
-      </div>
-    </div>
+        </view>
+      </view>
+    </view>
     
     <!-- 空状态 -->
-    <div v-if="!loading && supervisors.length === 0" class="empty-state">
-      <div class="empty-icon">👷</div>
-      <div class="empty-text">{{ emptyText }}</div>
-    </div>
+    <view v-if="!loading && supervisors.length === 0" class="empty-state">
+      <view class="empty-icon">👷</view>
+      <view class="empty-text">{{ emptyText }}</view>
+    </view>
     
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <span>正在加载监工列表...</span>
-    </div>
-  </div>
+    <view v-if="loading" class="loading">
+      <view class="spinner"></view>
+      <text>正在加载监工列表...</text>
+    </view>
+  </view>
 </template>
 
 <script>
 import { getSupervisorList, contactSupervisor } from '@/api/supervisorpublic'
-
+import { getUserProfile } from "@/api/users.js"
 export default {
   name: 'SupervisorList',
   data() {
@@ -79,7 +80,11 @@ export default {
       searchKeyword: '',
       supervisors: [],
       loading: false,
-      searchTimer: null
+      searchTimer: null,
+	  searchTimer: null,
+	  defaultAvatar: '/static/default-avatar.png',
+	  currentUserInfo: null, // 添加当前用户信息
+	  isLoadingUser: false // 添加用户信息加载状态
     }
   },
   
@@ -89,11 +94,47 @@ export default {
     }
   },
   
-  mounted() {
+  onLoad() {
     this.loadSupervisors()
+		this.getCurrentUserInfo(); // 页面加载时获取用户信息
   },
   
   methods: {
+	  // 新增：获取当前用户信息的方法
+	  async getCurrentUserInfo() {
+	          // 防止重复请求
+	      if (this.isLoadingUser) return;
+	          
+	      this.isLoadingUser = true;
+	      try {
+	  		const response = await getUserProfile();
+	          console.log('用户信息API响应:', response);
+	            
+	          if (response.code === 200) {
+	          this.currentUserInfo = response.data;
+	          console.log('当前用户信息:', this.currentUserInfo);
+	              // 存储到全局数据，方便其他地方使用
+	              if (getApp().globalData) {
+	                getApp().globalData.userInfo = response.data;
+	              }
+	              
+	              // 存储到本地缓存
+	              try {
+	                uni.setStorageSync('userInfo', response.data);
+	              } catch (storageError) {
+	                console.log('存储用户信息失败:', storageError);
+	              }
+	            } else {
+	              console.error('获取用户信息失败:', response.msg);
+	              this.currentUserInfo = null;
+	            }
+	          } catch (error) {
+	            console.error('获取用户信息异常:', error);
+	            this.currentUserInfo = null;
+	          } finally {
+	            this.isLoadingUser = false;
+	          }
+	        },
     // 加载监工列表
     async loadSupervisors() {
       this.loading = true
@@ -102,14 +143,38 @@ export default {
         const response = await getSupervisorList(this.searchKeyword)
         
         if (response.code === 200) {
-          this.supervisors = response.data || []
+          // 使用真实的后端数据，确保监工数据有必要的字段
+          this.supervisors = (response.data || []).map(supervisor => ({
+            userId: supervisor.userId,
+            id: supervisor.userId, // 确保有id字段用于详情页
+            name: supervisor.name || '匿名监工',
+            rating: supervisor.rating || 5.0,
+            caseCount: supervisor.caseCount || 0,
+            city: supervisor.city || '未知地区',
+            phone: supervisor.phone,
+            // 添加详情页需要的其他字段，如果后端没有返回，使用默认值
+            experience: supervisor.experience || '5年',
+            location: supervisor.location || supervisor.city || '未知地区',
+            certificates: supervisor.certificates || ['监理资格证书'],
+            specialty: supervisor.specialty || '住宅工程监理',
+            description: supervisor.description || '资深监理工程师，拥有丰富的施工现场管理经验。',
+            projects: supervisor.projects || supervisor.caseCount || 0
+          }))
         } else {
           console.error('获取监工列表失败:', response.msg)
           this.supervisors = []
+          uni.showToast({
+            title: response.msg || '获取监工列表失败',
+            icon: 'none'
+          })
         }
       } catch (error) {
         console.error('获取监工列表失败:', error)
         this.supervisors = []
+        uni.showToast({
+          title: '网络错误，请稍后重试',
+          icon: 'none'
+        })
       } finally {
         this.loading = false
       }
@@ -126,32 +191,39 @@ export default {
       }, 500)
     },
     
+    // 跳转到监工详情页
+    goToSupervisorDetail(supervisor) {
+	  console.log('跳转到监工详情，监工ID:', supervisor.userId, '监工数据:', supervisor)
+      uni.navigateTo({
+        url: `/pages/find-supervisor/supervisor-detail?supervisorId=${supervisor.userId || supervisor.id}`
+      })
+    },
+    
     // 联系监工
     async contactSupervisor(userId) {
       try {
-        const confirm = await this.$confirm('确定要联系此监工吗？', '联系监工', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'info'
-        })
-        
-        if (confirm) {
-          const response = await contactSupervisor(userId)
-          
-          if (response.code === 200) {
-            this.$message.success('联系请求已发送，监工会尽快回复您')
-          } else {
-            this.$message.error(response.msg || '联系监工失败')
+        uni.showModal({
+          title: '联系监工',
+          content: '确定要联系此监工吗？',
+          success: async (res) => {
+			this.onlineConsult(userId)
           }
-        }
+        })
       } catch (error) {
-        if (error !== 'cancel') {
-          console.error('联系监工失败:', error)
-          this.$message.error('网络错误，请稍后重试')
-        }
+        console.error('联系监工失败:', error)
+        uni.showToast({
+          title: '网络错误，请稍后重试',
+          icon: 'none'
+        })
       }
     },
-    
+    onlineConsult(supervisorUserId) {
+    	//获取用户ID
+      const currentUserId = this.currentUserInfo.userId;
+      uni.navigateTo({
+          url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${supervisorUserId}`
+      });
+    },
     // 格式化手机号
     formatPhone(phone) {
       if (!phone) return '电话未提供'
@@ -168,9 +240,7 @@ export default {
 
 <style scoped>
 .supervisor-container {
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 20px;
+  padding: 30rpx;
   background-color: #f5f7fa;
   min-height: 100vh;
 }
@@ -178,11 +248,11 @@ export default {
 /* 页面标题 */
 .page-header {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 30rpx;
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: 36rpx;
   font-weight: 600;
   color: #333;
 }
@@ -190,10 +260,10 @@ export default {
 /* 搜索区域 */
 .search-section {
   background: white;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 16rpx;
+  padding: 30rpx;
+  margin-bottom: 30rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
 }
 
 .search-box {
@@ -204,11 +274,11 @@ export default {
 
 .search-input {
   width: 100%;
-  height: 40px;
+  height: 80rpx;
   border: 1px solid #e0e0e0;
-  border-radius: 20px;
-  padding: 0 40px 0 15px;
-  font-size: 14px;
+  border-radius: 40rpx;
+  padding: 0 80rpx 0 30rpx;
+  font-size: 28rpx;
   background: #f8f8f8;
   outline: none;
   transition: all 0.3s;
@@ -221,26 +291,33 @@ export default {
 
 .search-icon {
   position: absolute;
-  right: 15px;
+  right: 30rpx;
   color: #8b5cf6;
-  font-size: 16px;
+  font-size: 32rpx;
 }
 
 /* 监工列表 */
 .supervisor-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24rpx;
 }
 
 .supervisor-card {
   background: white;
-  border-radius: 8px;
-  padding: 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 16rpx;
+  padding: 30rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.supervisor-card:active {
+  transform: translateY(-2px);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
 }
 
 .supervisor-info {
@@ -248,95 +325,90 @@ export default {
 }
 
 .supervisor-name {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 16rpx;
   color: #333;
 }
 
 .supervisor-rating {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 16rpx;
 }
 
 .stars {
   color: #ffc107;
-  margin-right: 8px;
-  font-size: 14px;
+  margin-right: 16rpx;
+  font-size: 28rpx;
 }
 
 .rating-text {
   color: #666;
-  font-size: 14px;
+  font-size: 28rpx;
 }
 
 .supervisor-details {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8rpx;
 }
 
 .detail-item {
   display: flex;
   align-items: center;
-  font-size: 13px;
+  font-size: 26rpx;
   color: #666;
 }
 
 .detail-icon {
-  margin-right: 6px;
-  font-size: 12px;
+  margin-right: 12rpx;
+  font-size: 24rpx;
 }
 
 .card-actions {
-  margin-left: 15px;
+  margin-left: 30rpx;
 }
 
 .contact-btn {
   background: linear-gradient(135deg, #8b5cf6, #a78bfa);
   color: white;
   border: none;
-  border-radius: 16px;
-  padding: 8px 16px;
-  font-size: 13px;
+  border-radius: 32rpx;
+  padding: 16rpx 32rpx;
+  font-size: 26rpx;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s;
   white-space: nowrap;
 }
 
-.contact-btn:hover {
+.contact-btn:active {
   background: linear-gradient(135deg, #7c3aed, #8b5cf6);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-}
-
-.contact-btn:active {
-  transform: translateY(0);
 }
 
 /* 空状态 */
 .empty-state {
   text-align: center;
-  padding: 40px 20px;
+  padding: 80rpx 40rpx;
   color: #999;
 }
 
 .empty-icon {
-  font-size: 48px;
-  margin-bottom: 10px;
+  font-size: 96rpx;
+  margin-bottom: 20rpx;
   opacity: 0.5;
 }
 
 .empty-text {
-  font-size: 14px;
+  font-size: 28rpx;
 }
 
 /* 加载状态 */
 .loading {
   text-align: center;
-  padding: 30px;
+  padding: 60rpx;
   color: #999;
   display: flex;
   align-items: center;
@@ -345,13 +417,13 @@ export default {
 
 .spinner {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #f3f3f3;
-  border-top: 2px solid #8b5cf6;
+  width: 32rpx;
+  height: 32rpx;
+  border: 4rpx solid #f3f3f3;
+  border-top: 4rpx solid #8b5cf6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-right: 8px;
+  margin-right: 16rpx;
 }
 
 @keyframes spin {
@@ -362,17 +434,17 @@ export default {
 /* 响应式调整 */
 @media (max-width: 480px) {
   .supervisor-container {
-    padding: 15px;
+    padding: 30rpx;
   }
   
   .page-title {
-    font-size: 20px;
+    font-size: 40rpx;
   }
   
   .supervisor-card {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 24rpx;
   }
   
   .card-actions {

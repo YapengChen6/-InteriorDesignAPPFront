@@ -50,9 +50,10 @@
             v-for="designer in filteredDesigners"
             :key="designer.userId"
             class="designer-card"
+            @tap="goToDesignerDetail(designer.userId)"
         >
           <view class="designer-header">
-            <view class="avatar-wrapper">
+            <view class="avatar-wrapper" @tap.stop="viewAvatar(designer)">
               <image
                   :src="designer.avatar || defaultAvatar"
                   mode="aspectFill"
@@ -76,7 +77,7 @@
               <view class="designer-phone">{{ designer.phone || designer.phonenumber || '电话未提供' }}</view>
             </view>
           </view>
-          <button class="contact-btn" @tap="contactDesigner(designer.userId, designer.name)">
+          <button class="contact-btn" @tap.stop="contactDesigner(designer)">
             联系设计师
           </button>
         </view>
@@ -87,7 +88,7 @@
 
 <script>
 import { getDesignerList } from "@/api/designer.js"
-import store from "@/store"
+import { getUserProfile } from "@/api/users.js"
 
 export default {
   data() {
@@ -97,7 +98,9 @@ export default {
       searchQuery: '',
       allDesigners: [],
       searchTimer: null,
-      defaultAvatar: '/static/default-avatar.png'
+      defaultAvatar: '/static/default-avatar.png',
+	  currentUserInfo: null, // 添加当前用户信息
+	  isLoadingUser: false // 添加用户信息加载状态
     }
   },
   computed: {
@@ -109,18 +112,58 @@ export default {
       const query = this.searchQuery.toLowerCase();
       return this.allDesigners.filter(designer =>
           (designer.name && designer.name.toLowerCase().includes(query)) ||
-          (designer.nickName && designer.nickName.toLowerCase().includes(query))
+          (designer.nickName && designer.nickName.toLowerCase().includes(query)) ||
+          (designer.specialty && designer.specialty.toLowerCase().includes(query))
       );
     }
   },
   onLoad() {
     this.loadDesigners();
+	this.getCurrentUserInfo(); // 页面加载时获取用户信息
   },
   onShow() {
-    // 当从其他页面返回时，重新获取设计师数据
-    this.loadDesigners();
+    if (this.allDesigners.length === 0) {
+      this.loadDesigners();
+    }
   },
   methods: {
+	  // 新增：获取当前用户信息的方法
+	async getCurrentUserInfo() {
+	        // 防止重复请求
+	    if (this.isLoadingUser) return;
+	        
+	    this.isLoadingUser = true;
+	    try {
+			const response = await getUserProfile();
+	        console.log('用户信息API响应:', response);
+	          
+	        if (response.code === 200) {
+	        this.currentUserInfo = response.data;
+	        console.log('当前用户信息:', this.currentUserInfo);
+	            // 存储到全局数据，方便其他地方使用
+	            if (getApp().globalData) {
+	              getApp().globalData.userInfo = response.data;
+	            }
+	            
+	            // 存储到本地缓存
+	            try {
+	              uni.setStorageSync('userInfo', response.data);
+	            } catch (storageError) {
+	              console.log('存储用户信息失败:', storageError);
+	            }
+	          } else {
+	            console.error('获取用户信息失败:', response.msg);
+	            this.currentUserInfo = null;
+	          }
+	        } catch (error) {
+	          console.error('获取用户信息异常:', error);
+	          this.currentUserInfo = null;
+	        } finally {
+	          this.isLoadingUser = false;
+	        }
+	      },
+	  
+	  
     async loadDesigners() {
       try {
         this.loading = true;
@@ -129,7 +172,7 @@ export default {
         const response = await getDesignerList();
 
         if (response.code === 200) {
-          this.allDesigners = response.data || [];
+          this.allDesigners = this.formatDesignerData(response.data || []);
           console.log('👥 设计师列表数据:', this.allDesigners);
         } else {
           throw new Error(response.msg || '获取设计师数据失败');
@@ -137,54 +180,173 @@ export default {
       } catch (error) {
         console.error('加载设计师数据错误:', error);
         this.error = '加载失败: ' + error.message;
-        // 如果API调用失败，使用模拟数据
         this.useMockData();
       } finally {
         this.loading = false;
       }
     },
 
-    useMockData() {
+    formatDesignerData(designers) {
+      return designers.map(designer => ({
+        userId: designer.userId || designer.id || 0,
+        name: designer.name || designer.nickName || designer.realName || '设计师',
+        nickName: designer.nickName || designer.name || '',
+        avatar: designer.avatar || designer.avatarUrl || '',
+        rating: designer.rating || designer.score || 5,
+        caseCount: designer.caseCount || designer.projectCount || designer.portfolioCount || 0,
+        address: designer.address || designer.city || designer.location || '',
+        city: designer.city || designer.location || '',
+        phone: designer.phone || designer.phonenumber || designer.tel || '',
+        specialty: designer.specialty || designer.style || designer.skills || '',
+        experience: designer.experience || 0,
+        isCertified: designer.isCertified || false,
+        isOnline: designer.isOnline || false
+      }));
     },
-
     onSearchInput() {
       clearTimeout(this.searchTimer);
       this.searchTimer = setTimeout(() => {
-        // 搜索逻辑已通过计算属性处理
+        console.log('搜索关键词:', this.searchQuery);
       }, 500);
     },
 
-    contactDesigner(designerId, designerName) {
-      uni.showModal({
-        title: '联系设计师',
-        content: `确定要联系设计师 ${designerName} 吗？`,
+    // 跳转到设计师详情页 - 修改路径
+    goToDesignerDetail(userId) {
+      if (!userId) {
+        uni.showToast({
+          title: '设计师ID无效',
+          icon: 'error'
+        });
+        return;
+      }
+      console.log('跳转到设计师详情，ID:', userId);
+      
+      // 使用正确的路径：/pages/find-design/design-detail
+      uni.navigateTo({
+        url: `/pages/find-design/design-detail?id=${userId}`,
+        success: () => {
+          console.log('跳转成功');
+        },
+        fail: (err) => {
+          console.error('跳转失败:', err);
+          this.tryAlternativeNavigate(userId);
+        }
+      });
+    },
+
+    tryAlternativeNavigate(userId) {
+      const urls = [
+        // 不同参数格式
+        `/pages/find-design/design-detail?userId=${userId}`,
+        `/pages/find-design/design-detail?designerId=${userId}`,
+        `/pages/find-design/design-detail?user_id=${userId}`,
+        `/pages/find-design/design-detail?ID=${userId}`,
+        `/pages/find-design/design-detail?uid=${userId}`
+      ];
+      
+    },
+
+    contactDesigner(designer) {
+       //console.log(' 📱 当前设计师信息:', designer.userId);
+      if (!designer || !designer.userId) {
+        uni.showToast({
+          title: '设计师信息无效',
+          icon: 'error'
+        });
+        return;
+      }
+      
+      uni.showActionSheet({
+        itemList: ['查看详情', '在线咨询'],
         success: (res) => {
-          if (res.confirm) {
-            // 实际应用中这里可以打开聊天窗口或拨打电话
-            uni.showToast({
-              title: '已发送联系请求',
-              icon: 'success'
-            });
+          const tapIndex = res.tapIndex;
+          switch (tapIndex) {
+            case 0:
+              this.goToDesignerDetail(designer.userId);
+              break;
+            case 1:
+              this.onlineConsult(designer);
+              break;
           }
         }
       });
     },
 
+    callDesigner(designer) {
+      if (!designer.phone || designer.phone === '电话未提供') {
+        uni.showToast({
+          title: '该设计师未提供电话',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      if (designer.phone.includes('****')) {
+        uni.showModal({
+          title: '提示',
+          content: '需要联系客服获取设计师真实电话',
+          success: (res) => {
+            if (res.confirm) {
+              uni.makePhoneCall({
+                phoneNumber: '400-123-4567'
+              });
+            }
+          }
+        });
+      } else {
+        uni.makePhoneCall({
+          phoneNumber: designer.phone
+        });
+      }
+    },
+
+    onlineConsult(designer) {
+		//获取用户ID
+	  const currentUserId = this.currentUserInfo.userId;
+      uni.navigateTo({
+          url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${designer.userId}`
+      });
+    },
+
+    viewAvatar(designer) {
+      if (!designer.avatar || designer.avatar === this.defaultAvatar) {
+        return;
+      }
+      
+      uni.previewImage({
+        urls: [designer.avatar],
+        current: 0
+      });
+    },
+
     onAvatarError(e) {
       console.error('头像加载失败:', e);
-      // 在实际应用中，这里可以设置默认头像
+      const img = e.target;
+      img.src = this.defaultAvatar;
+    },
+    
+    onPullDownRefresh() {
+      console.log('下拉刷新');
+      this.loadDesigners().then(() => {
+        uni.stopPullDownRefresh();
+      });
+    },
+    
+    onReachBottom() {
+      console.log('上拉加载更多');
     }
   }
 }
 </script>
-
 <style lang="scss">
 page {
   background-color: #f5f7fa;
+  height: 100%;
 }
 
 .container {
   padding: 20rpx;
+  min-height: 100%;
 }
 
 /* 头部样式 */
@@ -283,6 +445,12 @@ page {
   border-radius: 8rpx;
   padding: 20rpx 40rpx;
   font-size: 28rpx;
+  transition: all 0.3s ease;
+}
+
+.retry-btn:active {
+  background: #5a0db5;
+  transform: scale(0.98);
 }
 
 /* 设计师列表样式 */
@@ -290,6 +458,7 @@ page {
   display: flex;
   flex-direction: column;
   gap: 20rpx;
+  padding-bottom: 40rpx;
 }
 
 .designer-card {
@@ -298,21 +467,24 @@ page {
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
   padding: 40rpx;
   transition: all 0.3s ease;
+  position: relative;
 }
 
 .designer-card:active {
-  transform: scale(0.98);
+  transform: translateY(-2rpx);
+  box-shadow: 0 6rpx 30rpx rgba(0, 0, 0, 0.1);
   background: #f8f9fa;
 }
 
 .designer-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 30rpx;
 }
 
 .avatar-wrapper {
   margin-right: 30rpx;
+  position: relative;
 }
 
 .avatar {
@@ -320,10 +492,12 @@ page {
   height: 120rpx;
   border-radius: 50%;
   border: 4rpx solid #f0f0f0;
+  background-color: #f8f8f8;
 }
 
 .designer-info {
   flex: 1;
+  min-width: 0;
 }
 
 .designer-name {
@@ -331,12 +505,16 @@ page {
   font-weight: 600;
   color: #333;
   margin-bottom: 20rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .designer-stats {
   display: flex;
   gap: 40rpx;
   margin-bottom: 20rpx;
+  flex-wrap: wrap;
 }
 
 .stat-item {
@@ -359,6 +537,19 @@ page {
   font-size: 28rpx;
   color: #999;
   margin-bottom: 10rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.designer-location:before {
+  content: '📍';
+  font-size: 24rpx;
+}
+
+.designer-phone:before {
+  content: '📱';
+  font-size: 24rpx;
 }
 
 .contact-btn {
@@ -376,5 +567,66 @@ page {
 .contact-btn:active {
   background: #5a0db5;
   transform: scale(0.98);
+}
+
+/* 在线状态指示器 */
+.online-indicator {
+  position: absolute;
+  bottom: 10rpx;
+  right: 10rpx;
+  width: 20rpx;
+  height: 20rpx;
+  background-color: #4CAF50;
+  border: 2rpx solid white;
+  border-radius: 50%;
+}
+
+/* 认证徽章 */
+.cert-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ff7e5f, #feb47b);
+  color: white;
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  margin-left: 16rpx;
+  vertical-align: middle;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 6rpx solid #f3f3f3;
+  border-top: 6rpx solid #6a11cb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 30rpx;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 响应式调整 */
+@media (max-width: 375px) {
+  .designer-card {
+    padding: 30rpx;
+  }
+  
+  .avatar {
+    width: 100rpx;
+    height: 100rpx;
+  }
+  
+  .designer-name {
+    font-size: 30rpx;
+  }
+  
+  .contact-btn {
+    font-size: 28rpx;
+    padding: 20rpx;
+  }
 }
 </style>

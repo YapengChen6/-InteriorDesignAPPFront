@@ -1,6 +1,4 @@
-// api/orderStage.js
-
-import request from '@/utils/request' // 👈 默认导入
+import request from '@/utils/request'
 
 const BASE_URL = '/orderStage'
 
@@ -56,10 +54,54 @@ export function listOrderStages(params = {}) {
   })
 }
 
-// 导出服务对象，与你的其他 service 保持一致
+// =============== 新增：缺失的业务操作接口 ===============
+
+/**
+ * 确认订单阶段
+ * @param {Number} orderStageId - 阶段ID
+ * @returns {Promise}
+ */
+export function confirmOrderStage(orderStageId) {
+  return request({
+    url: `${BASE_URL}/confirm`,
+    method: 'PUT',
+    params: { orderStageId }
+  })
+}
+
+/**
+ * 启动订单阶段
+ * @param {Number} orderStageId - 阶段ID
+ * @returns {Promise}
+ */
+export function startOrderStage(orderStageId) {
+  return request({
+    url: `${BASE_URL}/start`,
+    method: 'PUT',
+    params: { orderStageId }
+  })
+}
+
+/**
+ * 结束订单阶段
+ * @param {Number} orderStageId - 阶段ID
+ * @returns {Promise}
+ */
+export function endOrderStage(orderStageId) {
+  return request({
+    url: `${BASE_URL}/end`,
+    method: 'PUT',
+    params: { orderStageId }
+  })
+}
+
+// 导出服务对象
 export const orderStageService = {
   save: saveOrderStage,
   delete: deleteOrderStage,
   update: updateOrderStage,
-  list: listOrderStages
+  list: listOrderStages,
+  confirm: confirmOrderStage,   // 新增
+  start: startOrderStage,       // 新增
+  end: endOrderStage            // 新增
 }

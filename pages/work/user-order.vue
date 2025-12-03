@@ -113,7 +113,7 @@
 							
 							<text class="designer-phone">电话: {{ order.contractorInfo.phone }}</text>
 						</view>
-						<view class="contact-btn" @click.stop="contactDesigner(order.contractorId)">
+						<view class="contact-btn" @click.stop="contactOrderParty(order)">
 							联系
 						</view>
 					</view>
@@ -190,24 +190,33 @@
 								
 								<!-- 监理订单：新增施工阶段逻辑 -->
 								<template v-else-if="String(order.type) === '2'">
+									<!-- 新增：所有阶段status=4时显示"待付款"按钮 -->
+									<template v-if="order.allStagesCompleted">
+										<button class="btn primary" @click="paySupervisorOrder(order.orderId)">
+											待付款
+										</button>
+									</template>
+									
 									<!-- 没有施工阶段或有待确认的施工阶段 -->
-									<button v-if="!order.hasStages || order.hasUnconfirmedStages" 
-											class="btn primary" 
-											@click="confirmConstructionStages(order.orderId)">
-										确认施工阶段
-									</button>
+									<template v-else-if="!order.hasStages || order.hasUnconfirmedStages">
+										<button class="btn primary" @click="confirmConstructionStages(order.orderId)">
+											确认施工阶段
+										</button>
+									</template>
 									
 									<!-- 有已确认的施工阶段 -->
-									<button v-else-if="order.hasStages && !order.hasUnconfirmedStages" 
-											class="btn primary" 
-											@click="goToConstructionStage(order.orderId)">
-										施工阶段
-									</button>
+									<template v-else-if="order.hasStages && !order.hasUnconfirmedStages">
+										<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+											施工阶段
+										</button>
+									</template>
 									
 									<!-- 默认按钮（备用） -->
-									<button v-else class="btn primary" @click="goToConstructionStage(order.orderId)">
-										施工阶段
-									</button>
+									<template v-else>
+										<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+											施工阶段
+										</button>
+									</template>
 								</template>
 							</template>
 						</template>
@@ -247,7 +256,7 @@
 <script>
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
-	import { getUserProfile } from '@/api/users.js'
+	import { getUserProfile, getCurrentRole } from '@/api/users.js'
 	import { getDesignSchemeList } from '@/api/designScheme.js'
 	import { orderReviewApi } from '@/api/orderReview.js'
 	// 新增：导入施工阶段API
@@ -280,7 +289,9 @@
 					phone: '',
 					name: '',
 					avatar: '',
-					address: ''
+					address: '',
+					role: '', // 用户角色：customer/designer/supervisor
+					roleName: '' // 角色名称
 				},
 				
 				// 分页参数
@@ -414,12 +425,23 @@
 					
 					console.log('📝 施工阶段列表:', stages);
 					
+					// 检查是否有施工阶段
+					const hasStages = stages.length > 0;
+					
+					// 检查是否有待确认的阶段（status = 0）
+					const hasUnconfirmedStages = stages.some(stage => Number(stage.status) === 0);
+					
+					// 新增：检查是否所有阶段都已完成（status = 4）
+					const allStagesCompleted = hasStages && stages.every(stage => Number(stage.status) === 4);
+					
 					// 返回施工阶段状态信息
 					return {
-						hasStages: stages.length > 0,
-						hasUnconfirmedStages: stages.some(stage => Number(stage.status) === 0),
+						hasStages,
+						hasUnconfirmedStages,
+						allStagesCompleted,
 						totalStages: stages.length,
-						unconfirmedCount: stages.filter(stage => Number(stage.status) === 0).length
+						unconfirmedCount: stages.filter(stage => Number(stage.status) === 0).length,
+						completedCount: stages.filter(stage => Number(stage.status) === 4).length
 					};
 					
 				} catch (error) {
@@ -427,8 +449,10 @@
 					return {
 						hasStages: false,
 						hasUnconfirmedStages: false,
+						allStagesCompleted: false,
 						totalStages: 0,
-						unconfirmedCount: 0
+						unconfirmedCount: 0,
+						completedCount: 0
 					};
 				}
 			},
@@ -445,6 +469,59 @@
 				} catch (error) {
 					console.error('❌ 跳转施工阶段确认页面失败:', error);
 					this.handleApiError(error, '跳转失败');
+				}
+			},
+
+			// 监理订单待付款按钮点击事件
+			async paySupervisorOrder(orderId) {
+				try {
+					console.log('💰 监理订单待付款，订单ID:', orderId);
+					
+					uni.showModal({
+						title: '确认付款',
+						content: '所有施工阶段已完成，确定要支付这个订单吗？付款后订单将标记为已完成。',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '付款中...' });
+								
+								try {
+									console.log('📤 调用 completeOrder API，订单ID:', orderId);
+									
+									const result = await orderService.completeOrder(orderId);
+									
+									console.log('📡 completeOrder API 响应:', result);
+									
+									uni.hideLoading();
+									
+									if (result === true || (result && result.code === 200)) {
+										uni.showToast({
+											title: '付款成功，订单已完成',
+											icon: 'success',
+											duration: 2000
+										});
+										
+										// 刷新订单列表
+										setTimeout(() => {
+											this.pagination.pageNum = 1;
+											this.loadOrderList();
+										}, 1500);
+										
+									} else {
+										console.error('❌ completeOrder 返回错误:', result);
+										throw new Error(result?.msg || '付款失败');
+									}
+								} catch (error) {
+									uni.hideLoading();
+									console.error('❌ 付款失败:', error);
+									this.handleApiError(error, '付款失败');
+								}
+							}
+						}
+					});
+					
+				} catch (error) {
+					console.error('❌ 监理订单付款操作失败:', error);
+					this.handleApiError(error, '付款操作失败');
 				}
 			},
 
@@ -518,15 +595,37 @@
 			// 加载用户信息
 			async loadUserInfo() {
 				try {
-					console.log('👤 开始获取用户信息...')
-					const res = await getUserProfile();
-					if (res.code === 200) {
-						this.userInfo = res.data;
-						console.log('👤 用户信息加载完成:', this.userInfo);
+					console.log('👤 开始获取用户信息...');
+					
+					// 同时获取用户基本信息和角色信息
+					const [userRes, roleRes] = await Promise.all([
+						getUserProfile(),
+						getCurrentRole()
+					]);
+					
+					if (userRes.code === 200) {
+						this.userInfo = userRes.data;
+						
+						// 添加角色信息
+						if (roleRes.code === 200 && roleRes.data) {
+							this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'customer';
+							this.userInfo.roleName = roleRes.data.roleName || '';
+						} else {
+							this.userInfo.role = 'customer'; // 默认角色
+							this.userInfo.roleName = '客户';
+						}
+						
+						console.log('👤 用户信息加载完成:', {
+							userId: this.userInfo.userId,
+							name: this.userInfo.name,
+							role: this.userInfo.role,
+							roleName: this.userInfo.roleName
+						});
+						
 						this.loadOrderList();
 					} else {
-						console.error('获取用户信息失败:', res.msg)
-						this.handleApiError(res.msg, '获取用户信息失败');
+						console.error('获取用户信息失败:', userRes.msg);
+						this.handleApiError(userRes.msg, '获取用户信息失败');
 					}
 				} catch (error) {
 					console.error('❌ 获取用户信息失败:', error);
@@ -615,7 +714,9 @@
 							constructionDrawingStatus: null,
 							// 新增施工阶段状态字段
 							hasStages: false,
-							hasUnconfirmedStages: false
+							hasUnconfirmedStages: false,
+							// 新增：所有阶段是否完成字段
+							allStagesCompleted: false
 						}
 						
 						// 只有设计师订单才需要检查设计方案状态
@@ -636,12 +737,16 @@
 							const stagesStatus = await this.checkConstructionStagesStatus(order.orderId);
 							orderWithDetails.hasStages = stagesStatus.hasStages;
 							orderWithDetails.hasUnconfirmedStages = stagesStatus.hasUnconfirmedStages;
+							// 新增：设置所有阶段是否完成
+							orderWithDetails.allStagesCompleted = stagesStatus.allStagesCompleted;
 							
 							console.log(`🏗️ 监理订单 ${order.orderId} 施工阶段状态:`, {
 								是否有阶段: stagesStatus.hasStages,
 								有待确认阶段: stagesStatus.hasUnconfirmedStages,
+								所有阶段已完成: stagesStatus.allStagesCompleted,
 								总阶段数: stagesStatus.totalStages,
-								待确认数: stagesStatus.unconfirmedCount
+								待确认数: stagesStatus.unconfirmedCount,
+								已完成数: stagesStatus.completedCount
 							});
 						}
 						
@@ -801,7 +906,7 @@
 				}
 			},
 
-			// 立即付款
+			// 立即付款（设计师订单）
 			async payOrder(orderId) {
 				try {
 					console.log('💰 立即付款，订单ID:', orderId);
@@ -941,7 +1046,7 @@
 									
 									if (result && (result.code === 200 || result.success)) {
 										uni.showToast({
-												title: '合同已确认',
+											title: '合同已确认',
 											icon: 'success'
 										});
 										
@@ -1041,7 +1146,7 @@
 					console.error('❌ 获取设计师信息失败:', error)
 					return {
 						name: '设计师',
-							phone: '暂无联系方式',
+						phone: '暂无联系方式',
 						avatar: '/static/images/default-avatar.png',
 						role: '设计师'
 					}
@@ -1124,18 +1229,87 @@
 				this.loadOrderList()
 			},
 			
-			// 联系设计师（跳转聊天页面）
-			contactDesigner(designerId) {
-				if (!designerId) {
+			// 联系订单相关方（设计师/监理师/客户）
+			contactOrderParty(order) {
+				try {
+					// 当前用户ID
+					const currentUserId = this.userInfo.userId;
+					
+					if (!currentUserId) {
+						uni.showToast({
+							title: '用户信息获取失败',
+							icon: 'none'
+						});
+						return;
+					}
+					
+					console.log('👤 当前用户信息:', {
+						userId: currentUserId,
+						role: this.userInfo.role,
+						roleName: this.userInfo.roleName
+					});
+					
+					console.log('📋 订单信息:', {
+						orderId: order.orderId,
+						contractorId: order.contractorId,
+						userId: order.userId, // 订单中的客户ID
+						type: order.type
+					});
+					
+					// 根据当前用户角色决定otherUserId
+					let otherUserId = '';
+					
+					// 判断当前用户角色
+					const userRole = this.userInfo.role || '';
+					
+					// 检查是否是设计师或监理师
+					// 注意：这里根据你的实际角色值进行调整
+					const isDesignerOrSupervisor = [
+						'designer', '设计师', '1', // 设计师角色
+						'supervisor', '监理师', '监理', '2' // 监理师角色
+					].includes(userRole.toLowerCase());
+					
+					if (isDesignerOrSupervisor) {
+						// 当前用户是设计师或监理师，otherUserId应该是订单中的客户ID
+						// 注意：需要确保订单数据中有userId字段
+						otherUserId = order.userId || '';
+						console.log('🎨 当前用户是设计师/监理师，联系客户，客户ID:', otherUserId);
+					} else {
+						// 当前用户是普通用户，otherUserId是订单中的承接者ID
+						otherUserId = order.contractorId || '';
+						console.log('👤 当前用户是普通用户，联系承接者，承接者ID:', otherUserId);
+					}
+					
+					if (!otherUserId) {
+						uni.showToast({
+							title: '对方信息不存在',
+							icon: 'none'
+						});
+						return;
+					}
+					
+					// conversationId始终是当前用户ID
+					const conversationId = currentUserId;
+					
+					console.log('💬 聊天跳转参数:', {
+						conversationId: conversationId,
+						otherUserId: otherUserId,
+						userRole: userRole,
+						orderId: order.orderId
+					});
+					
+					// 跳转到聊天详情页面
+					uni.navigateTo({
+						url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}&orderId=${order.orderId}`
+					});
+					
+				} catch (error) {
+					console.error('❌ 跳转聊天页面失败:', error);
 					uni.showToast({
-						title: '暂无设计师信息',
+						title: '跳转失败，请重试',
 						icon: 'none'
-					})
-					return
+					});
 				}
-				uni.navigateTo({
-					url: `/pages/chat/designer?id=${designerId}`
-				})
 			},
 			
 			// 确认订单
@@ -1438,7 +1612,7 @@
 		color: #FF9500;
 	}
 	
-	.status-progress {
+	status-progress {
 		background: #E6F7FF;
 		color: #007AFF;
 	}

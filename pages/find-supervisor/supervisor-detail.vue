@@ -30,7 +30,8 @@
         <view class="supervisor-tags">
           <view class="tag">专业监理</view>
           <view class="tag" v-if="supervisorInfo.city">{{ supervisorInfo.city }}</view>
-          <view class="tag status-tag" :class="getStatusClass(supervisorInfo.certificationStatus)">
+          <!-- 修改这里：使用计算属性 -->
+          <view class="tag status-tag" :class="statusClass">
             {{ getStatusText(supervisorInfo.certificationStatus) }}
           </view>
         </view>
@@ -44,7 +45,6 @@
             <text class="stat-value">{{ totalViews || 0 }}</text>
             <text class="stat-label">浏览</text>
           </view>
-          <view class="stat-divider"></view>
           <view class="stat-item like-btn" @click="toggleLike" :class="{ 'liked': isLiked, 'liking': isLiking }">
             <text class="stat-icon">{{ isLiked ? '❤️' : '🤍' }}</text>
             <text class="stat-value">{{ totalLikes || 0 }}</text>
@@ -100,7 +100,8 @@
           </view>
           <view class="info-item">
             <text class="info-label">⭐ 认证状态</text>
-            <text class="info-value" :class="getStatusClass(supervisorInfo.certificationStatus)">
+            <!-- 修改这里：使用计算属性 -->
+            <text class="info-value" :class="statusClass">
               {{ getStatusText(supervisorInfo.certificationStatus) }}
             </text>
           </view>
@@ -284,6 +285,16 @@ export default {
       isLiked: false,      // 当前用户是否点赞了该监工
       isLiking: false,     // 防止重复点击
       likeCheckLoading: false  // 检查点赞状态加载
+    }
+  },
+  
+  computed: {
+    // 计算认证状态的CSS类
+    statusClass() {
+      if (!this.supervisorInfo || !this.supervisorInfo.certificationStatus) {
+        return 'status-pending'
+      }
+      return this.getStatusClass(this.supervisorInfo.certificationStatus)
     }
   },
   
