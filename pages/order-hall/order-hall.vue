@@ -162,7 +162,7 @@
 
 <script>
 import { projectService } from '@/api/project.js'
-import { getUserProfile } from '@/api/users.js'
+import { getUserById } from '@/api/users.js'
 
 // 角色与项目类型的映射
 const ROLE_PROJECT_MAPPING = {
@@ -537,7 +537,7 @@ export default {
           
           if (!userInfo) {
             console.log(`🔍 正在获取用户 ${project.userId} 的信息...`)
-            userInfo = await getUserProfile(project.userId)
+            userInfo = await getUserById(project.userId)
             console.log(`✅ 用户 ${project.userId} 的信息获取成功:`, userInfo)
             
             // 缓存用户信息
@@ -758,7 +758,6 @@ export default {
   }
 }
 </script>
-
 <style>
 	.order-hall-container {
 		min-height: 100vh;

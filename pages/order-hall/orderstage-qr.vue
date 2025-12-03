@@ -93,6 +93,10 @@
                     <text class="detail-value">{{ stage.description || '暂无描述' }}</text>
                   </view>
                   <view class="detail-item">
+                    <text class="detail-label">创建人：</text>
+                    <text class="detail-value">{{ stage.creatorInfo ? stage.creatorInfo.nickName || stage.creatorInfo.userName : '未知用户' }}</text>
+                  </view>
+                  <view class="detail-item">
                     <text class="detail-label">创建时间：</text>
                     <text class="detail-value">{{ formatDate(stage.createTime) }}</text>
                   </view>
@@ -127,6 +131,7 @@
                     <view v-for="record in stage.recentLogs.slice(0, 3)" :key="record.orderTaskId" class="history-item">
                       <view class="record-header">
                         <text class="record-time">{{ formatDate(record.createTime) }}</text>
+                        <text class="record-creator">{{ record.creatorInfo ? record.creatorInfo.nickName || record.creatorInfo.userName : '未知用户' }}</text>
                       </view>
                       <text class="record-content">{{ record.description || '无描述' }}</text>
                       <view v-if="record.mediaList && record.mediaList.length > 0" class="record-images">
@@ -171,6 +176,7 @@
               <view class="log-header">
                 <view class="log-info">
                   <text class="log-time">{{ formatDate(log.createTime) }}</text>
+                  <text class="log-creator">{{ log.creatorInfo ? log.creatorInfo.nickName || log.creatorInfo.userName : '未知用户' }}</text>
                 </view>
                 <text class="log-type">施工日志</text>
               </view>
@@ -222,7 +228,6 @@ export default {
   data() {
     return {
       orderId: '',
-      userId: '',
       stages: [],
       loading: false,
       showLogModal: false,
@@ -241,7 +246,6 @@ export default {
 
   computed: {
     sortedStages() {
-      // 处理每个阶段的状态类
       return [...this.stages].sort((a, b) => a.sequence - b.sequence).map(stage => {
         return {
           ...stage,
@@ -256,7 +260,6 @@ export default {
 
   onLoad(options) {
     this.orderId = options.orderId || ''
-    this.userId = options.userId || ''
     if (!this.orderId) {
       uni.showToast({ title: '缺少订单ID', icon: 'none' })
       setTimeout(() => this.goBack(), 1500)
@@ -273,6 +276,15 @@ export default {
         const response = await orderStageService.list({ orderId: this.orderId })
 
         const rawData = response.data || []
+        
+        // 批量获取创建者信息
+        const creatorIds = rawData
+          .filter(item => item.createBy)
+          .map(item => item.createBy)
+          .filter((value, index, self) => self.indexOf(value) === index)
+        
+        const creatorMap = await this.getUserInfoMap(creatorIds)
+        
         this.stages = await Promise.all(
           rawData.map(async (item) => {
             const stageData = {
@@ -283,30 +295,38 @@ export default {
               description: item.description || '',
               expanded: false,
               recentLogs: [],
-              statusClass: this.getStatusClass(Number(item.status) || 0) // 添加状态类
+              statusClass: this.getStatusClass(Number(item.status) || 0),
+              creatorInfo: creatorMap[item.createBy] || null
             }
 
-            // 对于已开始、进行中、待验收、已完成的阶段，加载任务列表
+            // 对于已开始及以上的阶段，加载任务列表
             if (stageData.status >= 2) {
               try {
                 const { getOrderTaskList } = require('@/api/orderTask.js')
-                // 使用 stageId 参数
                 const taskResponse = await getOrderTaskList({
-                  stageId: stageData.orderStageId, // 修改为 stageId
+                  stageId: stageData.orderStageId,
                   pageNum: 1,
                   pageSize: 10
                 })
                 
                 if (taskResponse && taskResponse.data && taskResponse.data.length > 0) {
-                  // 根据新的数据结构转换，只取最新的3条记录
+                  // 获取任务创建者信息
+                  const taskCreatorIds = taskResponse.data
+                    .filter(task => task.createBy)
+                    .map(task => task.createBy)
+                    .filter((value, index, self) => self.indexOf(value) === index)
+                  
+                  const taskCreatorMap = await this.getUserInfoMap(taskCreatorIds)
+                  
                   stageData.recentLogs = taskResponse.data
                     .map(task => ({
                       ...task,
                       id: task.orderTaskId,
-                      imageUrls: (task.mediaList || []).map(media => media.fileUrl)
+                      imageUrls: (task.mediaList || []).map(media => media.fileUrl),
+                      creatorInfo: taskCreatorMap[task.createBy] || null
                     }))
                     .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
-                    .slice(0, 3) // 只取最新的3条记录
+                    .slice(0, 3)
                 }
               } catch (error) {
                 console.error(`加载阶段${stageData.name}的任务列表失败:`, error)
@@ -328,6 +348,45 @@ export default {
       }
     },
 
+    // 获取用户信息映射表 - 使用统一的用户信息接口
+    async getUserInfoMap(userIds) {
+      if (!userIds || userIds.length === 0) return {}
+      
+      const userMap = {}
+      
+      // 批量获取用户信息，统一使用 getUserById 方法
+      const userPromises = userIds.map(async (userId) => {
+        try {
+          const { getUserById } = require('@/api/users.js')
+          const userResponse = await getUserById({ userId })
+          
+          if (userResponse && userResponse.code === 200 && userResponse.data) {
+            // 根据示例数据格式处理响应
+            const userData = userResponse.data
+            userMap[userId] = {
+              userId: userData.userId,
+              userName: userData.userName,
+              nickName: userData.nickName,
+              phone: userData.phone,
+              avatar: userData.avatar,
+              sex: userData.sex,
+              email: userData.email,
+              status: userData.status,
+              createTime: userData.createTime,
+              remark: userData.remark
+            }
+          } else {
+            console.warn(`用户ID ${userId} 信息获取失败:`, userResponse)
+          }
+        } catch (error) {
+          console.error(`获取用户ID ${userId} 信息失败:`, error)
+        }
+      })
+      
+      await Promise.all(userPromises)
+      return userMap
+    },
+
     toggleStage(stage) {
       const index = this.stages.findIndex(s => s.orderStageId === stage.orderStageId)
       if (index !== -1) {
@@ -335,7 +394,6 @@ export default {
       }
     },
 
-    // 确认验收（status 3 -> 4）
     async completeStage(stage) {
       uni.showModal({
         title: '确认验收',
@@ -344,12 +402,10 @@ export default {
           if (res.confirm) {
             this.loading = true
             try {
-              // 使用 updateOrderStage 接口更新状态
               const { updateOrderStage } = require('@/api/orderStage.js')
-              // 只传递后端支持的字段
               await updateOrderStage({
                 orderStageId: stage.orderStageId,
-                status: 4 // 更新为已完成状态
+                status: 4
               })
               uni.showToast({ title: '阶段验收完成', icon: 'success' })
               this.loadStages()
@@ -373,20 +429,27 @@ export default {
       
       try {
         const { getOrderTaskList } = require('@/api/orderTask.js')
-        // 使用 stageId 参数
         const response = await getOrderTaskList({
-          stageId: stage.orderStageId, // 修改为 stageId
+          stageId: stage.orderStageId,
           pageNum: 1,
           pageSize: 50
         })
         
         if (response && response.data && response.data.length > 0) {
-          // 根据新的数据结构处理
+          // 获取任务创建者信息
+          const creatorIds = response.data
+            .filter(task => task.createBy)
+            .map(task => task.createBy)
+            .filter((value, index, self) => self.indexOf(value) === index)
+          
+          const creatorMap = await this.getUserInfoMap(creatorIds)
+          
           this.stageLogs = response.data
             .map(task => ({
               ...task,
               type: '施工日志',
-              imageUrls: (task.mediaList || []).map(media => media.fileUrl)
+              imageUrls: (task.mediaList || []).map(media => media.fileUrl),
+              creatorInfo: creatorMap[task.createBy] || null
             }))
             .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
         } else {
@@ -411,10 +474,8 @@ export default {
       this.stageLogs = []
     },
 
-    // 预览图片 - 修改为支持mediaList数据结构
     previewImage(mediaList, index) {
       if (mediaList && mediaList.length > 0) {
-        // 从mediaList中提取fileUrl数组
         const imageUrls = mediaList.map(media => media.fileUrl)
         uni.previewImage({
           current: Math.min(index, imageUrls.length - 1),
@@ -455,7 +516,6 @@ export default {
   }
 }
 </script>
-
 <style lang="scss" scoped>
 /* 注意：小程序中不使用 :deep() 选择器，如需覆盖子组件样式，请使用其他方法 */
 
@@ -761,6 +821,12 @@ export default {
             color: #999; 
             font-size: 24rpx; 
           }
+          
+          .record-creator {
+            color: #666;
+            font-size: 24rpx;
+            font-weight: 500;
+          }
         }
         
         .record-content { 
@@ -881,11 +947,19 @@ export default {
         
         .log-info {
           flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4rpx;
           
           .log-time {
             color: #666;
             font-size: 24rpx;
-            margin-bottom: 4rpx;
+          }
+          
+          .log-creator {
+            color: #2c6aa0;
+            font-size: 26rpx;
+            font-weight: 500;
           }
         }
         

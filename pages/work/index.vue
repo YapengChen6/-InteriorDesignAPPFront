@@ -114,7 +114,7 @@
 					</view>
 					
 					<!-- 显示发布人（客户）信息 -->
-					<view class="designer-info" v-if="order.userId">
+					<view class="designer-info" v-if="order.userId && order.publisherInfo && order.publisherInfo.name">
 						<view class="designer-avatar">
 							<image :src="order.publisherInfo.avatar" mode="aspectFill" />
 						</view>
@@ -123,12 +123,18 @@
 							<text class="designer-role">客户</text>
 							<text class="designer-phone">电话: {{ order.publisherInfo.phone }}</text>
 						</view>
-						<view class="contact-btn" @click.stop="contactOrderParty(order)">
-							联系
+						<!-- 替换为 onlineConsult 方法 -->
+						<view class="contact-btn" @click.stop="onlineConsult(order)">
+							在线联系
 						</view>
 					</view>
 					
 					<!-- 未获取客户信息 -->
+					<view class="no-designer" v-else-if="order.userId && order.publisherInfo">
+						<text class="no-designer-text">{{ order.publisherInfo.name || '' }}</text>
+					</view>
+					
+					<!-- 完全未获取客户信息 -->
 					<view class="no-designer" v-else>
 						<text class="no-designer-text">暂未获取客户信息</text>
 					</view>
@@ -216,8 +222,9 @@
 <script>
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
-	import { getUserProfile, getCurrentRole } from '@/api/users.js'
+	import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'  // 导入 getUserById
 	import { getDesignSchemeList, saveNullScheme } from '@/api/designScheme.js'
+	import { isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 	
 	// 方案类型常量
 	const SCHEME_TYPE = {
@@ -268,25 +275,43 @@
 		computed: {
 			// 过滤后的订单列表（用于待付款筛选和类型过滤）
 			filteredOrderList() {
-				// 首先过滤只显示设计师订单 (type=1)
-				const designerOrders = this.orderList.filter(order => order.type === 1);
+				// 修改：首先过滤只显示contractorId与当前用户ID相同的订单
+				const myOrders = this.orderList.filter(order => {
+					// 检查contractorId是否存在且与当前用户ID相同
+					const currentUserId = String(this.userInfo.userId || '');
+					const contractorId = String(order.contractorId || '');
+					
+					// 同时确保是设计师订单 (type=1)
+					return contractorId === currentUserId && order.type === 1;
+				});
+				
+				console.log('🔍 我的订单筛选结果:', {
+					totalOrders: this.orderList.length,
+					myOrdersCount: myOrders.length,
+					currentUserId: this.userInfo.userId,
+					filteredOrders: myOrders.map(o => ({
+						orderId: o.orderId,
+						contractorId: o.contractorId,
+						type: o.type
+					}))
+				});
 				
 				// 然后根据状态筛选
 				if (this.activeStatus === '4') {
 					// 筛选待付款订单
-					return designerOrders.filter(order => this.isWaitingPayment(order));
+					return myOrders.filter(order => this.isWaitingPayment(order));
 				}
 				
 				if (this.activeStatus !== '') {
-					return designerOrders.filter(order => order.status.toString() === this.activeStatus);
+					return myOrders.filter(order => order.status.toString() === this.activeStatus);
 				}
 				
-				return designerOrders;
+				return myOrders;
 			}
 		},
 		onLoad() {
 			console.log('🚀 设计师订单页面加载');
-			this.loadUserInfo();
+			this.loadCurrentUserInfo();
 		},
 		onShow() {
 			console.log('🔄 设计师订单页面显示，刷新数据');
@@ -361,14 +386,14 @@
 				return message;
 			},
 
-			// 加载用户信息
-			async loadUserInfo() {
+			// 加载当前用户信息 - 使用原来的 getUserProfile() 方法
+			async loadCurrentUserInfo() {
 				try {
-					console.log('👤 开始获取设计师信息...');
+					console.log('👤 开始获取当前用户信息（使用 getUserProfile）...');
 					
 					// 同时获取用户基本信息和角色信息
 					const [userRes, roleRes] = await Promise.all([
-						getUserProfile(),
+						getUserProfile(),  // 使用原来的方法获取当前用户信息
 						getCurrentRole()
 					]);
 					
@@ -384,21 +409,69 @@
 							this.userInfo.roleName = '设计师';
 						}
 						
-						console.log('👤 用户信息加载完成:', {
+						console.log('👤 当前用户信息加载完成:', {
 							userId: this.userInfo.userId,
 							name: this.userInfo.name,
 							role: this.userInfo.role,
 							roleName: this.userInfo.roleName
 						});
 						
+						// 确保用户信息存储到缓存
+						this.ensureUserInfoInStorage();
+						
 						this.loadOrderList();
 					} else {
-						console.error('获取设计师信息失败:', userRes.msg);
-						this.handleApiError(userRes.msg, '获取设计师信息失败');
+						console.error('获取当前用户信息失败:', userRes.msg);
+						this.handleApiError(userRes.msg, '获取用户信息失败');
 					}
 				} catch (error) {
-					console.error('❌ 获取设计师信息失败:', error);
-					this.handleApiError(error, '获取设计师信息失败');
+					console.error('❌ 获取当前用户信息失败:', error);
+					this.handleApiError(error, '获取用户信息失败');
+				}
+			},
+			
+			// 确保用户信息存储到缓存
+			ensureUserInfoInStorage() {
+				try {
+					// 如果用户信息存在，存储到缓存
+					if (this.userInfo && this.userInfo.userId) {
+						// 存储完整用户信息
+						uni.setStorageSync('userInfo', this.userInfo);
+						
+						// 单独存储用户ID（确保是字符串）
+						if (this.userInfo.userId) {
+							const userIdStr = String(this.userInfo.userId);
+							uni.setStorageSync('userId', userIdStr);
+							console.log('✅ 存储用户ID到缓存:', userIdStr);
+						}
+						
+						// 存储到全局数据
+						if (getApp().globalData) {
+							getApp().globalData.userInfo = this.userInfo;
+						}
+						
+						console.log('✅ 用户信息已更新到缓存:', {
+							userId: this.userInfo.userId,
+							name: this.userInfo.name
+						});
+						
+						return true;
+					}
+					
+					// 检查缓存是否存在
+					const cachedUserInfo = uni.getStorageSync('userInfo');
+					const cachedUserId = uni.getStorageSync('userId');
+					
+					if (!cachedUserInfo || !cachedUserId) {
+						console.warn('⚠️ 缓存中用户信息不完整');
+						return false;
+					}
+					
+					return true;
+					
+				} catch (storageError) {
+					console.error('❌ 存储用户信息失败:', storageError);
+					return false;
 				}
 			},
 			
@@ -456,7 +529,8 @@
 						
 						if (order.userId) {
 							try {
-								publisherInfo = await this.getPublisherInfo(order.userId) || {}
+								// 使用 getUserById 方法获取其他用户信息
+								publisherInfo = await this.getUserInfoById(order.userId) || {}
 							} catch (error) {
 								console.error(`获取订单 ${order.orderId} 的发布人信息失败:`, error)
 							}
@@ -499,6 +573,71 @@
 				} finally {
 					this.loading = false
 					this.refreshing = false
+				}
+			},
+			
+			// 获取其他用户信息的方法 - 只能使用 getUserById(userId)
+			async getUserInfoById(userId) {
+				if (!userId) {
+					console.warn('用户ID为空');
+					return {
+						name: '',
+						phone: '',
+						avatar: '/static/images/default-avatar.png',
+						role: ''
+					};
+				}
+				
+				try {
+					console.log('👤 使用 getUserById 获取用户信息，用户ID:', userId);
+					
+					// 只能使用 getUserById 方法获取其他用户信息
+					const result = await getUserById(userId);
+					console.log('✅ getUserById 原始结果:', result);
+					
+					// 解析API响应
+					let userData = null;
+					
+					// 处理不同的响应格式
+					if (result && typeof result === 'object') {
+						// 标准格式：{code: 200, data: {...}}
+						if (result.code === 200) {
+							userData = result.data || {};
+						}
+						// 非标准格式：直接是用户数据
+						else if (!result.code && (result.name || result.phone || result.avatar)) {
+							userData = result;
+						}
+						// 其他格式：尝试从可能的位置获取数据
+						else if (result.data) {
+							userData = result.data;
+						}
+					}
+					
+					if (!userData) {
+						console.warn('⚠️ 无法从响应中解析用户数据，使用默认值');
+						userData = {};
+					}
+					
+					console.log('✅ 解析后的用户数据:', userData);
+					
+					// 根据示例数据结构调整字段映射
+					return {
+						name: userData.nickName || userData.name || userData.nickname || userData.username || '',
+						phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '',
+						avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png',
+						role: userData.role || userData.userType || ''
+					};
+					
+				} catch (error) {
+					console.error('❌ 使用 getUserById 获取用户信息失败:', error);
+					// 返回默认用户信息（空值，避免显示"未知用户"）
+					return {
+						name: '',
+						phone: '',
+						avatar: '/static/images/default-avatar.png',
+						role: ''
+					};
 				}
 			},
 			
@@ -812,7 +951,7 @@
 									orderId, 
 									contractUrl, 
 									1  // contractStatus = 1 (合同待确认)
-								);
+									);
 								
 								console.log('✅ 合同URL和状态更新成功:', updateResult);
 								
@@ -978,39 +1117,6 @@
 				}
 			},
 			
-			// 根据用户ID获取发布人信息
-			async getPublisherInfo(userId) {
-				if (!userId) {
-					return null
-				}
-				
-				try {
-					console.log('👤 获取发布人信息，用户ID:', userId)
-					const publisherInfo = await getUserProfile(userId)
-					console.log('✅ 发布人信息获取成功:', publisherInfo)
-					
-					let publisherData = publisherInfo
-					if (publisherInfo && publisherInfo.data) {
-						publisherData = publisherInfo.data
-					}
-					
-					return {
-						name: publisherData.name || publisherData.nickname || '未知用户',
-						phone: publisherData.phone || publisherData.mobile || '暂无联系方式',
-						avatar: publisherData.avatar || '/static/images/default-avatar.png',
-						role: '客户'
-					}
-				} catch (error) {
-					console.error('❌ 获取发布人信息失败:', error)
-					return {
-						name: '客户',
-						phone: '暂无联系方式',
-						avatar: '/static/images/default-avatar.png',
-						role: '客户'
-					}
-				}
-			},
-			
 			// 切换订单状态
 			changeStatus(status) {
 				this.activeStatus = status
@@ -1067,15 +1173,19 @@
 				}
 			},
 			
-			// 更新状态统计（只统计设计师订单）
+			// 更新状态统计（只统计contractorId与当前用户ID相同的订单）
 			updateStatusCount() {
 				// 重置统计
 				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 }
 				
-				// 只统计设计师订单 (type=1)
-				const designerOrders = this.orderList.filter(order => order.type === 1);
+				// 只统计contractorId与当前用户ID相同的订单
+				const myOrders = this.orderList.filter(order => {
+					const currentUserId = String(this.userInfo.userId || '');
+					const contractorId = String(order.contractorId || '');
+					return contractorId === currentUserId && order.type === 1;
+				});
 				
-				designerOrders.forEach(order => {
+				myOrders.forEach(order => {
 					const status = order.status.toString()
 					if (this.statusCount[status] !== undefined) {
 						this.statusCount[status]++
@@ -1087,7 +1197,7 @@
 					}
 				})
 				
-				console.log('📊 设计师订单状态统计:', this.statusCount)
+				console.log('📊 我的订单状态统计:', this.statusCount)
 			},
 			
 			// 加载更多
@@ -1106,64 +1216,83 @@
 				this.loadOrderList()
 			},
 			
-			// 联系订单相关方（设计师 -> 客户）
-			contactOrderParty(order) {
+			// 在线咨询方法
+			async onlineConsult(order) {
+				console.log('🔥 开始在线咨询，订单:', order);
+				
+				// 检查登录状态
+				if (!isUserLoggedIn()) {
+					handleNotLoggedIn();
+					return;
+				}
+				
+				// 检查订单信息
+				if (!order || !order.userId) {
+					console.error('❌ 订单信息不完整:', order);
+					uni.showToast({
+						title: '订单信息无效',
+						icon: 'error'
+					});
+					return;
+				}
+				
+				// 检查是否是联系自己
+				if (order.userId === this.userInfo.userId) {
+					uni.showToast({
+						title: '不能联系自己',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				// 显示加载中
+				uni.showLoading({
+					title: '创建对话中...',
+					mask: true
+				});
+				
 				try {
-					// 当前用户ID（设计师）
-					const currentUserId = this.userInfo.userId;
-					
-					if (!currentUserId) {
-						uni.showToast({
-							title: '用户信息获取失败',
-							icon: 'none'
-						});
-						return;
-					}
-					
-					console.log('👤 当前用户信息（设计师）:', {
-						userId: currentUserId,
-						role: this.userInfo.role,
-						roleName: this.userInfo.roleName
+					// 这里需要根据你的conversationHelper.js中的函数来调整
+					// 假设你有一个类似的函数来创建对话
+					await this.createOrderConversation(
+						order.userId,
+						order.publisherInfo.name || '',
+						order.publisherInfo.avatar || '',
+						order.orderId
+					);
+				} catch (error) {
+					console.error('❌ 创建对话失败:', error);
+					uni.showToast({
+						title: '创建对话失败，请重试',
+						icon: 'error'
+					});
+				} finally {
+					uni.hideLoading();
+				}
+			},
+			
+			// 创建订单对话的方法
+			async createOrderConversation(otherUserId, otherUserName, otherUserAvatar, orderId) {
+				try {
+					console.log('💬 创建订单对话:', {
+						currentUserId: this.userInfo.userId,
+						otherUserId,
+						otherUserName,
+						orderId
 					});
 					
-					console.log('📋 订单信息:', {
-						orderId: order.orderId,
-						userId: order.userId, // 订单中的客户ID
-						type: order.type
-					});
+					// 这里应该调用你的对话创建API
+					// 假设你有一个创建对话的函数
+					// const result = await createConversation(this.userInfo.userId, otherUserId, orderId);
 					
-					// 确定对方ID（客户ID）
-					const otherUserId = order.userId || '';
-					
-					if (!otherUserId) {
-						uni.showToast({
-							title: '客户信息不存在',
-							icon: 'none'
-						});
-						return;
-					}
-					
-					// conversationId始终是当前用户ID
-					const conversationId = currentUserId;
-					
-					console.log('💬 聊天跳转参数:', {
-						conversationId: conversationId,
-						otherUserId: otherUserId,
-						userRole: this.userInfo.role,
-						orderId: order.orderId
-					});
-					
-					// 跳转到聊天详情页面
+					// 跳转到聊天页面
 					uni.navigateTo({
-						url: `/pages/chat/chatDetail?conversationId=${conversationId}&otherUserId=${otherUserId}&orderId=${order.orderId}`
+						url: `/pages/chat/chatDetail?conversationId=${this.userInfo.userId}&otherUserId=${otherUserId}&orderId=${orderId}`
 					});
 					
 				} catch (error) {
-					console.error('❌ 跳转聊天页面失败:', error);
-					uni.showToast({
-						title: '跳转失败，请重试',
-						icon: 'none'
-					});
+					console.error('❌ 创建订单对话失败:', error);
+					throw error;
 				}
 			},
 			
@@ -1217,51 +1346,49 @@
 	.back-btn {
 		display: flex;
 		align-items: center;
-		padding: 10rpx 20rpx;
+		padding: 12rpx 24rpx;
 		margin-right: 20rpx;
-		background-color: #f5f5f5;
-		border-radius: 20rpx;
+		background-color: #f8f9fa;
+		border-radius: 24rpx;
+		border: 1rpx solid #e9ecef;
+		transition: all 0.3s ease;
+	}
+	
+	.back-btn:active {
+		background-color: #e9ecef;
+		transform: scale(0.98);
 	}
 	
 	.back-icon {
 		font-size: 32rpx;
 		margin-right: 10rpx;
+		color: #6c757d;
 	}
 	
 	.back-text {
 		font-size: 28rpx;
-		color: #333;
+		color: #495057;
+		font-weight: 500;
 	}
 	
 	.header-section {
 		display: flex;
-		justify-content: flex-start;
+		justify-content: space-between;
 		align-items: center;
-		padding: 30rpx;
-		background: white;
-		border-bottom: 1rpx solid #eee;
+		padding: 30rpx 32rpx;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.1);
+		position: relative;
+		z-index: 10;
 	}
 	
 	.header-title {
 		font-size: 36rpx;
-		font-weight: bold;
-		color: #333;
+		font-weight: 700;
+		color: white;
+		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 		flex: 1;
 		text-align: center;
-		margin-right: 120rpx; /* 为右侧按钮留出空间 */
-	}
-	
-	/* 其他样式保持不变 */
-	.status-waiting-payment {
-		color: #ff6b35;
-		background-color: #fff0e6;
-		border: 1px solid #ff6b35;
-	}
-	
-	.container {
-		padding: 0;
-		background-color: #f5f5f5;
-		min-height: 100vh;
 	}
 	
 	.header-actions {
@@ -1270,16 +1397,35 @@
 	}
 	
 	.action-item {
-		padding: 10rpx;
+		width: 60rpx;
+		height: 60rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 50%;
+		margin-left: 20rpx;
+		transition: all 0.3s ease;
+	}
+	
+	.action-item:active {
+		background: rgba(255, 255, 255, 0.3);
+		transform: scale(0.95);
 	}
 	
 	.action-icon {
-		font-size: 40rpx;
+		font-size: 34rpx;
+		color: white;
 	}
 	
+	/* 订单状态筛选 */
 	.status-filter {
 		background: white;
-		padding: 20rpx 0;
+		padding: 24rpx 0;
+		position: sticky;
+		top: 0;
+		z-index: 5;
+		box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
 	}
 	
 	.filter-scroll {
@@ -1288,103 +1434,138 @@
 	
 	.filter-list {
 		display: inline-flex;
-		padding: 0 30rpx;
+		padding: 0 32rpx;
 	}
 	
 	.filter-item {
 		position: relative;
-		padding: 20rpx 30rpx;
-		margin-right: 40rpx;
+		padding: 16rpx 32rpx;
+		margin-right: 20rpx;
 		font-size: 28rpx;
-		color: #666;
+		color: #6c757d;
+		background: #f8f9fa;
+		border-radius: 25rpx;
+		transition: all 0.3s ease;
+		border: 1rpx solid transparent;
+	}
+	
+	.filter-item:last-child {
+		margin-right: 0;
 	}
 	
 	.filter-item.active {
-		color: #007AFF;
-		font-weight: bold;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		color: white;
+		font-weight: 600;
+		border-color: #5a67d8;
+		box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.2);
 	}
 	
-	.filter-item.active::after {
-		content: '';
-		position: absolute;
-		bottom: 10rpx;
-		left: 50%;
-		transform: translateX(-50%);
-		width: 40rpx;
-		height: 4rpx;
-		background: #007AFF;
-		border-radius: 2rpx;
+	.filter-item:not(.active):active {
+		background: #e9ecef;
+		transform: translateY(-2rpx);
 	}
 	
 	.count-badge {
 		position: absolute;
-		top: 10rpx;
-		right: 10rpx;
-		background: #FF3B30;
+		top: -8rpx;
+		right: -8rpx;
+		background: #ff6b6b;
 		color: white;
 		font-size: 20rpx;
-		padding: 4rpx 8rpx;
+		padding: 4rpx 10rpx;
 		border-radius: 20rpx;
-		min-width: 24rpx;
+		min-width: 28rpx;
 		text-align: center;
+		font-weight: 600;
+		box-shadow: 0 2rpx 6rpx rgba(255, 107, 107, 0.3);
+	}
+	
+	/* 订单列表容器 */
+	.container {
+		padding: 0;
+		background-color: #f5f7fa;
+		min-height: 100vh;
 	}
 	
 	.order-list {
-		height: calc(100vh - 200rpx);
-		padding: 20rpx;
+		height: calc(100vh - 240rpx);
+		padding: 24rpx;
 	}
 	
 	.refresh-container {
 		text-align: center;
-		padding: 20rpx;
+		padding: 30rpx;
+		background: white;
+		border-radius: 16rpx;
+		margin-bottom: 20rpx;
 	}
 	
 	.refresh-text {
 		font-size: 28rpx;
-		color: #999;
+		color: #6c757d;
+		font-weight: 500;
 	}
 	
+	/* 空状态和加载状态 */
 	.empty-state, .loading-state {
 		text-align: center;
-		padding: 100rpx 0;
+		padding: 120rpx 40rpx;
+		background: white;
+		border-radius: 20rpx;
+		margin-top: 40rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
 	}
 	
 	.empty-icon {
-		font-size: 120rpx;
+		font-size: 100rpx;
 		margin-bottom: 30rpx;
+		color: #adb5bd;
+		opacity: 0.7;
 	}
 	
 	.empty-text {
-		font-size: 32rpx;
-		color: #999;
+		font-size: 34rpx;
+		color: #495057;
 		margin-bottom: 20rpx;
+		font-weight: 600;
 	}
 	
 	.empty-desc {
 		font-size: 28rpx;
-		color: #ccc;
+		color: #adb5bd;
+		line-height: 1.5;
 	}
 	
 	.loading-text {
 		font-size: 28rpx;
-		color: #999;
+		color: #6c757d;
+		font-weight: 500;
 	}
 	
+	/* 订单项样式 */
 	.order-item {
 		background: white;
-		border-radius: 16rpx;
-		margin-bottom: 20rpx;
-		padding: 30rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05);
+		border-radius: 20rpx;
+		margin-bottom: 24rpx;
+		padding: 32rpx;
+		box-shadow: 0 6rpx 24rpx rgba(0, 0, 0, 0.06);
+		transition: all 0.3s ease;
+		border: 1rpx solid #e9ecef;
+	}
+	
+	.order-item:active {
+		transform: translateY(-2rpx);
+		box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
 	}
 	
 	.order-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 20rpx;
-		padding-bottom: 20rpx;
-		border-bottom: 1rpx solid #f0f0f0;
+		margin-bottom: 24rpx;
+		padding-bottom: 24rpx;
+		border-bottom: 1rpx solid #f1f3f5;
 	}
 	
 	.order-info {
@@ -1394,89 +1575,126 @@
 	.order-number {
 		display: block;
 		font-size: 26rpx;
-		color: #666;
-		margin-bottom: 10rpx;
+		color: #495057;
+		font-weight: 500;
+		margin-bottom: 8rpx;
 	}
 	
 	.order-time {
 		font-size: 24rpx;
-		color: #999;
+		color: #adb5bd;
 	}
 	
+	/* 订单状态样式 */
 	.order-status {
 		font-size: 26rpx;
-		font-weight: bold;
-		padding: 8rpx 16rpx;
+		font-weight: 600;
+		padding: 8rpx 20rpx;
 		border-radius: 20rpx;
+		text-align: center;
+		min-width: 120rpx;
 	}
 	
 	.status-pending {
-		background: #FFF6E6;
-		color: #FF9500;
+		background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+		color: #ff8f00;
+		border: 1rpx solid #ffd54f;
 	}
 	
 	.status-progress {
-		background: #E6F7FF;
-		color: #007AFF;
+		background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+		color: #1976d2;
+		border: 1rpx solid #64b5f6;
+	}
+	
+	.status-waiting-payment {
+		background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+		color: #d32f2f;
+		border: 1rpx solid #ef9a9a;
 	}
 	
 	.status-completed {
-		background: #E6FFED;
-		color: #52C41A;
+		background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+		color: #388e3c;
+		border: 1rpx solid #81c784;
 	}
 	
 	.status-canceled {
-		background: #FFF2F0;
-		color: #FF4D4F;
+		background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+		color: #757575;
+		border: 1rpx solid #bdbdbd;
 	}
 	
+	/* 订单内容 */
 	.order-content {
-		margin-bottom: 20rpx;
+		margin-bottom: 24rpx;
 	}
 	
 	.project-title {
 		font-size: 32rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 10rpx;
+		font-weight: 700;
+		color: #212529;
+		margin-bottom: 12rpx;
+		line-height: 1.4;
 	}
 	
 	.project-desc {
 		font-size: 28rpx;
-		color: #666;
-		margin-bottom: 15rpx;
-		line-height: 1.4;
+		color: #495057;
+		margin-bottom: 20rpx;
+		line-height: 1.5;
 	}
 	
 	.project-tags {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10rpx;
+		gap: 12rpx;
 	}
 	
 	.tag {
 		font-size: 24rpx;
-		color: #999;
-		background: #f5f5f5;
-		padding: 6rpx 12rpx;
-		border-radius: 12rpx;
+		color: #6c757d;
+		background: #f8f9fa;
+		padding: 8rpx 16rpx;
+		border-radius: 16rpx;
+		border: 1rpx solid #e9ecef;
+		font-weight: 500;
 	}
 	
+	.tag:nth-child(odd) {
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+	}
+	
+	.tag:nth-child(even) {
+		background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+		color: #1976d2;
+		border-color: #bbdefb;
+	}
+	
+	/* 设计师（客户）信息 */
 	.designer-info {
 		display: flex;
 		align-items: center;
-		margin-top: 20rpx;
-		padding: 20rpx;
-		background: #f9f9f9;
-		border-radius: 12rpx;
+		margin-top: 28rpx;
+		padding: 24rpx;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		border-radius: 16rpx;
+		border: 1rpx solid #dee2e6;
+		transition: all 0.3s ease;
+	}
+	
+	.designer-info:active {
+		background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
 	}
 	
 	.designer-avatar {
-		width: 80rpx;
-		height: 80rpx;
+		width: 88rpx;
+		height: 88rpx;
 		border-radius: 50%;
 		overflow: hidden;
-		margin-right: 20rpx;
+		margin-right: 24rpx;
+		border: 3rpx solid white;
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
 	}
 	
 	.designer-avatar image {
@@ -1490,101 +1708,163 @@
 	
 	.designer-name {
 		display: block;
-		font-size: 28rpx;
-		font-weight: bold;
-		color: #333;
-		margin-bottom: 5rpx;
+		font-size: 30rpx;
+		font-weight: 600;
+		color: #212529;
+		margin-bottom: 6rpx;
 	}
 	
 	.designer-role {
+		display: inline-block;
 		font-size: 24rpx;
-		color: #007AFF;
-		margin-bottom: 5rpx;
+		color: #1976d2;
+		background: rgba(25, 118, 210, 0.1);
+		padding: 4rpx 12rpx;
+		border-radius: 12rpx;
+		margin-bottom: 8rpx;
+		font-weight: 500;
 	}
 	
 	.designer-phone {
+		display: block;
 		font-size: 24rpx;
-		color: #666;
+		color: #6c757d;
 	}
 	
+	/* 联系按钮样式 */
 	.contact-btn {
 		font-size: 26rpx;
-		color: #007AFF;
-		padding: 10rpx 20rpx;
-		border: 1rpx solid #007AFF;
+		color: white;
+		padding: 14rpx 28rpx;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		border-radius: 20rpx;
+		font-weight: 600;
+		border: none;
+		box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.2);
+		transition: all 0.3s ease;
+		white-space: nowrap;
+	}
+	
+	.contact-btn:active {
+		transform: scale(0.98);
+		box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.3);
 	}
 	
 	.no-designer {
 		text-align: center;
-		padding: 20rpx;
-		background: #f9f9f9;
-		border-radius: 12rpx;
-		margin-top: 20rpx;
+		padding: 30rpx;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		border-radius: 16rpx;
+		margin-top: 28rpx;
+		border: 1rpx dashed #adb5bd;
 	}
 	
 	.no-designer-text {
 		font-size: 26rpx;
-		color: #999;
+		color: #adb5bd;
+		font-weight: 500;
 	}
 	
+	/* 订单底部 */
 	.order-footer {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding-top: 20rpx;
-		border-top: 1rpx solid #f0f0f0;
+		padding-top: 24rpx;
+		border-top: 1rpx solid #f1f3f5;
 	}
 	
 	.order-amount {
-		font-size: 28rpx;
+		font-size: 30rpx;
 	}
 	
 	.amount-label {
-		color: #666;
+		color: #495057;
+		font-weight: 500;
 	}
 	
 	.amount-value {
-		color: #FF6B35;
-		font-weight: bold;
+		color: #ff6b35;
+		font-weight: 700;
+		text-shadow: 0 2rpx 4rpx rgba(255, 107, 53, 0.1);
 	}
 	
 	.order-actions {
 		display: flex;
-		gap: 15rpx;
+		gap: 16rpx;
 	}
 	
 	.btn {
-		padding: 12rpx 24rpx;
+		padding: 14rpx 28rpx;
 		font-size: 26rpx;
 		border-radius: 20rpx;
 		border: none;
+		font-weight: 600;
+		transition: all 0.3s ease;
+	}
+	
+	.btn:active {
+		transform: scale(0.98);
 	}
 	
 	.btn.primary {
-		background: #007AFF;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		color: white;
+		box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.2);
+	}
+	
+	.btn.primary:active {
+		box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.3);
 	}
 	
 	.btn.secondary {
-		background: #f5f5f5;
-		color: #666;
-		border: 1rpx solid #ddd;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		color: #495057;
+		border: 1rpx solid #dee2e6;
 	}
 	
-	.status-text {
-		font-size: 26rpx;
-		color: #666;
-		padding: 12rpx 0;
+	.btn.secondary:active {
+		background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
 	}
 	
+	/* 加载更多 */
 	.load-more {
 		text-align: center;
-		padding: 30rpx;
+		padding: 40rpx 20rpx;
 	}
 	
 	.load-more-text {
 		font-size: 26rpx;
-		color: #999;
+		color: #adb5bd;
+		font-weight: 500;
+	}
+	
+	/* 响应式调整 */
+	@media (max-width: 375px) {
+		.header-title {
+			font-size: 32rpx;
+		}
+		
+		.order-item {
+			padding: 24rpx;
+		}
+		
+		.project-title {
+			font-size: 30rpx;
+		}
+		
+		.designer-info {
+			padding: 20rpx;
+		}
+		
+		.designer-avatar {
+			width: 80rpx;
+			height: 80rpx;
+		}
+		
+		.btn {
+			padding: 12rpx 24rpx;
+			font-size: 24rpx;
+		}
 	}
 </style>
