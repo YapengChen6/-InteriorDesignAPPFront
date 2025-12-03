@@ -87,7 +87,8 @@
       "navigationBarTitleText": "聊天详情",
       "navigationStyle": "custom"
     }
-  },{
+  },
+  {
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
@@ -180,12 +181,7 @@
       "navigationBarTitleText": "产品修改"
     }
   },
-  {
-    "path": "pages/merchant/product",
-    "style": {
-      "navigationBarTitleText": "产品页面"
-    }
-  },
+  
   {
     "path": "pages/post/post",
     "style": {
@@ -220,9 +216,62 @@
   {
     "path": "pages/shop/shop",
     "style": {
-      "navigationBarTitleText": "商品展示页面"
+      "navigationBarTitleText": "商家商品页面"
     }
   },
+  {
+    "path": "pages/shop/add_shop",
+    "style": {
+      "navigationBarTitleText": "新商品上传页面"
+    }
+  },
+  {
+    "path": "pages/shop/shop-list",
+    "style": {
+      "navigationBarTitleText": "购买居家建材页面"
+    }
+  },
+  {
+    "path": "pages/shop/cart",
+    "style": {
+      "navigationBarTitleText": "购物车"
+    }
+  },
+  {
+    "path": "pages/shop/product-detail",
+    "style": {
+      "navigationBarTitleText": "商品详情"
+    }
+  },
+  {
+    "path": "pages/shop/checkout",
+    "style": {
+      "navigationBarTitleText": "结算页面"
+    }
+  },
+  {
+    "path": "pages/shop/order-detail",
+    "style": {
+      "navigationBarTitleText": "普通用户订单详情页面"
+    }
+  },
+  {
+    "path": "pages/order/detail",
+    "style": {
+      "navigationBarTitleText": "商家订单详情页面"
+    }
+  },
+  {
+    "path": "pages/shop/manage",
+    "style": {
+      "navigationBarTitleText": "商家页面"
+    }
+  }, {
+    "path": "pages/shop/shop-detail",
+    "style": {
+      "navigationBarTitleText": "商家详情"
+    }
+  }, 
   {
     "path": "pages/post/order",
     "style": {
@@ -371,10 +420,24 @@
   	}
   },
   {
-  	"path" : "pages/order-hall/orderstage-detail",
+  	"path" : "pages/mine/likes/likes",
   	"style" : 
   	{
-  		"navigationBarTitleText" : "监理订单每个监理订单阶段的详情页面"
+  		"navigationBarTitleText" : "点赞页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/favorites/favorites",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "收藏页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/follows/follows",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "关注页面"
   	}
 },
 {

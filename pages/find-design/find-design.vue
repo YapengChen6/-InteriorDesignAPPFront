@@ -88,6 +88,8 @@
 
 <script>
 import { getDesignerList } from "@/api/designer.js"
+import { getUserProfile } from "@/api/users.js"
+import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 
 export default {
   data() {
@@ -97,7 +99,9 @@ export default {
       searchQuery: '',
       allDesigners: [],
       searchTimer: null,
-      defaultAvatar: '/static/default-avatar.png'
+      defaultAvatar: '/static/default-avatar.png',
+	  currentUserInfo: null, // 添加当前用户信息
+	  isLoadingUser: false // 添加用户信息加载状态
     }
   },
   computed: {
@@ -114,7 +118,9 @@ export default {
       );
     }
   },
-  onLoad() {
+  async onLoad() {
+    // 先获取用户信息，再加载设计师列表
+    await this.getCurrentUserInfo();
     this.loadDesigners();
   },
   onShow() {
@@ -123,6 +129,84 @@ export default {
     }
   },
   methods: {
+    // 新增：获取当前用户信息的方法
+    async getCurrentUserInfo() {
+      // 防止重复请求
+      if (this.isLoadingUser) return;
+      
+      this.isLoadingUser = true;
+      try {
+        // 先尝试从缓存获取
+        const cachedUserInfo = uni.getStorageSync('userInfo');
+        if (cachedUserInfo && cachedUserInfo.userId) {
+          this.currentUserInfo = cachedUserInfo;
+          console.log('✅ 从缓存获取用户信息:', this.currentUserInfo);
+          this.isLoadingUser = false;
+          return;
+        }
+        
+        // 缓存中没有，从API获取
+        const response = await getUserProfile();
+        console.log('📡 用户信息API响应:', response);
+        
+        if (response.code === 200 && response.data) {
+          this.currentUserInfo = response.data;
+          console.log('✅ 当前用户信息:', this.currentUserInfo);
+          
+          // 存储到全局数据，方便其他地方使用
+          if (getApp().globalData) {
+            getApp().globalData.userInfo = response.data;
+          }
+          
+          // 存储到本地缓存
+          try {
+            uni.setStorageSync('userInfo', response.data);
+            // 单独存储用户ID，方便其他页面使用
+            if (response.data.userId) {
+              uni.setStorageSync('userId', response.data.userId.toString());
+            }
+          } catch (storageError) {
+            console.warn('⚠️ 存储用户信息失败:', storageError);
+          }
+        } else {
+          console.error('❌ 获取用户信息失败:', response.msg);
+          this.currentUserInfo = null;
+          // 可能需要重新登录
+          this.handleUserInfoError();
+        }
+      } catch (error) {
+        console.error('❌ 获取用户信息异常:', error);
+        this.currentUserInfo = null;
+        this.handleUserInfoError();
+      } finally {
+        this.isLoadingUser = false;
+      }
+    },
+    
+    // 处理用户信息获取失败
+    handleUserInfoError() {
+      // 清除可能已损坏的缓存
+      try {
+        uni.removeStorageSync('userInfo');
+        uni.removeStorageSync('userId');
+      } catch (e) {
+        console.warn('清除缓存失败:', e);
+      }
+      
+      // 提示用户重新登录
+      uni.showModal({
+        title: '提示',
+        content: '获取用户信息失败，请重新登录',
+        showCancel: false,
+        success: () => {
+          uni.reLaunch({
+            url: '/pages/register'
+          });
+        }
+      });
+    },
+	  
+	  
     async loadDesigners() {
       try {
         this.loading = true;
@@ -162,63 +246,6 @@ export default {
         isOnline: designer.isOnline || false
       }));
     },
-
-    useMockData() {
-      this.allDesigners = [
-        {
-          userId: 104,
-          name: '设计专家',
-          nickName: '专家设计',
-          avatar: '/static/default-avatar.png',
-          rating: 4.8,
-          caseCount: 67,
-          address: '北京市朝阳区',
-          city: '北京',
-          phone: '138****5678',
-          specialty: '现代简约、北欧风格',
-          experience: 6,
-          isCertified: true,
-          isOnline: true
-        },
-        {
-          userId: 105,
-          name: '创意空间',
-          nickName: '创意',
-          avatar: '/static/default-avatar.png',
-          rating: 4.9,
-          caseCount: 89,
-          address: '上海市浦东新区',
-          city: '上海',
-          phone: '139****1234',
-          specialty: '工业风、LOFT',
-          experience: 8,
-          isCertified: true,
-          isOnline: false
-        },
-        {
-          userId: 106,
-          name: '空间魔术',
-          nickName: '魔术师',
-          avatar: '/static/default-avatar.png',
-          rating: 4.7,
-          caseCount: 45,
-          address: '广州市天河区',
-          city: '广州',
-          phone: '137****9876',
-          specialty: '小户型、收纳设计',
-          experience: 5,
-          isCertified: true,
-          isOnline: true
-        }
-      ];
-      
-      uni.showToast({
-        title: '使用模拟数据',
-        icon: 'none',
-        duration: 2000
-      });
-    },
-
     onSearchInput() {
       clearTimeout(this.searchTimer);
       this.searchTimer = setTimeout(() => {
@@ -235,7 +262,6 @@ export default {
         });
         return;
       }
-      
       console.log('跳转到设计师详情，ID:', userId);
       
       // 使用正确的路径：/pages/find-design/design-detail
@@ -257,32 +283,14 @@ export default {
         `/pages/find-design/design-detail?userId=${userId}`,
         `/pages/find-design/design-detail?designerId=${userId}`,
         `/pages/find-design/design-detail?user_id=${userId}`,
-        // 如果还有问题，可能是路径大小写问题
         `/pages/find-design/design-detail?ID=${userId}`,
         `/pages/find-design/design-detail?uid=${userId}`
       ];
       
-      for (let i = 0; i < urls.length; i++) {
-        setTimeout(() => {
-          console.log(`尝试跳转方案 ${i + 1}:`, urls[i]);
-          uni.navigateTo({
-            url: urls[i],
-            fail: (err) => {
-              console.error(`跳转方案${i + 1}失败:`, err);
-              if (i === urls.length - 1) {
-                uni.showModal({
-                  title: '提示',
-                  content: '无法跳转到设计师详情页，请确认页面路径',
-                  showCancel: false
-                });
-              }
-            }
-          });
-        }, i * 200);
-      }
     },
 
     contactDesigner(designer) {
+       //console.log(' 📱 当前设计师信息:', designer.userId);
       if (!designer || !designer.userId) {
         uni.showToast({
           title: '设计师信息无效',
@@ -292,7 +300,7 @@ export default {
       }
       
       uni.showActionSheet({
-        itemList: ['查看详情', '电话联系', '在线咨询'],
+        itemList: ['查看详情', '在线咨询'],
         success: (res) => {
           const tapIndex = res.tapIndex;
           switch (tapIndex) {
@@ -300,9 +308,6 @@ export default {
               this.goToDesignerDetail(designer.userId);
               break;
             case 1:
-              this.callDesigner(designer);
-              break;
-            case 2:
               this.onlineConsult(designer);
               break;
           }
@@ -338,10 +343,31 @@ export default {
       }
     },
 
-    onlineConsult(designer) {
-      uni.navigateTo({
-        url: `/pages/chat/index?id=${designer.userId}&name=${designer.name}`
-      });
+    async onlineConsult(designer) {
+      console.log('🔥 开始在线咨询设计师:', designer);
+      
+      // 检查登录状态
+      if (!isUserLoggedIn()) {
+        handleNotLoggedIn();
+        return;
+      }
+      
+      // 检查设计师信息
+      if (!designer || !designer.userId) {
+        console.error('❌ 设计师信息不完整:', designer);
+        uni.showToast({
+          title: '设计师信息无效',
+          icon: 'error'
+        });
+        return;
+      }
+      
+      // 使用辅助工具函数创建对话并跳转
+      await createConversationAndNavigate(
+        designer.userId,
+        designer.name || designer.nickName || '设计师',
+        designer.avatar || ''
+      );
     },
 
     viewAvatar(designer) {

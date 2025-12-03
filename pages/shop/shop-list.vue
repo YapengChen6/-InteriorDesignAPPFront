@@ -4,9 +4,15 @@
     <view class="header">
       <view class="title-wrap">
         <text class="title">好物精选</text>
-        <text class="subtitle">实时同步全部商品 · 点击卡片即可查看详情</text>
+        <!-- <text class="subtitle">实时同步全部商品 · 点击卡片即可查看详情</text> -->
       </view>
-      <view class="header-badge">JD STYLE</view>
+      <view class="header-right">
+        <!-- <view class="header-badge">JD STYLE</view> -->
+        <view class="cart-entry" @click="goCart">
+          <uni-icons type="cart" size="22" color="#fa541c"></uni-icons>
+          <text class="cart-entry-text">购物车</text>
+        </view>
+      </view>
     </view>
 
     <!-- 搜索 & 筛选 -->
@@ -83,20 +89,27 @@
             ></image>
             <view
               class="status-badge"
-              :class="item.status === '0' ? 'on' : 'off'"
+              :class="getProductStatus(item) === '0' ? 'on' : 'off'"
             >
-              {{ item.status === '0' ? '上架' : '下架' }}
+              {{ getProductStatus(item) === '0' ? '上架' : '下架' }}
             </view>
             <view class="corner-tag" v-if="item.stock > 99">爆款</view>
           </view>
 
           <view class="card-body">
             <text class="name">{{ item.productName || '未命名商品' }}</text>
+            <!-- 商家信息 -->
+            <view class="shop-info-row" v-if="item.shopName || item.shopId" @click.stop="goToShopDetail(item.shopId)">
+              <image 
+                class="shop-avatar-small" 
+                :src="item.shopAvatar || '/static/images/default-shop.png'"
+                mode="aspectFill"
+              ></image>
+              <text class="shop-name-text">{{ item.shopName || '商家店铺' }}</text>
+              <uni-icons type="arrowright" size="14" color="#999"></uni-icons>
+            </view>
             <view class="price-row">
               <text class="price">￥{{ formatPrice(item.marketPrice) }}</text>
-              <text class="sub-price" v-if="item.costPrice">
-                成本 ￥{{ formatPrice(item.costPrice) }}
-              </text>
             </view>
             <text class="desc">
               {{ item.productDetail || '暂无描述' }}
@@ -104,6 +117,22 @@
             <view class="meta-row">
               <text class="stock">库存 {{ item.stock || 0 }}</text>
               <text class="category">{{ item.categoryPath || '未分类' }}</text>
+            </view>
+            <view class="card-actions">
+              <button
+                class="action-btn ghost"
+                :disabled="actionLoadingId === item.id"
+                @click.stop="addToCart(item)"
+              >
+                加入购物车
+              </button>
+              <button
+                class="action-btn primary"
+                :disabled="actionLoadingId === item.id"
+                @click.stop="buyNow(item)"
+              >
+                立即购买
+              </button>
             </view>
           </view>
         </view>
@@ -139,6 +168,7 @@
 <script>
 import * as productApi from '@/api/product.js'
 import * as mediaApi from '@/api/media.js'
+import * as cartApi from '@/api/cart.js'
 
 export default {
   name: 'ShopProductList',
@@ -152,7 +182,8 @@ export default {
       searchQuery: '',
       statusFilter: 'all', // all | '0' | '2'
       loadMoreStatus: 'more',
-      productImagesMap: new Map()
+      productImagesMap: new Map(),
+      actionLoadingId: null
     }
   },
   computed: {
@@ -160,9 +191,14 @@ export default {
     filteredList() {
       let list = [...this.allProducts]
 
-      // 状态筛选
+      // 状态筛选（统一使用 productStatus 或 status）
       if (this.statusFilter !== 'all') {
-        list = list.filter(item => String(item.status) === this.statusFilter)
+        list = list.filter(item => {
+          const status = item.productStatus !== undefined 
+            ? String(item.productStatus) 
+            : (item.status !== undefined ? String(item.status) : '0')
+          return status === this.statusFilter
+        })
       }
 
       // 搜索
@@ -192,18 +228,27 @@ export default {
   methods: {
     // 将原始商品数据包装成前端展示结构（与管理页保持一致字段）
     wrapProduct(product) {
+      // 统一使用 productStatus 字段，如果没有则使用 status
+      const productStatus = product.productStatus !== undefined 
+        ? String(product.productStatus) 
+        : (product.status !== undefined ? String(product.status) : '0')
+      
       return {
         id: product.productSpuId || product.spuId || product.id,
         productName: product.productName,
         categoryPath: product.categoryPath,
         productDetail: product.productDetail,
         marketPrice: product.marketPrice,
-        costPrice: product.costPrice,
-        status: product.status !== undefined ? String(product.status) : '0',
+        status: productStatus, // 统一使用 status 字段
+        productStatus: productStatus, // 同时保留 productStatus 字段以保持兼容
         stock: product.stock || 0,
+        specType: product.specType,
         imageUrl: product.imageUrl,
         coverImage: product.coverImage,
         imageList: product.imageList || [],
+        shopId: product.shopId, // 商家ID
+        shopName: product.shopName, // 商家名称
+        shopAvatar: product.shopAvatar, // 商家头像
         originalData: product
       }
     },
@@ -346,6 +391,12 @@ export default {
       await this.loadImagesForCurrentPage()
     },
 
+    goCart() {
+      uni.navigateTo({
+        url: '/pages/shop/cart'
+      })
+    },
+
     refresh() {
       this.refreshing = true
       this.loadData()
@@ -359,6 +410,77 @@ export default {
       } else {
         this.loadMoreStatus = 'more'
       }
+    },
+
+    getProductStatus(product) {
+      // 统一获取商品状态
+      if (product.productStatus !== undefined) {
+        return String(product.productStatus)
+      }
+      if (product.status !== undefined) {
+        return String(product.status)
+      }
+      return '0'
+    },
+    
+    async performAddToCart(product) {
+      if (!product || !product.id) {
+        uni.showToast({ title: '商品信息缺失', icon: 'none' })
+        return false
+      }
+      if (this.getProductStatus(product) !== '0') {
+        uni.showToast({ title: '商品未上架', icon: 'none' })
+        return false
+      }
+      if (product.specType === '1') {
+        uni.showToast({ title: '多规格商品请前往详情选择规格', icon: 'none' })
+        return false
+      }
+      const payload = {
+        spuId: product.id,
+        skuId: null,
+        quantity: 1
+      }
+      this.actionLoadingId = product.id
+      try {
+        const res = await cartApi.addCartItem(payload)
+        if (res && (res.code === 200 || res.success)) {
+          uni.showToast({ title: '已加入购物车', icon: 'success' })
+          return true
+        }
+        uni.showToast({ title: res?.msg || '加入购物车失败', icon: 'none' })
+        return false
+      } catch (error) {
+        console.error('加入购物车失败:', error)
+        uni.showToast({ title: error.message || '加入购物车失败', icon: 'none' })
+        return false
+      } finally {
+        this.actionLoadingId = null
+      }
+    },
+
+    async addToCart(product) {
+      await this.performAddToCart(product)
+    },
+
+    async buyNow(product) {
+      const success = await this.performAddToCart(product)
+      if (success) {
+        uni.navigateTo({
+          url: '/pages/shop/cart'
+        })
+      }
+    },
+    
+    // 跳转到商家详情页
+    goToShopDetail(shopId) {
+      if (!shopId) {
+        uni.showToast({ title: '商家信息不存在', icon: 'none' })
+        return
+      }
+      uni.navigateTo({
+        url: `/pages/shop/shop-detail?shopId=${shopId}`
+      })
     }
   },
   onLoad() {
@@ -409,6 +531,28 @@ export default {
   padding: 6rpx 20rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.6);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.cart-entry {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(250, 84, 28, 0.35);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 6rpx 18rpx rgba(250, 84, 28, 0.15);
+}
+
+.cart-entry-text {
+  font-size: 24rpx;
+  color: #fa541c;
 }
 
 .filter-bar {
@@ -559,6 +703,29 @@ export default {
   color: #909399;
 }
 
+.shop-info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12rpx;
+  padding: 8rpx 12rpx;
+  background-color: #f5f5f5;
+  border-radius: 8rpx;
+}
+
+.shop-avatar-small {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  margin-right: 8rpx;
+  background-color: #e0e0e0;
+}
+
+.shop-name-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #666;
+}
+
 .desc {
   font-size: 24rpx;
   color: #606266;
@@ -573,6 +740,33 @@ export default {
   justify-content: space-between;
   font-size: 22rpx;
   color: #a0a3a8;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  gap: 16rpx;
+}
+
+.action-btn {
+  flex: 1;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  padding: 16rpx;
+}
+
+.action-btn.ghost {
+  border: 2rpx solid #fa541c;
+  color: #fa541c;
+  background: #fff;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #ff7a45, #fa541c);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8rpx 18rpx rgba(250, 84, 28, 0.35);
 }
 
 .load-more {

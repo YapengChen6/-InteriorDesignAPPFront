@@ -1,14 +1,41 @@
 <template>
   <view class="container">
     <view class="header">
-      <text class="title">PDF文档预览</text>
-      <text class="subtitle">{{ fileName }}</text>
+      <text class="title">功能测试页面</text>
+      <text class="subtitle">对话检查 & PDF预览</text>
     </view>
     
-    <view class="preview-card">
-      <view class="pdf-icon">📄</view>
-      <text class="card-title">PDF文档</text>
-      <text class="card-desc">点击下方按钮预览文档</text>
+    <!-- 对话检查测试区域 -->
+    <view class="test-section">
+      <view class="section-title">对话检查功能测试</view>
+      
+      <view class="input-group">
+        <text class="input-label">用户1 ID:</text>
+        <input class="test-input" v-model="testUserId1" placeholder="输入用户1的ID" type="number" />
+      </view>
+      
+      <view class="input-group">
+        <text class="input-label">用户2 ID:</text>
+        <input class="test-input" v-model="testUserId2" placeholder="输入用户2的ID" type="number" />
+      </view>
+      
+      <button class="test-btn" @click="testConversationCheck" :loading="conversationLoading">
+        <text class="btn-text">{{ conversationLoading ? '检查中...' : '测试对话检查' }}</text>
+      </button>
+      
+      <view v-if="conversationResult" class="result-box">
+        <text class="result-title">检查结果:</text>
+        <text class="result-text">{{ conversationResult }}</text>
+      </view>
+    </view>
+    
+    <!-- PDF预览测试区域 -->
+    <view class="test-section">
+      <view class="section-title">PDF预览功能测试</view>
+      <view class="preview-card">
+        <view class="pdf-icon">📄</view>
+        <text class="card-title">PDF文档</text>
+        <text class="card-desc">{{ fileName }}</text>
       
       <button class="preview-btn" @click="downloadAndPreview" :loading="loading">
         <text class="btn-icon">👁️</text>
@@ -22,6 +49,7 @@
           <view class="progress-inner" :style="{width: downloadProgress + '%'}"></view>
         </view>
       </view>
+    </view>
     </view>
     
     <view class="action-buttons">
@@ -47,9 +75,16 @@
 </template>
 
 <script>
+import { checkOrCreateConversation } from '@/api/conversationCheck.js'
+
 export default {
   data() {
     return {
+      // 对话检查测试相关
+      testUserId1: '',
+      testUserId2: '',
+      conversationLoading: false,
+      conversationResult: '',
       originalPdfUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/11/26/addce7090a794b8582a87a2531a0b2ec.pdf',
       backendBaseUrl: 'http://localhost:8081/api/media/preview',
       fileName: '测试文档.pdf',
@@ -66,6 +101,69 @@ export default {
     }
   },
   methods: {
+    // 测试对话检查功能
+    async testConversationCheck() {
+      if (!this.testUserId1 || !this.testUserId2) {
+        uni.showToast({
+          title: '请输入两个用户ID',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      if (this.testUserId1 === this.testUserId2) {
+        uni.showToast({
+          title: '不能与自己创建对话',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      this.conversationLoading = true;
+      this.conversationResult = '';
+      
+      try {
+        console.log('🧪 测试对话检查:', {
+          userId1: this.testUserId1,
+          userId2: this.testUserId2
+        });
+        
+        const response = await checkOrCreateConversation(
+          parseInt(this.testUserId1), 
+          parseInt(this.testUserId2)
+        );
+        
+        console.log('✅ 对话检查响应:', response);
+        
+        if (response.code === 200) {
+          const data = response.data;
+          this.conversationResult = JSON.stringify({
+            exists: data.exists,
+            conversationId: data.conversation.conversationId,
+            message: data.message,
+            createTime: data.conversation.createTime
+          }, null, 2);
+          
+          uni.showToast({
+            title: data.exists ? '对话已存在' : '创建新对话',
+            icon: 'success'
+          });
+        } else {
+          throw new Error(response.msg || '检查失败');
+        }
+        
+      } catch (error) {
+        console.error('❌ 对话检查失败:', error);
+        this.conversationResult = `错误: ${error.message}`;
+        
+        uni.showToast({
+          title: error.message || '检查失败',
+          icon: 'none'
+        });
+      } finally {
+        this.conversationLoading = false;
+      }
+    },
     async downloadAndPreview() {
       this.loading = true;
       this.downloadProgress = 0;
@@ -225,6 +323,89 @@ export default {
   padding: 40rpx;
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 测试区域样式 */
+.test-section {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 40rpx;
+  margin-bottom: 30rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 30rpx;
+  text-align: center;
+}
+
+.input-group {
+  margin-bottom: 25rpx;
+}
+
+.input-label {
+  display: block;
+  font-size: 28rpx;
+  color: #666;
+  margin-bottom: 10rpx;
+}
+
+.test-input {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 20rpx;
+  border: 2rpx solid #e0e0e0;
+  border-radius: 10rpx;
+  font-size: 28rpx;
+  background: #f8f9fa;
+}
+
+.test-input:focus {
+  border-color: #007AFF;
+  background: #fff;
+}
+
+.test-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: #fff;
+  border: none;
+  border-radius: 15rpx;
+  padding: 25rpx 0;
+  font-size: 30rpx;
+  font-weight: bold;
+  margin: 30rpx 0;
+}
+
+.test-btn:active {
+  transform: scale(0.98);
+}
+
+.result-box {
+  background: #f8f9fa;
+  border: 2rpx solid #e9ecef;
+  border-radius: 10rpx;
+  padding: 20rpx;
+  margin-top: 20rpx;
+}
+
+.result-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #495057;
+  margin-bottom: 10rpx;
+}
+
+.result-text {
+  display: block;
+  font-size: 24rpx;
+  color: #6c757d;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .header {

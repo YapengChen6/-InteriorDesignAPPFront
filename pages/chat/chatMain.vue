@@ -30,7 +30,7 @@ export default {
       if (options.name) params.push(`name=${encodeURIComponent(options.name)}`)
       if (options.avatar) params.push(`avatar=${encodeURIComponent(options.avatar)}`)
       
-      redirectUrl = `/pages/chat/chatDetail?${params.join('&')}`
+      redirectUrl = `/pages/chat/chatDetail.vue?${params.join('&')}`
       console.log('🔄 跳转到聊天详情:', redirectUrl)
     } else {
       console.log('🔄 跳转到聊天列表')
