@@ -73,6 +73,7 @@
 <script>
 import { getSupervisorList, contactSupervisor } from '@/api/supervisorpublic'
 import { getUserProfile } from "@/api/users.js"
+import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 export default {
   name: 'SupervisorList',
   data() {
@@ -94,47 +95,89 @@ export default {
     }
   },
   
-  onLoad() {
-    this.loadSupervisors()
-		this.getCurrentUserInfo(); // 页面加载时获取用户信息
+  async onLoad() {
+    // 先获取用户信息，再加载监理列表
+    await this.getCurrentUserInfo();
+    this.loadSupervisors();
   },
   
   methods: {
-	  // 新增：获取当前用户信息的方法
-	  async getCurrentUserInfo() {
-	          // 防止重复请求
-	      if (this.isLoadingUser) return;
-	          
-	      this.isLoadingUser = true;
-	      try {
-	  		const response = await getUserProfile();
-	          console.log('用户信息API响应:', response);
-	            
-	          if (response.code === 200) {
-	          this.currentUserInfo = response.data;
-	          console.log('当前用户信息:', this.currentUserInfo);
-	              // 存储到全局数据，方便其他地方使用
-	              if (getApp().globalData) {
-	                getApp().globalData.userInfo = response.data;
-	              }
-	              
-	              // 存储到本地缓存
-	              try {
-	                uni.setStorageSync('userInfo', response.data);
-	              } catch (storageError) {
-	                console.log('存储用户信息失败:', storageError);
-	              }
-	            } else {
-	              console.error('获取用户信息失败:', response.msg);
-	              this.currentUserInfo = null;
-	            }
-	          } catch (error) {
-	            console.error('获取用户信息异常:', error);
-	            this.currentUserInfo = null;
-	          } finally {
-	            this.isLoadingUser = false;
-	          }
-	        },
+    // 新增：获取当前用户信息的方法
+    async getCurrentUserInfo() {
+      // 防止重复请求
+      if (this.isLoadingUser) return;
+      
+      this.isLoadingUser = true;
+      try {
+        // 先尝试从缓存获取
+        const cachedUserInfo = uni.getStorageSync('userInfo');
+        if (cachedUserInfo && cachedUserInfo.userId) {
+          this.currentUserInfo = cachedUserInfo;
+          console.log('✅ 从缓存获取用户信息:', this.currentUserInfo);
+          this.isLoadingUser = false;
+          return;
+        }
+        
+        // 缓存中没有，从API获取
+        const response = await getUserProfile();
+        console.log('📡 用户信息API响应:', response);
+        
+        if (response.code === 200 && response.data) {
+          this.currentUserInfo = response.data;
+          console.log('✅ 当前用户信息:', this.currentUserInfo);
+          
+          // 存储到全局数据，方便其他地方使用
+          if (getApp().globalData) {
+            getApp().globalData.userInfo = response.data;
+          }
+          
+          // 存储到本地缓存
+          try {
+            uni.setStorageSync('userInfo', response.data);
+            // 单独存储用户ID，方便其他页面使用
+            if (response.data.userId) {
+              uni.setStorageSync('userId', response.data.userId.toString());
+            }
+          } catch (storageError) {
+            console.warn('⚠️ 存储用户信息失败:', storageError);
+          }
+        } else {
+          console.error('❌ 获取用户信息失败:', response.msg);
+          this.currentUserInfo = null;
+          // 可能需要重新登录
+          this.handleUserInfoError();
+        }
+      } catch (error) {
+        console.error('❌ 获取用户信息异常:', error);
+        this.currentUserInfo = null;
+        this.handleUserInfoError();
+      } finally {
+        this.isLoadingUser = false;
+      }
+    },
+    
+    // 处理用户信息获取失败
+    handleUserInfoError() {
+      // 清除可能已损坏的缓存
+      try {
+        uni.removeStorageSync('userInfo');
+        uni.removeStorageSync('userId');
+      } catch (e) {
+        console.warn('清除缓存失败:', e);
+      }
+      
+      // 提示用户重新登录
+      uni.showModal({
+        title: '提示',
+        content: '获取用户信息失败，请重新登录',
+        showCancel: false,
+        success: () => {
+          uni.reLaunch({
+            url: '/pages/register'
+          });
+        }
+      });
+    },
     // 加载监工列表
     async loadSupervisors() {
       this.loading = true
@@ -200,29 +243,59 @@ export default {
     },
     
     // 联系监工
-    async contactSupervisor(userId) {
-      try {
-        uni.showModal({
-          title: '联系监工',
-          content: '确定要联系此监工吗？',
-          success: async (res) => {
-			this.onlineConsult(userId)
-          }
-        })
-      } catch (error) {
-        console.error('联系监工失败:', error)
+    async contactSupervisor(supervisorId) {
+      // 找到对应的监理信息
+      const supervisor = this.supervisors.find(s => s.userId === supervisorId);
+      
+      if (!supervisor) {
         uni.showToast({
-          title: '网络错误，请稍后重试',
-          icon: 'none'
-        })
+          title: '监理信息不存在',
+          icon: 'error'
+        });
+        return;
       }
-    },
-    onlineConsult(supervisorUserId) {
-    	//获取用户ID
-      const currentUserId = this.currentUserInfo.userId;
-      uni.navigateTo({
-          url: `/pages/chat/chatDetail?conversationId=${currentUserId}&otherUserId=${supervisorUserId}`
+      
+      uni.showActionSheet({
+        itemList: ['查看详情', '在线咨询'],
+        success: (res) => {
+          const tapIndex = res.tapIndex;
+          switch (tapIndex) {
+            case 0:
+              this.goToSupervisorDetail(supervisor);
+              break;
+            case 1:
+              this.onlineConsult(supervisor);
+              break;
+          }
+        }
       });
+    },
+    
+    async onlineConsult(supervisor) {
+      console.log('🔥 开始在线咨询监理:', supervisor);
+      
+      // 检查登录状态
+      if (!isUserLoggedIn()) {
+        handleNotLoggedIn();
+        return;
+      }
+      
+      // 检查监理信息
+      if (!supervisor || !supervisor.userId) {
+        console.error('❌ 监理信息不完整:', supervisor);
+        uni.showToast({
+          title: '监理信息无效',
+          icon: 'error'
+        });
+        return;
+      }
+      
+      // 使用辅助工具函数创建对话并跳转
+      await createConversationAndNavigate(
+        supervisor.userId,
+        supervisor.name || '监理',
+        supervisor.avatar || ''
+      );
     },
     // 格式化手机号
     formatPhone(phone) {
