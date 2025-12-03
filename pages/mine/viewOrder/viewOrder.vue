@@ -165,7 +165,7 @@ import * as orderApi from '@/api/product-order.js'
   },
   onUnload() {
     uni.$off(ORDER_EVENT, this.handleOrderEvent)
-  },
+		},
 		methods: {
     async loadOrders() {
       this.loading = true
