@@ -152,6 +152,23 @@
 					</view>
 				</view>
 
+				<!-- 联系设计师卡片 -->
+				<view class="card" v-if="designerInfo.name && designerInfo.name !== '未知设计师'">
+					<view class="card-header">
+						<view class="card-icon">💬</view>
+						<text class="card-title">联系设计师</text>
+					</view>
+					<view class="card-body">
+						<view class="contact-content">
+							<text class="contact-desc">对方案有疑问？直接联系设计师沟通</text>
+							<button class="contact-btn" @click="contactDesigner">
+								<text class="contact-icon">💬</text>
+								<text class="contact-text">在线联系设计师</text>
+							</button>
+						</view>
+					</view>
+				</view>
+
 				<!-- 底部操作区域 - 始终显示，无限制条件 -->
 				<view class="bottom-actions" v-if="schemeData">
 					<view class="action-buttons">
@@ -203,6 +220,8 @@
 	import { getDesignSchemeList, updateDesignSchemeStatus } from '@/api/designScheme.js'
 	import uniPopup from '@/uni_modules/uni-popup/components/uni-popup/uni-popup.vue'
 	import uniPopupMessage from '@/uni_modules/uni-popup/components/uni-popup-message/uni-popup-message.vue'
+	import { isUserLoggedIn, handleNotLoggedIn, createConversationAndNavigate } from "@/utils/conversationHelper.js"
+	import { getUserById } from '@/api/users.js'
 
 	// 方案状态常量
 	const SCHEME_STATUS = {
@@ -320,6 +339,143 @@
 		},
 		
 		methods: {
+			// 在线联系设计师 - 完善版本
+			async contactDesigner() {
+				console.log('💬 客户开始联系设计师，订单ID:', this.orderId);
+				
+				// 1. 检查登录状态
+				if (!isUserLoggedIn()) {
+					handleNotLoggedIn();
+					return;
+				}
+				
+				// 2. 检查方案信息完整性
+				if (!this.schemeData || !this.schemeData.contractorId) {
+					console.error('❌ 方案信息不完整:', this.schemeData);
+					uni.showToast({
+						title: '方案信息无效',
+						icon: 'error',
+						duration: 2000
+					});
+					return;
+				}
+				
+				// 3. 获取设计师ID（承接方）
+				const designerId = this.schemeData.contractorId;
+				if (!designerId) {
+					uni.showToast({
+						title: '设计师信息不存在',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				// 4. 获取设计师详细信息
+				let designerName = this.designerInfo.name || '';
+				let designerAvatar = this.designerInfo.avatar || '';
+				
+				// 如果设计师信息不全，尝试通过API获取
+				if (!designerName || designerName === '未知设计师') {
+					try {
+						const designerInfo = await this.getDesignerInfoById(designerId);
+						designerName = designerInfo.name || '设计师';
+						designerAvatar = designerInfo.avatar || '';
+					} catch (error) {
+						console.warn('⚠️ 获取设计师详细信息失败:', error);
+					}
+				}
+				
+				// 5. 显示加载中
+				uni.showLoading({
+					title: '创建对话中...',
+					mask: true
+				});
+				
+				try {
+					console.log('💬 准备创建对话:', {
+						客户身份: '用户',
+						设计师ID: designerId,
+						设计师姓名: designerName,
+						订单ID: this.orderId,
+						方案类型: this.schemeTypeText
+					});
+					
+					// 6. 使用工具函数创建对话并跳转
+					await createConversationAndNavigate(
+						designerId,
+						designerName,
+						designerAvatar
+					);
+					
+					console.log('✅ 对话创建成功');
+					
+				} catch (error) {
+					console.error('❌ 创建对话失败:', error);
+					
+					// 错误处理
+					let errorMessage = '联系设计师失败';
+					if (error.message) {
+						if (error.message.includes('请先登录')) {
+							errorMessage = '请先登录';
+						} else if (error.message.includes('不能与自己')) {
+							errorMessage = '不能联系自己';
+						} else if (error.message.includes('权限')) {
+							errorMessage = '没有权限联系设计师';
+						} else if (error.message.includes('对方不存在')) {
+							errorMessage = '设计师信息不存在';
+						} else {
+							errorMessage = error.message;
+						}
+					}
+					
+					uni.showToast({
+						title: errorMessage,
+						icon: 'none',
+						duration: 3000
+					});
+					
+					// 如果是因为对话不存在，尝试直接跳转到聊天页面
+					if (error.message && error.message.includes('对话不存在')) {
+						console.log('⚠️ 尝试直接跳转到聊天页面');
+						setTimeout(() => {
+							uni.navigateTo({
+								url: `/pages/chat/chat?otherUserId=${designerId}&otherUserName=${encodeURIComponent(designerName)}&orderId=${this.orderId}`
+							});
+						}, 1000);
+					}
+				} finally {
+					// 7. 隐藏加载状态
+					uni.hideLoading();
+				}
+			},
+			
+			// 通过ID获取设计师信息
+			async getDesignerInfoById(designerId) {
+				try {
+					console.log('👤 获取设计师信息，ID:', designerId);
+					
+					const userResponse = await getUserById(designerId);
+					console.log('👤 设计师信息响应:', userResponse);
+					
+					if (userResponse && userResponse.code === 200 && userResponse.data) {
+						const userData = userResponse.data;
+						
+						return {
+							// 根据示例数据格式解析
+							name: userData.nickName || userData.userName || userData.name || '设计师',
+							avatar: userData.avatar || '/static/images/default-avatar.png',
+							phone: userData.phone || userData.userName || '',
+							role: '设计师'
+						};
+					} else {
+						throw new Error('未获取到设计师信息');
+					}
+				} catch (error) {
+					console.error('❌ 获取设计师信息失败:', error);
+					throw error;
+				}
+			},
+			
 			initPageParams(options) {
 				try {
 					this.orderId = options.orderId ? parseInt(options.orderId) : null
@@ -381,6 +537,19 @@
 						if (schemeList.length > 0) {
 							this.schemeData = schemeList[0]
 							console.log('✅ 找到效果图方案:', this.schemeData)
+							
+							// 如果设计师信息不完整，尝试通过ID获取
+							if (!this.designerInfo.name && this.schemeData.contractorId) {
+								try {
+									const designerInfo = await this.getDesignerInfoById(this.schemeData.contractorId);
+									this.designerInfo.name = designerInfo.name;
+									this.designerInfo.avatar = designerInfo.avatar;
+									this.designerInfo.role = designerInfo.role;
+								} catch (error) {
+									console.warn('⚠️ 获取设计师信息失败，使用默认值:', error);
+								}
+							}
+							
 							this.buildFileList()
 						} else {
 							console.log('❌ 未找到效果图方案')
@@ -722,28 +891,6 @@
 				uni.navigateBack()
 			},
 			
-			contactDesigner() {
-				if (!this.designerInfo.name || this.designerInfo.name === '未知设计师') {
-					uni.showToast({
-						title: '暂无设计师信息',
-						icon: 'none'
-					})
-					return
-				}
-				
-				const designerId = this.schemeData.contractorId
-				if (designerId) {
-					uni.navigateTo({
-						url: `/pages/chat/designer?designerId=${designerId}`
-					})
-				} else {
-					uni.showToast({
-						title: '无法联系设计师',
-						icon: 'none'
-					})
-				}
-			},
-			
 			async confirmScheme() {
 				console.log('🟢 确认按钮被点击')
 				if (this.submitting || !this.schemeData) {
@@ -843,8 +990,8 @@
 						const prevPage = pages[pages.length - 2]
 						if (prevPage.route && prevPage.route.includes('order/my-order')) {
 							if (prevPage.$vm && prevPage.$vm.loadOrderList) {
-								prevPage.$vm.pagination.pageNum = 1
-								prevPage.$vm.loadOrderList()
+								 prevPage.$vm.pagination.pageNum = 1
+								 prevPage.$vm.loadOrderList()
 							}
 						}
 					}
@@ -1377,20 +1524,48 @@
 		color: #8f959e;
 	}
 	
+	/* 联系设计师卡片样式 */
+	.contact-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 24rpx;
+		text-align: center;
+	}
+	
+	.contact-desc {
+		font-size: 28rpx;
+		color: #666;
+		line-height: 1.5;
+	}
+	
 	.contact-btn {
 		background: #1890ff;
 		color: #fff;
-		padding: 16rpx 24rpx;
-		border-radius: 8rpx;
-		font-size: 24rpx;
+		padding: 20rpx 40rpx;
+		border-radius: 12rpx;
+		font-size: 28rpx;
 		font-weight: 500;
 		cursor: pointer;
-		transition: background-color 0.3s ease;
-		flex-shrink: 0;
+		transition: all 0.3s ease;
+		display: flex;
+		align-items: center;
+		gap: 10rpx;
+		border: none;
 	}
 	
 	.contact-btn:active {
 		background: #0d7ae5;
+		transform: scale(0.98);
+	}
+	
+	.contact-icon {
+		font-size: 28rpx;
+	}
+	
+	.contact-text {
+		font-size: 28rpx;
+		font-weight: 500;
 	}
 	
 	/* 底部操作区域 */

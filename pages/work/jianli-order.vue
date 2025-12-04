@@ -206,7 +206,7 @@
 <script>
 	import { orderService } from '@/api/order.js'
 	import { projectService } from '@/api/project.js'
-	import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'  // 导入 getUserById
+	import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'
 	// 新增：导入施工阶段API
 	import { orderStageService } from '@/api/orderStage.js'
 	// 新增：导入对话辅助工具（与设计师页面相同）
@@ -304,11 +304,11 @@
 			}
 		},
 		onLoad() {
-			console.log('🚀 设计师订单页面加载');
+			console.log('🚀 监理师订单页面加载');
 			this.loadCurrentUserInfo();
 		},
 		onShow() {
-			console.log('🔄 设计师订单页面显示，刷新数据');
+			console.log('🔄 监理师订单页面显示，刷新数据');
 			if (this.userInfo.userId) {
 				this.pagination.pageNum = 1;
 				this.loadOrderList();
@@ -323,7 +323,7 @@
 				});
 			},
 
-			// 检查订单施工阶段状态（虽然现在不用来判断按钮，但保留用于其他用途）
+			// 检查订单施工阶段状态
 			async checkConstructionStagesStatus(orderId) {
 				try {
 					console.log('🔍 检查施工阶段状态，订单ID:', orderId);
@@ -351,7 +351,7 @@
 					// 返回施工阶段状态信息
 					return {
 						hasStages: stages.length > 0,
-						stageStatus: stages.length > 0 ? Number(stages[0].status) : null, // 取第一个阶段的状态
+						stageStatus: stages.length > 0 ? Number(stages[0].status) : null,
 						totalStages: stages.length
 					};
 					
@@ -437,7 +437,7 @@
 					
 					// 同时获取用户基本信息和角色信息
 					const [userRes, roleRes] = await Promise.all([
-						getUserProfile(),  // 使用原来的方法获取当前用户信息
+						getUserProfile(),
 						getCurrentRole()
 					]);
 					
@@ -446,11 +446,11 @@
 						
 						// 添加角色信息
 						if (roleRes.code === 200 && roleRes.data) {
-							this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'designer';
-							this.userInfo.roleName = roleRes.data.roleName || '';
+							this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'supervisor';
+							this.userInfo.roleName = roleRes.data.roleName || '监理师';
 						} else {
-							this.userInfo.role = 'designer'; // 默认角色
-							this.userInfo.roleName = '设计师';
+							this.userInfo.role = 'supervisor'; // 默认角色为监理师
+							this.userInfo.roleName = '监理师';
 						}
 						
 						console.log('👤 当前用户信息加载完成:', {
@@ -535,10 +535,10 @@
 						queryParams.status = this.activeStatus
 					}
 					
-					console.log('📋 加载设计师订单列表 - 设计师ID:', this.userInfo.userId, '查询参数:', queryParams)
+					console.log('📋 加载监理师订单列表 - 监理师ID:', this.userInfo.userId, '查询参数:', queryParams)
 					
 					const result = await orderService.getOrderListByUserId(this.userInfo.userId, queryParams)
-					console.log('✅ 设计师订单列表响应:', result)
+					console.log('✅ 监理师订单列表响应:', result)
 					
 					let list = []
 					let total = 0
@@ -604,7 +604,7 @@
 						
 						ordersWithDetails.push(orderWithDetails)
 					}
-					console.log('✅ 设计师订单数据整合完成:', ordersWithDetails)
+					console.log('✅ 监理师订单数据整合完成:', ordersWithDetails)
 					
 					if (this.pagination.pageNum === 1) {
 						this.orderList = ordersWithDetails
@@ -641,24 +641,19 @@
 				try {
 					console.log('👤 使用 getUserById 获取用户信息，用户ID:', userId);
 					
-					// 只能使用 getUserById 方法获取其他用户信息
 					const result = await getUserById(userId);
 					console.log('✅ getUserById 原始结果:', result);
 					
 					// 解析API响应
 					let userData = null;
 					
-					// 处理不同的响应格式
 					if (result && typeof result === 'object') {
-						// 标准格式：{code: 200, data: {...}}
 						if (result.code === 200) {
 							userData = result.data || {};
 						}
-						// 非标准格式：直接是用户数据
 						else if (!result.code && (result.name || result.phone || result.avatar)) {
 							userData = result;
 						}
-						// 其他格式：尝试从可能的位置获取数据
 						else if (result.data) {
 							userData = result.data;
 						}
@@ -671,7 +666,6 @@
 					
 					console.log('✅ 解析后的用户数据:', userData);
 					
-					// 根据示例数据结构调整字段映射
 					return {
 						name: userData.nickName || userData.name || userData.nickname || userData.username || '',
 						phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '',
@@ -681,7 +675,6 @@
 					
 				} catch (error) {
 					console.error('❌ 使用 getUserById 获取用户信息失败:', error);
-					// 返回默认用户信息（空值，避免显示"未知用户"）
 					return {
 						name: '',
 						phone: '',
@@ -721,7 +714,7 @@
 				}
 			},
 
-			// 设计师上传/修改合同图片
+			// 监理师上传/修改合同图片
 			async uploadContract(orderId, isModify = false) {
 				try {
 					console.log(`📄 开始${isModify ? '修改' : '上传'}合同图片，订单ID:`, orderId);
@@ -756,26 +749,22 @@
 						mask: true
 					});
 
-					// 1. 上传合同图片到媒体服务
 					const uploadResult = await this.uploadContractImageDirect(orderId, imagePath);
 					
 					if (uploadResult && uploadResult.code === 200) {
 						console.log(`✅ 合同图片${isModify ? '修改' : '上传'}成功:`, uploadResult);
 						
-						// 2. 获取上传成功的图片URL
 						const contractUrl = uploadResult.data?.url || uploadResult.data?.fileUrl;
 						console.log('📸 合同图片URL:', contractUrl);
 						
 						if (contractUrl) {
-							// 3. 使用专用接口同时更新合同URL和状态
 							uni.showLoading({ title: '更新合同信息...' });
 							
 							try {
-								// 合同状态设为1（待确认）
 								const updateResult = await orderService.updateContractUrlAndContractStatus(
 									orderId, 
 									contractUrl, 
-									1  // contractStatus = 1 (合同待确认)
+									1
 								);
 								
 								console.log('✅ 合同URL和状态更新成功:', updateResult);
@@ -788,7 +777,6 @@
 									duration: 2000
 								});
 								
-								// 刷新列表
 								this.pagination.pageNum = 1;
 								this.loadOrderList();
 								
@@ -969,7 +957,7 @@
 					}
 				})
 				
-				console.log('📊 设计师订单状态统计（我的订单）:', this.statusCount)
+				console.log('📊 监理师订单状态统计（我的订单）:', this.statusCount)
 			},
 			
 			// 加载更多
@@ -988,58 +976,156 @@
 				this.loadOrderList()
 			},
 			
-			// 联系订单相关方（设计师/监理师 -> 客户）- 与设计师页面完全相同的逻辑
+			// 联系订单相关方（监理师 -> 客户）- 完善版
 			async contactOrderParty(order) {
-				console.log('🔥 开始联系客户，订单信息:', order);
+				console.log('👷 监理师开始联系客户，订单信息:', order);
 				
-				// 确保用户信息在缓存中
-				this.ensureUserInfoInStorage();
-				
-				// 检查登录状态（与设计师页面完全相同）
-				if (!isUserLoggedIn()) {
-					handleNotLoggedIn();
-					return;
-				}
-				
-				// 检查订单信息
-				if (!order || !order.userId) {
-					console.error('❌ 订单信息不完整:', order);
-					uni.showToast({
-						title: '订单信息无效',
-						icon: 'error'
-					});
-					return;
-				}
-				
-				// 获取客户信息
-				let customerInfo = order.publisherInfo;
-				if (!customerInfo || !customerInfo.name) {
-					try {
-						customerInfo = await this.getUserInfoById(order.userId);
-						if (!customerInfo || !customerInfo.name) {
-							console.error('❌ 获取客户信息失败或客户信息为空:', customerInfo);
-							uni.showToast({
-								title: '客户信息不存在',
-								icon: 'none'
-							});
-							return;
-						}
-					} catch (error) {
-						console.error('❌ 获取客户信息失败:', error);
+				try {
+					// 1. 检查登录状态
+					if (!isUserLoggedIn()) {
+						handleNotLoggedIn();
+						return;
+					}
+					
+					// 2. 检查订单信息完整性
+					if (!order || !order.userId) {
+						console.error('❌ 订单信息不完整:', order);
 						uni.showToast({
-							title: '获取客户信息失败',
-							icon: 'error'
+							title: '订单信息无效',
+							icon: 'error',
+							duration: 2000
 						});
 						return;
 					}
+					
+					// 3. 确认当前用户身份
+					const currentUserId = String(this.userInfo.userId || '');
+					const contractorId = String(order.contractorId || '');
+					const customerId = String(order.userId || '');
+					
+					console.log('👤 身份确认:', {
+						当前用户ID: currentUserId,
+						订单客户ID: customerId,
+						承接方ID: contractorId,
+						当前用户角色: this.userInfo.role,
+						当前用户角色名称: this.userInfo.roleName,
+						页面类型: '监理师订单页面'
+					});
+					
+					// 4. 验证当前用户是否是订单承接方（监理师）
+					if (currentUserId !== contractorId) {
+						console.warn('⚠️ 当前用户不是订单承接方，权限验证失败');
+						uni.showToast({
+							title: '权限不足，只能联系自己承接的订单',
+							icon: 'none',
+							duration: 2000
+						});
+						return;
+					}
+					
+					// 5. 确定联系对象：监理师联系客户
+					let targetUserId = customerId;
+					let targetUserName = '';
+					let targetUserAvatar = '';
+					
+					// 6. 防止联系自己
+					if (String(targetUserId) === String(currentUserId)) {
+						console.warn('⚠️ 尝试联系自己:', {
+							当前用户ID: currentUserId,
+							目标用户ID: targetUserId
+						});
+						uni.showToast({
+							title: '不能联系自己',
+							icon: 'none',
+							duration: 2000
+						});
+						return;
+					}
+					
+					// 7. 获取客户信息
+					try {
+						const customerInfo = await this.getUserInfoById(targetUserId);
+						targetUserName = customerInfo.name || '客户';
+						targetUserAvatar = customerInfo.avatar || '';
+					} catch (error) {
+						console.warn('⚠️ 获取客户信息失败:', error);
+						// 使用默认值
+						targetUserName = '客户';
+						targetUserAvatar = '';
+					}
+					
+					console.log('📞 监理师准备联系客户:', {
+						客户ID: targetUserId,
+						客户姓名: targetUserName,
+						监理师ID: currentUserId,
+						订单ID: order.orderId,
+						订单类型: order.type
+					});
+					
+					// 8. 显示加载状态
+					uni.showLoading({
+						title: '创建对话中...',
+						mask: true
+					});
+					
+					try {
+						// 9. 创建对话并跳转
+						await createConversationAndNavigate(
+							targetUserId,
+							targetUserName,
+							targetUserAvatar || ''
+						);
+						
+						console.log('✅ 对话创建成功，跳转聊天页面');
+						
+					} catch (conversationError) {
+						console.error('❌ 创建对话失败:', conversationError);
+						
+						// 错误处理
+						let errorMessage = '创建对话失败';
+						if (conversationError.message) {
+							if (conversationError.message.includes('请先登录')) {
+								errorMessage = '请先登录';
+							} else if (conversationError.message.includes('不能与自己')) {
+								errorMessage = '不能联系自己';
+							} else if (conversationError.message.includes('权限')) {
+								errorMessage = '没有权限联系该用户';
+							} else if (conversationError.message.includes('对方不存在')) {
+								errorMessage = '对方用户不存在';
+							} else {
+								errorMessage = conversationError.message;
+							}
+						}
+						
+						uni.showToast({
+							title: errorMessage,
+							icon: 'none',
+							duration: 3000
+						});
+						
+						// 如果是因为对话不存在，尝试直接跳转到聊天页面
+						if (conversationError.message && conversationError.message.includes('对话不存在')) {
+							console.log('⚠️ 尝试直接跳转到聊天页面');
+							setTimeout(() => {
+								uni.navigateTo({
+									url: `/pages/chat/chat?otherUserId=${targetUserId}&otherUserName=${encodeURIComponent(targetUserName)}`
+								});
+							}, 1000);
+						}
+					} finally {
+						// 10. 隐藏加载状态
+						uni.hideLoading();
+					}
+					
+				} catch (error) {
+					console.error('❌ 联系客户失败:', error);
+					
+					uni.showToast({
+						title: '联系失败，请稍后重试',
+						icon: 'none',
+						duration: 3000
+					});
 				}
-				
-				// 使用与设计师页面完全相同的调用方式
-				await createConversationAndNavigate(
-					order.userId,
-					customerInfo.name,
-					customerInfo.avatar || ''
-				);
 			},
 			
 			// 取消订单
@@ -1086,7 +1172,6 @@
 		}
 	}
 </script>
-
 <style scoped>
 	/* 样式保持不变 */
 	.back-btn {
