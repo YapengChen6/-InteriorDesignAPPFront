@@ -1,11 +1,5 @@
 <template>
   <view class="product-detail-page">
-    <view class="nav-bar">
-      <text class="back-icon" @click="goBack">←</text>
-      <text class="nav-title">{{ product.productName || '商品详情' }}</text>
-      <view class="nav-placeholder"></view>
-    </view>
-
     <scroll-view class="detail-scroll" scroll-y>
       <!-- 图片轮播 -->
       <view class="media-section" v-if="imageList.length">
@@ -333,10 +327,6 @@ export default {
         current: urls[index] || urls[0]
       })
     },
-
-    goBack() {
-      uni.navigateBack()
-    },
     
     // 跳转到商家详情页
     goToShopDetail() {
@@ -476,30 +466,6 @@ export default {
   background-color: #f7f8fa;
   display: flex;
   flex-direction: column;
-}
-
-.nav-bar {
-  padding: 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: #fff;
-  border-bottom: 1rpx solid #eee;
-}
-
-.back-icon {
-  font-size: 32rpx;
-  color: #303133;
-}
-
-.nav-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #303133;
-}
-
-.nav-placeholder {
-  width: 32rpx;
 }
 
 .detail-scroll {

@@ -82,6 +82,10 @@
           <view class="order-info">
             <text class="order-no">订单号：{{ order.orderNo }}</text>
             <text class="order-time">{{ formatTime(order.createTime) }}</text>
+            <!-- 售后状态标签 -->
+            <view class="after-sale-tag" v-if="order.afterSaleStatus">
+              <text class="after-sale-text">{{ getAfterSaleStatusText(order.afterSaleStatus) }}</text>
+            </view>
           </view>
           <view :class="['status-pill', getStatusClass(order.orderStatus)]">
             {{ getStatusText(order.orderStatus) }}
@@ -133,6 +137,11 @@
               <button class="btn ghost" @click.stop="viewOrderDetail(order.orderId)">查看详情</button>
               <button class="btn primary" @click.stop="confirmReceipt(order.orderId)">确认收货</button>
             </template>
+            <!-- 已支付/已发货/已完成：显示售后按钮 -->
+            <template v-else-if="order.orderStatus === 'PAID' || order.orderStatus === 'SHIPPED' || order.orderStatus === 'DELIVERED'">
+              <button class="btn ghost" @click.stop="viewOrderDetail(order.orderId)">查看详情</button>
+              <button class="btn after-sale-btn" @click.stop="viewAfterSale(order.orderId)">售后服务</button>
+            </template>
             <!-- 其他状态：仅查看 -->
             <template v-else>
               <button class="btn ghost" @click.stop="viewOrderDetail(order.orderId)">查看详情</button>
@@ -148,6 +157,7 @@
 const ORDER_EVENT = 'productOrderUpdated'
 
 import * as orderApi from '@/api/product-order.js'
+import * as afterSaleApi from '@/api/after-sale.js'
 
 	export default {
   name: 'UserProductOrderList',
@@ -173,6 +183,8 @@ import * as orderApi from '@/api/product-order.js'
         const res = await orderApi.getUserOrderList(this.activeStatus || undefined)
         if (res && res.code === 200) {
           this.orderList = res.data || []
+          // 加载每个订单的售后状态
+          await this.loadAfterSaleStatus()
         } else {
           uni.showToast({ title: res?.msg || '加载订单失败', icon: 'none' })
         }
@@ -183,6 +195,41 @@ import * as orderApi from '@/api/product-order.js'
         this.loading = false
         this.refreshing = false
       }
+    },
+    async loadAfterSaleStatus() {
+      // 为每个订单加载售后状态
+      for (let order of this.orderList) {
+        try {
+          const afterSaleRes = await afterSaleApi.getAfterSaleList(order.orderId)
+          if (afterSaleRes && afterSaleRes.code === 200 && afterSaleRes.data && afterSaleRes.data.length > 0) {
+            // 获取最新的售后申请状态
+            const latestAfterSale = afterSaleRes.data[0]
+            order.afterSaleStatus = latestAfterSale.status
+            order.afterSaleType = latestAfterSale.type
+          } else {
+            order.afterSaleStatus = null
+          }
+        } catch (error) {
+          console.error(`加载订单 ${order.orderId} 售后状态失败:`, error)
+          order.afterSaleStatus = null
+        }
+      }
+    },
+    getAfterSaleStatusText(status) {
+      const statusMap = {
+        PENDING: '售后处理中',
+        APPROVED: '售后已同意',
+        REJECTED: '售后已拒绝',
+        PROCESSING: '售后处理中',
+        COMPLETED: '售后已完成',
+        CANCELLED: '售后已取消'
+      }
+      return statusMap[status] || '售后中'
+    },
+    viewAfterSale(orderId) {
+      uni.navigateTo({
+        url: `/pages/shop/after-sale-list?orderId=${orderId}`
+      })
     },
     handleOrderEvent() {
       this.loadOrders()
@@ -232,7 +279,7 @@ import * as orderApi from '@/api/product-order.js'
     },
     viewOrderDetail(orderId) {
       uni.navigateTo({
-        url: `/pages/order/detail?id=${orderId}&type=user`
+        url: `/pages/shop/order-detail?orderId=${orderId}`
       })
     },
     async payOrder(orderId) {
@@ -549,5 +596,25 @@ import * as orderApi from '@/api/product-order.js'
 
 .loading-text {
   font-size: 26rpx;
+}
+
+/* 售后状态标签 */
+.after-sale-tag {
+  margin-top: 8rpx;
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  background: #fff7e6;
+  border-radius: 12rpx;
+  border: 1rpx solid #fa8c16;
+}
+
+.after-sale-text {
+  font-size: 20rpx;
+  color: #fa8c16;
+}
+
+.btn.after-sale-btn {
+  background-color: #fa8c16;
+  color: #fff;
 }
 </style>
