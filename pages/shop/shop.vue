@@ -1616,8 +1616,8 @@ export default {
     console.log('商品管理页面加载');
     await this.loadCurrentShop();
     if (this.currentShopId) {
-      this.loadProducts();
-      this.loadCategories();
+    this.loadProducts();
+    this.loadCategories();
     }
   },
   
