@@ -86,6 +86,13 @@
                   class="avatar"
                   @error="onAvatarError"
               ></image>
+              <!-- 在线状态指示器 -->
+              <OnlineStatusIndicator 
+                :isOnline="designer.isOnline || false"
+                :showText="false"
+                size="small"
+                class="online-status-overlay"
+              />
               <!-- 评分徽章 -->
               <view v-if="designer.ratingLevel && designer.avgRating > 4" class="rating-badge">
                 {{ designer.ratingLevel }}
@@ -167,9 +174,13 @@
 import { getDesignerList } from "@/api/designer.js"
 import { getUserProfile } from "@/api/users.js"
 import { batchGetUserRatings } from "@/api/rating.js"
+import { batchGetUserOnlineStatus } from "@/api/onlineStatus.js"
 import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 
 export default {
+  components: {
+    OnlineStatusIndicator: () => import('@/components/OnlineStatusIndicator.vue')
+  },
   data() {
     return {
       loading: true,
@@ -184,6 +195,9 @@ export default {
       sortBy: 'rating', // 排序方式：rating-评分, cases-案例数
       sortOrder: 'desc', // 排序顺序：desc-降序, asc-升序
       showRatingTip: true,
+      onlineStatusCache: {}, // 在线状态缓存
+      onlineStatusCacheTime: null, // 缓存时间
+      CACHE_DURATION: 30000, // 缓存持续时间30秒
       
       // 模拟数据（当API不可用时使用）
       mockRatings: {
@@ -224,6 +238,11 @@ export default {
   onShow() {
     if (this.displayDesigners.length === 0) {
       this.loadDesigners();
+    } else {
+      // 如果缓存过期，刷新在线状态
+      if (!this.isOnlineStatusCacheValid()) {
+        this.loadDesignerOnlineStatus();
+      }
     }
   },
   methods: {
@@ -268,6 +287,9 @@ export default {
           
           // 2. 批量获取评分信息
           await this.loadDesignerRatings(designers);
+          
+          // 3. 批量获取在线状态
+          await this.loadDesignerOnlineStatus();
         } else {
           throw new Error(response.msg || '获取设计师数据失败');
         }
@@ -530,9 +552,122 @@ export default {
       }
     },
     
+    // 加载设计师在线状态
+    async loadDesignerOnlineStatus() {
+      try {
+        // 检查缓存是否有效
+        if (this.isOnlineStatusCacheValid()) {
+          console.log('🔄 使用缓存的在线状态数据');
+          this.applyOnlineStatusFromCache();
+          return;
+        }
+        
+        // 提取设计师ID
+        const designerIds = this.displayDesigners
+          .filter(designer => designer.userId)
+          .map(designer => designer.userId);
+        
+        console.log('🌐 需要获取在线状态的设计师ID:', designerIds);
+        
+        if (designerIds.length === 0) {
+          console.warn('⚠️ 没有找到有效的设计师ID');
+          return;
+        }
+        
+        // 批量获取在线状态
+        const onlineStatusResponse = await batchGetUserOnlineStatus(designerIds);
+        console.log('🌐 在线状态API响应:', onlineStatusResponse);
+        
+        if (onlineStatusResponse.code === 200) {
+          const onlineStatusMap = onlineStatusResponse.data || {};
+          console.log('📊 在线状态数据映射:', onlineStatusMap);
+          
+          // 更新缓存
+          this.onlineStatusCache = onlineStatusMap;
+          this.onlineStatusCacheTime = Date.now();
+          
+          // 将在线状态数据合并到设计师数据中
+          this.displayDesigners = this.displayDesigners.map(designer => {
+            const userId = designer.userId;
+            const onlineInfo = onlineStatusMap[userId] || {};
+            
+            return {
+              ...designer,
+              isOnline: onlineInfo.isOnline || false,
+              lastActiveTime: onlineInfo.lastActiveTime || null
+            };
+          });
+          
+          console.log('✅ 在线状态数据已合并到设计师列表');
+          
+        } else {
+          console.warn('⚠️ 获取在线状态失败，使用默认离线状态');
+          this.setAllDesignersOffline();
+        }
+        
+      } catch (error) {
+        console.error('❌ 获取在线状态数据错误:', error);
+        this.setAllDesignersOffline();
+      }
+    },
+    
+    // 检查在线状态缓存是否有效
+    isOnlineStatusCacheValid() {
+      if (!this.onlineStatusCacheTime || Object.keys(this.onlineStatusCache).length === 0) {
+        return false;
+      }
+      
+      const now = Date.now();
+      const cacheAge = now - this.onlineStatusCacheTime;
+      return cacheAge < this.CACHE_DURATION;
+    },
+    
+    // 从缓存应用在线状态
+    applyOnlineStatusFromCache() {
+      this.displayDesigners = this.displayDesigners.map(designer => {
+        const userId = designer.userId;
+        const onlineInfo = this.onlineStatusCache[userId] || {};
+        
+        return {
+          ...designer,
+          isOnline: onlineInfo.isOnline || false,
+          lastActiveTime: onlineInfo.lastActiveTime || null
+        };
+      });
+    },
+    
+    // 设置所有设计师为离线状态
+    setAllDesignersOffline() {
+      this.displayDesigners = this.displayDesigners.map(designer => ({
+        ...designer,
+        isOnline: false,
+        lastActiveTime: null
+      }));
+    },
+    
+    // 刷新在线状态
+    async refreshOnlineStatus() {
+      console.log('🔄 刷新在线状态');
+      // 清除缓存，强制重新获取
+      this.onlineStatusCache = {};
+      this.onlineStatusCacheTime = null;
+      
+      await this.loadDesignerOnlineStatus();
+      
+      uni.showToast({
+        title: '状态已更新',
+        icon: 'success',
+        duration: 1500
+      });
+    },
+
     // 下拉刷新
     onPullDownRefresh() {
       console.log('🔄 下拉刷新');
+      // 清除在线状态缓存，确保获取最新状态
+      this.onlineStatusCache = {};
+      this.onlineStatusCacheTime = null;
+      
       this.loadDesigners().then(() => {
         uni.stopPullDownRefresh();
         uni.showToast({
@@ -787,6 +922,13 @@ page {
   border-radius: 50%;
   border: 4rpx solid #f0f0f0;
   background: linear-gradient(135deg, #f5f7fa, #e4e7eb);
+}
+
+.online-status-overlay {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  z-index: 2;
 }
 
 .rating-badge {

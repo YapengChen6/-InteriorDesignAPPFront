@@ -80,6 +80,14 @@
             mode="aspectFill" 
             @error="handleImageError"
           ></image>
+          <!-- 在线状态指示器 -->
+          <OnlineStatusIndicator
+            :isOnline="getOnlineStatus(chat.otherUserId)"
+            :showStatus="true"
+            :showText="false"
+            size="small"
+            class="online-status-overlay"
+          />
           <!-- 未读角标 -->
           <view v-if="chat && chat.unreadCount > 0" class="unread-badge">
             {{ chat.unreadCount > 99 ? '99+' : chat.unreadCount }}
@@ -143,9 +151,14 @@ import { updateCategoryCount, filterChatsByCategory } from '@/utils/chatDataUtil
 import { searchUsers, getRoleSwitchInfo } from '@/api/users.js'
 import { getConversationList, createOrGetConversation } from '@/api/conversation.js'
 import { getUnreadCount } from '@/api/message_new.js'
+import { batchGetUserOnlineStatus } from '@/api/onlineStatus.js'
+import OnlineStatusIndicator from '@/components/OnlineStatusIndicator.vue'
 
 export default {
   name: 'ChatList',
+  components: {
+    OnlineStatusIndicator
+  },
   data() {
     return {
       // --- 核心数据 ---
@@ -170,7 +183,10 @@ export default {
       loading: false,
       hasMore: true,
       addChatPhone: '',
-      addingChat: false
+      addingChat: false,
+      
+      // --- 在线状态 ---
+      onlineStatusMap: {} // 存储用户在线状态 {userId: {isOnline: boolean, lastActiveTime: string}}
     }
   },
   
@@ -255,7 +271,7 @@ export default {
       uni.showLoading({ title: '刷新中...', mask: true })
       
       try {
-        // 重新加载对话列表
+        // 重新加载对话列表（包含在线状态）
         await this.loadConversationList()
         
         uni.hideLoading()
@@ -311,7 +327,10 @@ export default {
           // 4. 加载未读消息数
           await this.loadUnreadCounts()
           
-          // 5. 更新 UI 统计和过滤
+          // 5. 加载在线状态
+          await this.loadOnlineStatuses()
+          
+          // 6. 更新 UI 统计和过滤
           this.updateCategoryCount()
           this.filterChats()
         } else {
@@ -357,11 +376,14 @@ export default {
             } 
           })
           
+          // 同时刷新在线状态
+          await this.loadOnlineStatuses()
+          
           // 更新分类计数和过滤
           this.updateCategoryCount()
           this.filterChats()
           
-          console.log('✅ 未读数更新完成')
+          console.log('✅ 未读数和在线状态更新完成')
         }
       } catch (error) {
         console.error('❌ 加载未读消息数失败:', error)
@@ -454,6 +476,48 @@ export default {
     
     handleImageError(e) {
       // 图片加载失败，Image组件会显示默认图或空白，此处可扩展
+    },
+    
+    // --- 在线状态相关方法 ---
+    getOnlineStatus(userId) {
+      if (!userId || !this.onlineStatusMap[userId]) {
+        return false
+      }
+      return this.onlineStatusMap[userId].isOnline || false
+    },
+    
+    // 批量加载对话对方的在线状态
+    async loadOnlineStatuses() {
+      if (this.chats.length === 0) {
+        return
+      }
+      
+      try {
+        // 提取所有对方用户ID
+        const otherUserIds = this.chats
+          .map(chat => chat.otherUserId)
+          .filter(userId => userId && userId !== this.currentUserId)
+        
+        if (otherUserIds.length === 0) {
+          return
+        }
+        
+        console.log('📊 批量查询在线状态，用户数量:', otherUserIds.length)
+        
+        // 批量查询在线状态
+        const response = await batchGetUserOnlineStatus(otherUserIds)
+        
+        if (response.code === 200 && response.data) {
+          // 更新在线状态映射
+          this.onlineStatusMap = { ...this.onlineStatusMap, ...response.data }
+          console.log('✅ 在线状态加载完成')
+        } else {
+          console.warn('⚠️ 在线状态查询返回异常:', response)
+        }
+      } catch (error) {
+        console.error('❌ 加载在线状态失败:', error)
+        // 失败时不影响聊天列表的正常显示
+      }
     },
 
     loadMore() {
@@ -719,6 +783,18 @@ page {
 .avatar-container {
   position: relative;
   margin-right: 32rpx; /* 增加间距 */
+}
+
+/* 在线状态指示器覆盖层 */
+.online-status-overlay {
+  position: absolute;
+  bottom: 2rpx;
+  right: 2rpx;
+  z-index: 3;
+  background-color: #fff;
+  border-radius: 50%;
+  padding: 2rpx;
+  box-shadow: 0 0 4rpx rgba(0,0,0,0.1);
 }
 
 .chat-avatar {
