@@ -109,7 +109,7 @@
             <view class="designer-info">
               <!-- 姓名和评分 -->
               <view class="name-rating-row">
-                <view class="designer-name">{{ designer.nickName || designer.userName || '设计师' }}</view>
+                <view class="designer-name">{{ designer.nickName }}</view>
                 <view class="rating-display">
                   <view class="rating-score">
                     <text class="score">{{ designer.avgRating !== undefined ? designer.avgRating.toFixed(1) : '5.0' }}</text>
@@ -180,12 +180,11 @@
 </template>
 
 <script>
-import { getDesignerList } from "@/api/designer.js"
+import { getDesignerList, searchDesigners } from "@/api/designer.js"
 import { getUserProfile } from "@/api/users.js"
 import { batchGetUserRatings } from "@/api/rating.js"
 import { batchGetUserOnlineStatus } from "@/api/onlineStatus.js"
 import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
-
 export default {
   components: {
     OnlineStatusIndicator: () => import('@/components/OnlineStatusIndicator.vue')
@@ -290,7 +289,7 @@ export default {
         console.log('👥 获取设计师列表响应:', response);
 
         if (response.code === 200) {
-          const designers = response.data || [];
+          const designers = response.data || {};
           this.allDesigners = this.formatDesignerData(designers);
           console.log('📋 格式化后的设计师数据:', this.allDesigners);
           
@@ -388,28 +387,13 @@ export default {
       this.sortByRating();
     },
     
-    // 使用模拟数据（备用方案）
-    useMockData() {
-      console.log('📦 使用模拟设计师数据');
-      const mockDesigners = [
-        { userId: 1, userName: '设计师张三', nickName: '张三', avatar: '', caseCount: 15, address: '北京' },
-        { userId: 2, userName: '设计师李四', nickName: '李四', avatar: '', caseCount: 8, address: '上海' },
-        { userId: 3, userName: '设计师王五', nickName: '王五', avatar: '', caseCount: 12, address: '广州' },
-        { userId: 4, userName: '设计师赵六', nickName: '赵六', avatar: '', caseCount: 25, address: '深圳' },
-        { userId: 5, userName: '设计师孙七', nickName: '孙七', avatar: '', caseCount: 5, address: '杭州' },
-        { userId: 6, userName: '设计师周八', nickName: '周八', avatar: '', caseCount: 18, address: '成都' }
-      ];
-      
-      this.allDesigners = this.formatDesignerData(mockDesigners);
-      this.useMockRatings();
-    },
     
     // 格式化设计师数据
     formatDesignerData(designers) {
       return designers.map(designer => ({
         userId: designer.userId || designer.id || 0,
         userName: designer.userName || '',
-        nickName: designer.nickName || designer.userName || '设计师',
+        nickName: designer.name,
         avatar: designer.avatar || designer.avatarUrl || '',
         caseCount: designer.caseCount || designer.projectCount || designer.portfolioCount || 0,
         address: designer.address || designer.city || designer.location || '',
@@ -421,15 +405,15 @@ export default {
         isOnline: designer.isOnline || false
       }));
     },
-    
-    // 搜索输入
-    onSearchInput() {
-      clearTimeout(this.searchTimer);
-      this.searchTimer = setTimeout(() => {
-        console.log('🔍 搜索关键词:', this.searchQuery);
-      }, 300);
-    },
-    
+// 搜索输入
+onSearchInput() {
+  clearTimeout(this.searchTimer);
+  this.searchTimer = setTimeout(() => {
+    console.log('🔍 搜索关键词:', this.searchQuery);
+    this.performSearch(); // 调用搜索函数
+  }, 500); // 适当增加延迟，减少请求频率
+},
+
     // 清除搜索
     clearSearch() {
       this.searchQuery = '';
