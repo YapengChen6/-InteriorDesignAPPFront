@@ -2,7 +2,6 @@
   <view class="container">
     <!-- 顶部导航 -->
     <view class="header">
-      <view class="back-btn" @click="goBack">←</view>
       <view class="header-title">设计师详情</view>
       <view class="header-actions">
         <view class="like-header-btn" @click="toggleDesignerLike">
@@ -48,9 +47,6 @@
                 </text>
               </view>
               <view class="action-buttons">
-                <button class="follow-btn" :class="{ followed: isFollowed }" @click="toggleFollow">
-                  {{ isFollowed ? '已关注' : '+ 关注' }}
-                </button>
                 <button class="like-btn" :class="{ liked: isDesignerLiked }" @click="toggleDesignerLike">
                   <text class="like-btn-icon">❤</text>
                   <text class="like-btn-text">{{ isDesignerLiked ? '已点赞' : '点赞' }}</text>
@@ -296,9 +292,6 @@
 import {
   getDesignerDetail,
   getDesignerPortfolios,
-  checkFollowStatus,
-  followDesigner,
-  unfollowDesigner,
   likePortfolio,
   unlikePortfolio,
   contactDesigner
@@ -319,7 +312,6 @@ export default {
       designerId: null,
       designerDetail: null,
       loading: true,
-      isFollowed: false,
       isDesignerLiked: false,
       designerLikeCount: 0,
       errorMessage: '',
@@ -365,9 +357,7 @@ export default {
   },
 
   methods: {
-    goBack() {
-      uni.navigateBack();
-    },
+    // 移除goBack方法
 
     // 加载设计师完整详情
     async loadDesignerDetail() {
@@ -386,9 +376,6 @@ export default {
           if (this.designerDetail.portfolios && this.designerDetail.portfolios.length > 0) {
             this.portfolios = this.designerDetail.portfolios;
           }
-          
-          // 检查关注状态
-          this.checkFollowStatus();
           
           // 检查点赞状态和获取点赞数
           this.checkDesignerLikeStatus();
@@ -588,47 +575,6 @@ export default {
       return num.toLocaleString();
     },
 
-    // 检查关注状态
-    async checkFollowStatus() {
-      try {
-        const res = await checkFollowStatus(this.designerId);
-        if (res.code === 200) {
-          this.isFollowed = res.data.isFollowed || false;
-        }
-      } catch (error) {
-        console.error('检查关注状态失败:', error);
-        this.isFollowed = false;
-      }
-    },
-
-    // 切换关注状态
-    async toggleFollow() {
-      try {
-        if (this.isFollowed) {
-          await unfollowDesigner(this.designerId);
-          this.isFollowed = false;
-          uni.showToast({
-            title: '已取消关注',
-            icon: 'success'
-          });
-        } else {
-          await followDesigner(this.designerId);
-          this.isFollowed = true;
-          uni.showToast({
-            title: '关注成功',
-            icon: 'success'
-          });
-        }
-      } catch (error) {
-        console.error('关注操作失败:', error);
-        this.isFollowed = !this.isFollowed;
-        uni.showToast({
-          title: this.isFollowed ? '关注成功' : '已取消关注',
-          icon: 'success'
-        });
-      }
-    },
-
     // 切换作品点赞状态
     async togglePortfolioLike(item) {
       try {
@@ -768,7 +714,6 @@ export default {
     // 页面显示时刷新数据
     onShow() {
       if (this.designerId) {
-        this.checkFollowStatus();
         this.checkDesignerLikeStatus();
         this.getDesignerLikeCount();
       }
@@ -793,12 +738,7 @@ export default {
   border-bottom: 1px solid #eee;
 }
 
-.back-btn {
-  font-size: 36rpx;
-  color: #333;
-  padding: 10rpx;
-}
-
+/* 移除.back-btn样式 */
 .header-title {
   font-size: 32rpx;
   font-weight: 600;
@@ -930,23 +870,6 @@ export default {
   gap: 15rpx;
   margin-top: 10rpx;
   flex-wrap: wrap;
-}
-
-.follow-btn {
-  background: #6a11cb;
-  color: white;
-  border: none;
-  border-radius: 30rpx;
-  padding: 12rpx 24rpx;
-  font-size: 26rpx;
-  min-width: 100rpx;
-  height: 60rpx;
-  line-height: 36rpx;
-}
-
-.follow-btn.followed {
-  background: #f0f0f0;
-  color: #666;
 }
 
 .like-btn {
