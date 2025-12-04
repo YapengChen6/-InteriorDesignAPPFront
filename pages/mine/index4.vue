@@ -63,7 +63,7 @@
 					<view class="menu-item" @tap="handleMenuClick('查看订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
+								<text class="iconfont icon-shopping-cart"></text>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">查看订单</text>
@@ -75,8 +75,8 @@
 					
 					<view class="menu-item" @tap="handleMenuClick('收货地址')">
 						<view class="menu-item-left">
-							<view class="menu-icon blue">
-								<image class="menu-icon-img" src="/static/icons/收货地址.svg" mode="aspectFit"></image>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/收货地址.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">收货地址</text>
@@ -104,7 +104,7 @@
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
+								<text class="iconfont icon-shopping-cart"></text>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -131,8 +131,8 @@
 					
 					<view class="menu-item" @tap="handleMenuClick('商家页面')">
 						<view class="menu-item-left">
-							<view class="menu-icon green">
-								<image class="menu-icon-img" src="/static/icons/商家页面.svg" mode="aspectFit"></image>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/商家页面.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">商家页面</text>
@@ -144,8 +144,8 @@
 					
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
-							<view class="menu-icon orange">
-								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -160,7 +160,7 @@
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
+								<text class="iconfont icon-shopping-cart"></text>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -190,8 +190,8 @@
 			<view class="menu-list">
 				<view class="menu-item" @tap="goToPersonalCenter">
 					<view class="menu-item-left">
-						<view class="menu-icon purple">
-							<image class="menu-icon-img" src="/static/icons/个人中心.svg" mode="aspectFit"></image>
+						<view class="menu-icon image-icon">
+							<image class="menu-icon-img" src="/static/images/个人中心.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">个人中心</text>
@@ -204,8 +204,8 @@
 				<!-- 新增举报投诉菜单项 -->
 				<view class="menu-item" @tap="handleMenuClick('举报投诉')">
 					<view class="menu-item-left">
-						<view class="menu-icon red">
-							<image class="menu-icon-img" src="/static/icons/举报投诉.svg" mode="aspectFit"></image>
+						<view class="menu-icon image-icon">
+							<image class="menu-icon-img" src="/static/images/举报投诉.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">举报投诉</text>
@@ -217,8 +217,8 @@
 				
 				<view class="menu-item" @tap="handleMenuClick('隐私与安全')">
 					<view class="menu-item-left">
-						<view class="menu-icon red">
-							<image class="menu-icon-img" src="/static/icons/隐私安全.svg" mode="aspectFit"></image>
+						<view class="menu-icon image-icon">
+							<image class="menu-icon-img" src="/static/images/隐私安全.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">隐私与安全</text>
@@ -243,8 +243,8 @@
 				
 				<view class="menu-item" @tap="handleMenuClick('关于我们')">
 					<view class="menu-item-left">
-						<view class="menu-icon gray">
-							<image class="menu-icon-img" src="/static/icons/关于我们.svg" mode="aspectFit"></image>
+						<view class="menu-icon image-icon">
+							<image class="menu-icon-img" src="/static/images/关于我们.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">关于我们</text>
@@ -637,7 +637,7 @@
 						});
 						break;
 					
-					// 不同角色的"我的订单"
+					// 不同角色的“我的订单”
 					case '我的订单':
 						// 根据当前角色类型跳转到不同的订单页面
 						if (this.currentRoleType === 'material_supplier') {
@@ -888,6 +888,15 @@
 		margin-right: 32rpx;
 	}
 	
+	.menu-icon.image-icon {
+		background: rgba(0, 0, 0, 0.04);
+	}
+	
+	.menu-icon-img {
+		width: 56rpx;
+		height: 56rpx;
+	}
+	
 	.menu-icon.blue {
 		background: rgba(74, 144, 226, 0.1);
 		color: #4A90E2;
@@ -969,10 +978,4 @@
 	.icon-cube:before { content: "\e612"; }
 	.icon-folder:before { content: "\e613"; }
 	.icon-user-check:before { content: "\e614"; }
-	
-	/* SVG图标样式 */
-	.menu-icon-img {
-		width: 48rpx;
-		height: 48rpx;
-	}
 </style>
