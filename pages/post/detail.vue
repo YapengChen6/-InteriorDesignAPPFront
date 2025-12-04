@@ -449,8 +449,40 @@ export default {
 		
 		// 获取作者名称
 		getAuthorName(data) {
-			if (data.nickname || data.userName || data.author) {
-				return data.nickname || data.userName || data.author
+			if (!data) return '匿名用户'
+			
+			const possibleFields = [
+				data.authorName,
+				data.nickName,
+				data.nickname,
+				data.userName,
+				data.username,
+				data.author,
+				data.realName,
+				data.contactName
+			]
+			
+			if (data.user) {
+				possibleFields.push(
+					data.user.nickName,
+					data.user.nickname,
+					data.user.userName,
+					data.user.username,
+					data.user.realName
+				)
+			}
+			
+			const name = possibleFields
+				.map(item => {
+					if (typeof item === 'string') {
+						return item.trim()
+					}
+					return item
+				})
+				.find(item => item)
+			
+			if (name) {
+				return name
 			}
 			
 			const roleType = data.roleType || data.role_type

@@ -51,6 +51,13 @@
           >
             <text>已取消</text>
           </view>
+          <view
+            class="filter-item"
+            :class="{ active: activeStatus === 'AFTER_SALE' }"
+            @click="changeStatus('AFTER_SALE')"
+          >
+            <text>售后</text>
+          </view>
         </view>
       </scroll-view>
     </view>
@@ -180,11 +187,21 @@ import * as afterSaleApi from '@/api/after-sale.js'
     async loadOrders() {
       this.loading = true
       try {
-        const res = await orderApi.getUserOrderList(this.activeStatus || undefined)
+        // 售后筛选需要先加载全部订单，再前端按 hasAfterSale 过滤
+        const queryStatus = this.activeStatus && this.activeStatus !== 'AFTER_SALE'
+          ? this.activeStatus
+          : undefined
+
+        const res = await orderApi.getUserOrderList(queryStatus)
         if (res && res.code === 200) {
           this.orderList = res.data || []
           // 加载每个订单的售后状态
           await this.loadAfterSaleStatus()
+
+          // 如果当前是“售后”标签，只保留有售后的订单
+          if (this.activeStatus === 'AFTER_SALE') {
+            this.orderList = (this.orderList || []).filter(order => order.hasAfterSale)
+          }
         } else {
           uni.showToast({ title: res?.msg || '加载订单失败', icon: 'none' })
         }

@@ -22,10 +22,10 @@
 					></image>
 				</view>
 				<view class="user-info">
-					<text class="user-name">
-						{{ (userInfo.nickName || userInfo.userName || '用户') }}
-						{{ userInfo.phone || userInfo.phonenumber ? ' ' + (userInfo.phone || userInfo.phonenumber) : '' }}
-					</text>
+					<view class="user-name">
+						<text class="user-name-line">{{ displayUserName }}</text>
+						<text class="user-phone-line" v-if="displayUserPhone">{{ displayUserPhone }}</text>
+					</view>
 					<view class="current-role">
 						<text class="iconfont icon-user"></text> {{ currentRoleName }}
 					</view>
@@ -303,7 +303,15 @@
 		},
 		computed: {
 			currentRoleName() {
-				return this.roleMap[this.currentRoleType]?.name || '普通用户'
+				return (this.roleMap[this.currentRoleType] && this.roleMap[this.currentRoleType].name) || '普通用户'
+			},
+			displayUserName() {
+				const info = this.userInfo || {}
+				return info.nickName || info.nickname || info.userName || info.name || '用户'
+			},
+			displayUserPhone() {
+				const info = this.userInfo || {}
+				return info.phone || info.phonenumber || info.mobile || ''
 			}
 		},
 		onLoad() {
@@ -739,17 +747,20 @@
 	}
 	
 	.user-name {
-		display: block;
-		font-size: 42rpx;
-		font-weight: bold;
-		margin-bottom: 8rpx;
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
 	}
 	
-	.user-phone {
-		display: block;
+	.user-name-line {
+		font-size: 42rpx;
+		font-weight: bold;
+	}
+	
+	.user-phone-line {
 		font-size: 28rpx;
-		opacity: 0.8;
-		margin-bottom: 16rpx;
+		opacity: 0.85;
+		margin-top: 8rpx;
 	}
 	
 	.current-role {
