@@ -51,6 +51,13 @@
           >
             <text>已取消</text>
           </view>
+          <view
+            class="filter-item"
+            :class="{ active: activeStatus === 'AFTER_SALE' }"
+            @click="changeStatus('AFTER_SALE')"
+          >
+            <text>售后</text>
+          </view>
         </view>
       </scroll-view>
     </view>
@@ -82,6 +89,10 @@
           <view class="order-info">
             <text class="order-no">订单号：{{ order.orderNo }}</text>
             <text class="order-time">{{ formatTime(order.createTime) }}</text>
+            <!-- 售后标签：如果有售后记录则显示 -->
+            <view class="after-sale-tag" v-if="order.hasAfterSale">
+              <text class="after-sale-text">有售后</text>
+            </view>
           </view>
           <view :class="['status-pill', getStatusClass(order.orderStatus)]">
             {{ getStatusText(order.orderStatus) }}
@@ -133,6 +144,11 @@
               <button class="btn ghost" @click.stop="viewOrderDetail(order.orderId)">查看详情</button>
               <button class="btn primary" @click.stop="confirmReceipt(order.orderId)">确认收货</button>
             </template>
+            <!-- 已支付/已发货/已完成：显示售后按钮 -->
+            <template v-else-if="order.orderStatus === 'PAID' || order.orderStatus === 'SHIPPED' || order.orderStatus === 'DELIVERED'">
+              <button class="btn ghost" @click.stop="viewOrderDetail(order.orderId)">查看详情</button>
+              <button class="btn after-sale-btn" @click.stop="viewAfterSale(order.orderId)">售后服务</button>
+            </template>
             <!-- 其他状态：仅查看 -->
             <template v-else>
               <button class="btn ghost" @click.stop="viewOrderDetail(order.orderId)">查看详情</button>
@@ -148,6 +164,7 @@
 const ORDER_EVENT = 'productOrderUpdated'
 
 import * as orderApi from '@/api/product-order.js'
+import * as afterSaleApi from '@/api/after-sale.js'
 
 	export default {
   name: 'UserProductOrderList',
@@ -170,9 +187,21 @@ import * as orderApi from '@/api/product-order.js'
     async loadOrders() {
       this.loading = true
       try {
-        const res = await orderApi.getUserOrderList(this.activeStatus || undefined)
+        // 售后筛选需要先加载全部订单，再前端按 hasAfterSale 过滤
+        const queryStatus = this.activeStatus && this.activeStatus !== 'AFTER_SALE'
+          ? this.activeStatus
+          : undefined
+
+        const res = await orderApi.getUserOrderList(queryStatus)
         if (res && res.code === 200) {
           this.orderList = res.data || []
+          // 加载每个订单的售后状态
+          await this.loadAfterSaleStatus()
+
+          // 如果当前是“售后”标签，只保留有售后的订单
+          if (this.activeStatus === 'AFTER_SALE') {
+            this.orderList = (this.orderList || []).filter(order => order.hasAfterSale)
+          }
         } else {
           uni.showToast({ title: res?.msg || '加载订单失败', icon: 'none' })
         }
@@ -183,6 +212,27 @@ import * as orderApi from '@/api/product-order.js'
         this.loading = false
         this.refreshing = false
       }
+    },
+    async loadAfterSaleStatus() {
+      // 为每个订单检查是否有售后记录
+      for (let order of this.orderList) {
+        try {
+          const afterSaleRes = await afterSaleApi.getAfterSaleList(order.orderId)
+          if (afterSaleRes && afterSaleRes.code === 200 && afterSaleRes.data && afterSaleRes.data.length > 0) {
+            order.hasAfterSale = true
+          } else {
+            order.hasAfterSale = false
+          }
+        } catch (error) {
+          console.error(`加载订单 ${order.orderId} 售后记录失败:`, error)
+          order.hasAfterSale = false
+        }
+      }
+    },
+    viewAfterSale(orderId) {
+      uni.navigateTo({
+        url: `/pages/shop/after-sale-list?orderId=${orderId}`
+      })
     },
     handleOrderEvent() {
       this.loadOrders()
@@ -232,7 +282,7 @@ import * as orderApi from '@/api/product-order.js'
     },
     viewOrderDetail(orderId) {
       uni.navigateTo({
-        url: `/pages/order/detail?id=${orderId}&type=user`
+        url: `/pages/shop/order-detail?orderId=${orderId}`
       })
     },
     async payOrder(orderId) {
@@ -549,5 +599,25 @@ import * as orderApi from '@/api/product-order.js'
 
 .loading-text {
   font-size: 26rpx;
+}
+
+/* 售后状态标签 */
+.after-sale-tag {
+  margin-top: 8rpx;
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  background: #fff7e6;
+  border-radius: 12rpx;
+  border: 1rpx solid #fa8c16;
+}
+
+.after-sale-text {
+  font-size: 20rpx;
+  color: #fa8c16;
+}
+
+.btn.after-sale-btn {
+  background-color: #fa8c16;
+  color: #fff;
 }
 </style>

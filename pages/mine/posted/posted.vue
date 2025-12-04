@@ -20,8 +20,8 @@
       </view>
     </view>
     
-    <!-- 状态导航 -->
-    <scroll-view class="status-nav" scroll-x="true" :show-scrollbar="false">
+    <!-- 状态导航 - 只在帖子标签时显示 -->
+    <scroll-view v-if="currentTab === 'posts'" class="status-nav" scroll-x="true" :show-scrollbar="false">
       <view class="nav-container">
         <view 
           v-for="nav in navList" 
@@ -40,10 +40,62 @@
       <!-- 帖子列表 -->
       <scroll-view class="post-list" scroll-y="true" :show-scrollbar="false">
         <!-- 订单视图 -->
-        <view v-if="currentTab === 'orders'" class="empty-state">
+        <view v-if="currentTab === 'orders'">
+          <view 
+            v-for="order in orderList" 
+            :key="order.projectId || order.id"
+            class="order-item"
+            @tap="viewOrderDetail(order)"
+          >
+          <view class="order-header">
+            <view class="order-info">
+              <text class="order-title">{{ order.title || '项目' + (order.projectId || order.id) }}</text>
+              <view class="order-meta">
+                <text class="order-type" :class="getOrderTypeClass(order.requiredRoles)">
+                  {{ getOrderTypeText(order.requiredRoles) }}
+                </text>
+                <text class="order-status" :class="getOrderStatusClass(order.status)">
+                  {{ getOrderStatusText(order.status) }}
+                </text>
+              </view>
+            </view>
+          </view>
+          
+          <view class="order-content">
+            <view class="order-detail-item" v-if="order.address">
+              <text class="detail-label">地址：</text>
+              <text class="detail-value">{{ order.address }}</text>
+            </view>
+            <view class="order-detail-item" v-if="order.budget">
+              <text class="detail-label">预算：</text>
+              <text class="detail-value">￥{{ formatPrice(order.budget) }}</text>
+            </view>
+            <view class="order-detail-item" v-if="order.area">
+              <text class="detail-label">面积：</text>
+              <text class="detail-value">{{ order.area }}㎡</text>
+            </view>
+            <view class="order-detail-item" v-if="order.deadline">
+              <text class="detail-label">截止：</text>
+              <text class="detail-value">{{ formatTime(order.deadline) }}</text>
+            </view>
+          </view>
+          
+          <view class="order-footer">
+            <text class="order-time">{{ formatTime(order.createTime) }}</text>
+          </view>
+          </view>
+          
+          <!-- 空状态 -->
+          <view v-if="!orderLoading && orderList.length === 0" class="empty-state">
           <view class="empty-icon">📦</view>
-          <text class="empty-title">订单列表</text>
-          <text class="empty-desc">切换到订单视图，这里将显示订单相关内容</text>
+            <text class="empty-title">暂无订单</text>
+            <text class="empty-desc">您还没有发布任何订单</text>
+          </view>
+          
+          <!-- 加载状态 -->
+          <view v-if="orderLoading" class="loading-state">
+            <text class="loading-text">加载中...</text>
+          </view>
         </view>
         
         <!-- 帖子视图 -->
@@ -265,6 +317,7 @@
 <script>
 import { getPostList, getPostDetail } from '@/api/community'
 import { getUserProfile } from '@/api/users.js'
+import { projectService } from '@/api/project.js'
 
 export default {
   name: 'PostedPage',
@@ -291,6 +344,9 @@ export default {
         { value: 4, label: '材料展示' }
       ],
       posts: [],
+      orderList: [],
+      orderLoading: false,
+      userRole: null,
       // 修复：预定义所有样式类映射
       postTypeClasses: {
         '1': 'type-1',
@@ -357,11 +413,119 @@ export default {
       }
     },
     
+    async loadOrders() {
+      if (this.orderLoading || !this.userId) return
+      
+      try {
+        this.orderLoading = true
+        
+        const queryParams = {
+          userId: this.userId, // 根据用户ID查询项目
+          pageNum: 1,
+          pageSize: 100 // 获取所有项目
+        }
+        
+        console.log('📋 加载用户项目列表 - 用户ID:', this.userId)
+        
+        const result = await projectService.getProjectList(queryParams)
+        console.log('✅ 项目列表响应:', result)
+        
+        let list = []
+        if (Array.isArray(result)) {
+          list = result
+        } else if (result && result.records) {
+          list = result.records
+        } else if (result && result.list) {
+          list = result.list
+        } else if (result && result.data) {
+          list = result.data.records || result.data.list || result.data || []
+        }
+        
+        this.orderList = list || []
+        
+      } catch (error) {
+        console.error('❌ 加载项目列表失败:', error)
+        uni.showToast({
+          title: error.msg || error.message || '加载项目失败',
+          icon: 'none'
+        })
+        this.orderList = []
+      } finally {
+        this.orderLoading = false
+      }
+    },
+    
+    getOrderTypeText(requiredRoles) {
+      const typeMap = {
+        1: '设计项目',
+        2: '监理项目',
+        3: '设计+监理项目'
+      }
+      return typeMap[requiredRoles] || '项目'
+    },
+    
+    getOrderTypeClass(requiredRoles) {
+      const classMap = {
+        1: 'order-type-design',
+        2: 'order-type-supervision',
+        3: 'order-type-both'
+      }
+      return classMap[requiredRoles] || ''
+    },
+    
+    getOrderStatusText(status) {
+      const statusMap = {
+        0: '草稿',
+        1: '发布中',
+        2: '设计师已接单',
+        3: '监理已接单',
+        4: '已完成',
+        5: '已取消'
+      }
+      return statusMap[status] || '未知状态'
+    },
+    
+    getOrderStatusClass(status) {
+      const classMap = {
+        0: 'status-draft',
+        1: 'status-bidding',
+        2: 'status-processing',
+        3: 'status-processing',
+        4: 'status-completed',
+        5: 'status-cancelled'
+      }
+      return classMap[status] || ''
+    },
+    
+    formatPrice(price) {
+      if (!price && price !== 0) return '0.00'
+      const num = Number(price)
+      if (Number.isNaN(num)) return '0.00'
+      return num.toFixed(2)
+    },
+    
+    viewOrderDetail(order) {
+      const projectId = order.projectId || order.id
+      if (!projectId) {
+        uni.showToast({
+          title: '项目ID不存在',
+          icon: 'none'
+        })
+        return
+      }
+      
+      // 跳转到项目详情页（订单大厅的详情页）
+      uni.navigateTo({
+        url: `/pages/order-hall/order-detail?projectId=${projectId}`
+      })
+    },
+    
     async getUserInfo() {
       try {
         const res = await getUserProfile()
         if (res.code === 200) {
           this.userId = res.data.userId
+          this.userRole = res.data.currentRoleType || res.data.role_type || res.data.roleType
           uni.setStorageSync('userId', this.userId)
         } else {
           throw new Error(res.msg || '获取用户信息失败')
@@ -785,6 +949,9 @@ export default {
     
     switchTab(tab) {
       this.currentTab = tab
+      if (tab === 'orders' && this.orderList.length === 0) {
+        this.loadOrders()
+      }
     },
     
     switchNav(nav) {
@@ -1288,6 +1455,163 @@ export default {
 .empty-desc {
   font-size: 28rpx;
   line-height: 1.6;
+  color: #999;
+}
+
+/* 订单相关样式 */
+.order-item {
+  background: white;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+  border: 2rpx solid #f8f9fa;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+}
+
+.order-info {
+  flex: 1;
+}
+
+.order-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.order-meta {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+
+.order-type {
+  display: inline-block;
+  padding: 8rpx 20rpx;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.order-type-design {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.order-type-supervision {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.order-type-both {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.order-status {
+  display: inline-block;
+  padding: 8rpx 20rpx;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.status-draft {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.status-bidding {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.status-pending {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.status-processing {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.status-completed {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.status-cancelled {
+  background: #fff1f0;
+  color: #ff4d4f;
+}
+
+.status-refunded {
+  background: #f9f0ff;
+  color: #722ed1;
+}
+
+.order-content {
+  margin: 20rpx 0;
+  padding: 20rpx 0;
+  border-top: 1rpx solid #f0f0f0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.order-detail-item {
+  display: flex;
+  margin-bottom: 12rpx;
+  font-size: 28rpx;
+}
+
+.order-detail-item:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  color: #999;
+  margin-right: 12rpx;
+  min-width: 100rpx;
+}
+
+.detail-value {
+  color: #333;
+  flex: 1;
+}
+
+.order-footer {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding-top: 20rpx;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.order-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 80rpx 0;
+}
+
+.loading-text {
+  font-size: 28rpx;
   color: #999;
 }
 

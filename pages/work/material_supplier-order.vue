@@ -1,15 +1,5 @@
 <template>
   <view class="container">
-    <!-- 顶部标题栏 -->
-    <view class="header-section">
-      <view class="back-btn" @click="goBack">
-        <text class="back-icon">←</text>
-        <text class="back-text">返回</text>
-      </view>
-      <view class="header-title">我的订单</view>
-      <view class="header-placeholder"></view>
-    </view>
-    
     <!-- 订单状态筛选 -->
     <view class="status-filter">
       <scroll-view class="filter-scroll" scroll-x="true">
@@ -401,11 +391,6 @@ export default {
     getProductImage(item) {
       // TODO: 从商品信息中获取图片
       return '/static/images/default-product.jpg'
-    },
-    
-    // 返回
-    goBack() {
-      uni.navigateBack()
     }
   }
 }
@@ -415,41 +400,6 @@ export default {
 .container {
   min-height: 100vh;
   background-color: #f5f7fa;
-}
-
-.header-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 30rpx;
-  background-color: #fff;
-  border-bottom: 1rpx solid #eee;
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.back-icon {
-  font-size: 36rpx;
-  color: #333;
-}
-
-.back-text {
-  font-size: 28rpx;
-  color: #333;
-}
-
-.header-title {
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #333;
-}
-
-.header-placeholder {
-  width: 100rpx;
 }
 
 .status-filter {
