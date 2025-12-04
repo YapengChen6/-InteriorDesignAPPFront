@@ -209,7 +209,1086 @@
 		</view>
 	</view>
 </template>
-<script>import { 	getPostList, 	getCategories, 	getThreadTypes,	getImageDetail,	formatFileSize} from '@/api/community.js'export default {	data() {		return {			// 定位相关数据			locationText: '选择位置',			searchKeyword: '',						// 原有数据			activeMainMenu: 0,			activeTab: 0,			currentBanner: 0,			bannerTimer: null,			banners: [				{					title: '限时特惠！全屋定制8折起',					color: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',					link: '/pages/promotion'				},				{					title: '新用户专享 ¥1000装修礼包',					color: 'linear-gradient(135deg, #4834d4 0%, #686de0 100%)',					link: '/pages/newuser'				},				{					title: '设计师精品案例合集',					color: 'linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%)',					link: '/pages/designer'				},				{					title: '春季装修节 建材买一送一',					color: 'linear-gradient(135deg, #f368e0 0%, #ff9ff3 100%)',					link: '/pages/spring'				}			],						// 帖子相关数据			postList: [], // 帖子列表			categories: [], // 分类列表			threadTypes: [], // 帖子类型列表			loading: false,			hasMore: true,			pageParams: {				pageNum: 1,				pageSize: 12,				keyword: '',				categoryId: null,				threadType: null			},			total: 0,						// 图片详情相关数据			showImageInfo: false, // 是否显示图片信息			imageDetailsCache: new Map(), // 图片详情缓存			loadingImageDetails: new Set(), // 正在加载的图片详情						// 帖子类型样式类映射 - 修复 :class 绑定问题			postTypeClasses: {				1: 'portfolio-tag',    // 作品集				2: 'case-tag',         // 案例集				3: 'normal-tag',       // 普通帖				4: 'material-tag'      // 材料展示			},						// 防止重复点击			isNavigating: false		}	},		methods: {		// 跳转到订单大厅页面		goToOrderHall() {			uni.navigateTo({				url: '/pages/order-hall/order-hall'			});		},				// 跳转到定位页面		goToLocationPage() {			uni.navigateTo({				url: '/pages/location/location'			});		},				// 跳转到商城页面		goToShopPage() {			uni.navigateTo({				url: '/pages/shop/shop-list'			});		},				// 跳转到找监工页面		goToFindSupervisor() {			uni.navigateTo({				url: '/pages/find-supervisor/find-supervisor'			});		},				// 跳转到找设计师页面		goToFindDesigner() {			uni.navigateTo({				url: '/pages/find-design/find-design'			});		},				// 清空搜索		clearSearch() {			this.searchKeyword = '';			this.pageParams.keyword = '';			this.pageParams.pageNum = 1;			this.loadPosts();		},				// 搜索帖子		async onSearch() {			this.pageParams.keyword = this.searchKeyword;			this.pageParams.pageNum = 1;			await this.loadPosts();		},				// 查看帖子详情 - 优化后的跳转逻辑		async viewPostDetail(id) {			// 防止重复点击			if (this.isNavigating) {				return;			}						try {				this.isNavigating = true;				console.log('📖 查看帖子详情，ID:', id);								// 添加点击反馈				uni.vibrateShort({					success: () => {						console.log('振动反馈');					}				});								// 显示加载提示				uni.showLoading({					title: '加载中...',					mask: true				});								// 跳转到详情页				uni.navigateTo({					url: `/pages/post/detail?id=${id}`,					success: () => {						console.log('跳转成功');						uni.hideLoading();					},					fail: (error) => {						console.error('跳转失败:', error);						uni.hideLoading();						uni.showToast({							title: '跳转失败，请重试',							icon: 'none',							duration: 2000						});					},					complete: () => {						// 重置导航状态						setTimeout(() => {							this.isNavigating = false;						}, 500);					}				});			} catch (error) {				console.error('跳转异常:', error);				uni.hideLoading();				uni.showToast({					title: '跳转失败',					icon: 'none'				});				this.isNavigating = false;			}		},				// 获取帖子图片URL - 直接使用 cover_url		getPostImageUrl(post) {			// 优先使用 cover_url（后端提供的预览图）			if (post.coverUrl) {				return post.coverUrl;			}						// 如果没有 cover_url，使用 mediaUrls 中的第一张图片作为降级方案			if (post.mediaUrls && post.mediaUrls.length > 0) {				return post.mediaUrls[0];			}						// 如果都没有图片，返回空字符串，显示无图片状态			return '';		},				// 加载图片详情信息		async loadImageDetail(post) {			try {				// 如果已经在加载中，跳过				if (this.loadingImageDetails.has(post.id)) {					return;				}								// 标记为正在加载详情				this.loadingImageDetails.add(post.id);								console.log(`🔄 开始加载帖子 ${post.id} 的图片详情`);								// 从图片URL中提取mediaId（假设URL中包含mediaId）				const imageUrl = post.coverUrl || (post.mediaUrls && post.mediaUrls[0]);				const mediaId = this.extractMediaIdFromUrl(imageUrl);								if (mediaId) {					// 调用图片详情接口					const response = await getImageDetail(mediaId);					console.log(`📊 获取到图片详情:`, response);										if (response && response.code === 200) {						const imageDetail = response.data;												// 处理图片详情数据						const processedDetail = this.processImageDetail(imageDetail);												// 更新帖子数据						this.$set(post, 'imageDetail', processedDetail);						this.$set(post, 'imageDetailLoaded', true);												// 缓存图片详情						this.imageDetailsCache.set(post.id, processedDetail);												console.log(`✅ 成功加载图片详情:`, processedDetail);					}				} else {					console.log(`⚠️ 无法从URL提取mediaId:`, imageUrl);					// 如果没有mediaId，创建基本的图片信息					this.createBasicImageInfo(post, imageUrl);				}							} catch (error) {				console.error(`❌ 加载图片详情失败:`, error);				// 标记为详情加载失败，避免重复尝试				this.$set(post, 'imageDetailLoaded', true);			} finally {				this.loadingImageDetails.delete(post.id);			}		},				// 从图片URL中提取mediaId		extractMediaIdFromUrl(imageUrl) {			if (!imageUrl) return null;						// 假设URL格式为：https://domain.com/path/{mediaId}.jpg			// 或者：https://domain.com/path/{mediaId}			const urlParts = imageUrl.split('/');			const lastPart = urlParts[urlParts.length - 1];						// 移除文件扩展名			const withoutExtension = lastPart.split('.')[0];						// 检查是否是有效的ID格式（数字或特定格式）			if (/^\d+$/.test(withoutExtension)) {				return withoutExtension;			}						// 如果是其他格式的ID，可以在这里添加更多解析逻辑			return null;		},				// 处理图片详情数据		processImageDetail(imageDetail) {			if (!imageDetail) return null;						return {				// 基本信息				id: imageDetail.id || imageDetail.mediaId,				filename: imageDetail.filename || imageDetail.fileName,				fileUrl: imageDetail.fileUrl || imageDetail.url,								// 文件信息				fileSize: imageDetail.fileSize ? formatFileSize(imageDetail.fileSize) : '未知大小',				fileType: imageDetail.fileType || imageDetail.mimeType || 'image',				width: imageDetail.width,				height: imageDetail.height,								// 关联信息				relatedType: imageDetail.relatedType,				relatedId: imageDetail.relatedId,				sequence: imageDetail.sequence,				stage: imageDetail.stage,				description: imageDetail.description,								// 时间信息				createTime: imageDetail.createTime || imageDetail.create_time,				updateTime: imageDetail.updateTime || imageDetail.update_time,								// 状态信息				status: imageDetail.status,				isDeleted: imageDetail.isDeleted || imageDetail.deleted			};		},				// 创建基本的图片信息		createBasicImageInfo(post, imageUrl) {			try {				console.log(`🔄 创建基本图片信息:`, imageUrl);								// 创建基本的图片信息				const basicInfo = {					fileUrl: imageUrl,					filename: this.extractFilenameFromUrl(imageUrl),					fileSize: '未知大小',					fileType: this.extractFileTypeFromUrl(imageUrl),					createTime: post.createTime || '未知时间'				};								this.$set(post, 'imageDetail', basicInfo);				this.$set(post, 'imageDetailLoaded', true);							} catch (error) {				console.error(`❌ 创建基本图片信息失败:`, error);				this.$set(post, 'imageDetailLoaded', true);			}		},				// 从URL中提取文件名		extractFilenameFromUrl(url) {			if (!url) return '未知文件';			const parts = url.split('/');			return parts[parts.length - 1] || '未知文件';		},				// 从URL中提取文件类型		extractFileTypeFromUrl(url) {			if (!url) return 'image';			const parts = url.split('.');			const extension = parts[parts.length - 1]?.toLowerCase();						const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];			if (imageTypes.includes(extension)) {				return 'image';			}						return extension || 'file';		},				// 图片预览		previewImage(post) {			// 预览时使用原始图片URL（mediaUrls），而不是封面图			if (!post.mediaUrls || post.mediaUrls.length === 0) {				return;			}						// 使用uni.previewImage进行图片预览			uni.previewImage({				urls: post.mediaUrls,				current: post.mediaUrls[0],				indicator: 'number',				loop: true,				success: () => {					console.log('图片预览成功');				},				fail: (error) => {					console.error('图片预览失败:', error);					uni.showToast({						title: '预览失败',						icon: 'none'					});				}			});		},				// 图片加载失败处理		handleImageError(post, event) {			console.log('❌ 图片加载失败:', event);			post.imageError = true;			post.imageLoading = false;						// 标记图片详情加载完成			this.$set(post, 'imageDetailLoaded', true);		},				// 图片加载成功处理		handleImageLoad(post) {			console.log('✅ 图片加载成功');			post.imageError = false;			post.imageLoading = false;						// 图片加载成功后，加载图片详情			if (!post.imageDetailLoaded) {				this.loadImageDetail(post);			}		},				// 重试加载图片		retryLoadImage(post) {			post.imageError = false;			post.imageLoading = true;			post.imageDetailLoaded = false;						this.$forceUpdate();		},				// 切换显示图片信息		toggleImageInfo() {			this.showImageInfo = !this.showImageInfo;			uni.showToast({				title: this.showImageInfo ? '已显示图片信息' : '已隐藏图片信息',				icon: 'none',				duration: 1500			});		},				// 批量预加载图片详情		preloadImageDetails() {			// 预加载前几个帖子的图片详情			const postsToPreload = this.postList.slice(0, 4);						postsToPreload.forEach(post => {				if ((post.coverUrl || (post.mediaUrls && post.mediaUrls.length > 0)) && !post.imageDetailLoaded) {					this.loadImageDetail(post);				}			});		},				// 切换轮播图		switchBanner(index) {			this.currentBanner = index;			this.resetBannerTimer();		},				// 自动轮播		autoPlayBanner() {			this.bannerTimer = setInterval(() => {				this.currentBanner = (this.currentBanner + 1) % this.banners.length;			}, 3000);		},				// 重置轮播定时器		resetBannerTimer() {			if (this.bannerTimer) {				clearInterval(this.bannerTimer);			}			this.autoPlayBanner();		},				// 跳转到轮播图链接		goToBannerLink(link) {			uni.navigateTo({				url: link			});		},				// 获取缓存的定位信息		getCachedLocation() {			try {				const cachedLocation = uni.getStorageSync('userLocation');				if (cachedLocation) {					this.locationText = cachedLocation.city || cachedLocation.address || '定位成功';				}			} catch (e) {				console.log('获取缓存定位失败:', e);			}		},				// 切换标签 - 根据数据库thread_type字段调整		async switchTab(tabIndex) {			this.activeTab = tabIndex;						const tabFilters = {				0: { threadType: null }, // 推荐 - 全部				1: { threadType: 1 },    // 作品集				2: { threadType: 2 },    // 案例集				3: { threadType: 4 },    // 材料展示 (数据库中是4)				4: { threadType: 3 }     // 普通帖 (数据库中是3)			};						this.pageParams = {				...this.pageParams,				...tabFilters[tabIndex],				pageNum: 1			};						await this.loadPosts();		},				// 加载帖子列表		async loadPosts() {			try {				this.loading = true;								// 构建查询参数				const queryParams = {					pageNum: this.pageParams.pageNum,					pageSize: this.pageParams.pageSize				};								// 添加可选参数				if (this.pageParams.keyword) {					queryParams.keyword = this.pageParams.keyword;				}				if (this.pageParams.threadType) {					queryParams.threadType = this.pageParams.threadType;				}				if (this.pageParams.categoryId) {					queryParams.categoryId = this.pageParams.categoryId;				}								console.log('🔍 发送请求参数:', queryParams);								// 调用API获取帖子列表				const response = await getPostList(queryParams);				console.log('📨 API响应数据:', response);								// 根据数据库结构处理响应				let posts = [];				let total = 0;								// 处理响应数据				if (response && response.code === 200) {					// 如果响应有data字段					if (response.data) {						// 分页结构：data中有rows和total						if (response.data.rows && Array.isArray(response.data.rows)) {							posts = response.data.rows;							total = response.data.total || 0;						}						// 分页结构：data中有list和total						else if (response.data.list && Array.isArray(response.data.list)) {							posts = response.data.list;							total = response.data.total || 0;						}						// data本身就是数组						else if (Array.isArray(response.data)) {							posts = response.data;							total = posts.length;						}						// 其他结构						else {							posts = this.extractPostsFromResponse(response.data);							total = response.total || posts.length;						}					}					// 响应直接是数组					else if (Array.isArray(response)) {						posts = response;						total = response.length;					}				} else if (Array.isArray(response)) {					// 直接返回数组的情况					posts = response;					total = response.length;				} else {					console.warn('⚠️ 无法识别的响应结构:', response);					posts = [];					total = 0;				}								console.log('📊 解析后的帖子数据:', posts);								if (this.pageParams.pageNum === 1) {					this.postList = [];				}								// 处理API返回的数据 - 根据数据库字段映射				const processedPosts = this.processPostData(posts);				this.postList = [...this.postList, ...processedPosts];								// 更新分页信息				this.total = total;				this.hasMore = this.postList.length < total && posts.length === this.pageParams.pageSize;								console.log('✅ 加载完成，当前帖子数:', this.postList.length, '是否有更多:', this.hasMore);							} catch (error) {				console.error('❌ 加载帖子失败:', error);				// 出错时使用模拟数据作为降级方案				this.useMockDataAsFallback();				uni.showToast({					title: '加载失败，使用演示数据',					icon: 'none'				});			} finally {				this.loading = false;			}		},				// 从响应对象中提取帖子数据		extractPostsFromResponse(response) {			const possibleKeys = ['rows', 'list', 'records', 'posts', 'data', 'items', 'content'];						for (let key of possibleKeys) {				if (Array.isArray(response[key])) {					return response[key];				}			}						return [];		},				// 处理API返回的帖子数据 - 根据数据库字段映射		processPostData(posts) {			if (!posts || !Array.isArray(posts)) {				return [];			}						return posts.map(post => {				// 根据API返回的数据结构处理				const processedPost = {					// 帖子ID					id: post.id || post.thread_id || Math.random().toString(36).substr(2, 9),					// 标题					title: post.title || '无标题',					// 作者信息					author: this.getAuthorName(post),					// 作者头像					authorAvatar: post.avatar || post.authorAvatar,					// 浏览量					views: this.formatViewCount(post.viewCount || post.view_count || 0),					viewCount: post.viewCount || post.view_count || 0,					// 点赞数					likeCount: post.likeCount || post.like_count || 0,					// 评论数					commentCount: post.commentCount || post.comment_count || 0,					// 帖子类型 - 根据数据库thread_type					threadType: post.threadType || post.thread_type || 3,					// 创建时间					createTime: post.createTime || post.create_time,					// 分类信息					categoryId: post.categoryId || post.category_id,					// 角色类型					roleType: post.roleType || post.role_type,					// 状态					status: post.status,					// 封面图URL - 后端提供的预览图					coverUrl: post.coverUrl || post.cover_url,					// 媒体URL数组 - 原始图片					mediaUrls: post.mediaUrls || post.media_urls || [],					// 图片加载状态					imageLoading: true,					imageError: false,					// 图片详情相关					imageDetail: null,					imageDetailLoaded: false,					// 模板数据					normalPost: post.normalPost,					portfolio: post.portfolio,					caseStudy: post.caseStudy,					materialShow: post.materialShow				};								return processedPost;			});		},				// 获取作者名称		getAuthorName(post) {			// 如果有直接的用户名字段			if (post.nickname || post.userName || post.author) {				return post.nickname || post.userName || post.author;			}						// 根据用户ID或其他信息生成默认名称			if (post.userId) {				return `用户${post.userId}`;			}						// 根据角色类型返回默认名称			const roleType = post.roleType || post.role_type;			const roleNames = {				1: '普通用户',				2: '设计师',				3: '监理',				4: '材料商'			};						return roleNames[roleType] || '匿名用户';		},				// 格式化浏览量显示		formatViewCount(count) {			if (count >= 10000) {				return (count / 10000).toFixed(1) + '万';			} else if (count >= 1000) {				return (count / 1000).toFixed(1) + '千';			}			return count.toString();		},				// 降级方案：使用模拟数据		useMockDataAsFallback() {			const mockPosts = this.getMockPosts();						if (this.pageParams.pageNum === 1) {				this.postList = [];			}						this.postList = [...this.postList, ...mockPosts];			this.hasMore = false;		},				// 模拟帖子数据 - 根据API返回的数据结构		getMockPosts() {			const baseMockPosts = [				// 普通帖 (thread_type: 3) - 使用您提供的真实数据				{					id: 11,					title: '氨基酸更加灵活',					author: '用户102',					viewCount: 0,					likeCount: 0,					commentCount: 0,					threadType: 3,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/5c92c50d76b047308767329292ccddf7.jpg'					],					normalPost: {						normalPostId: "7",						postId: "11"					}				},				// 作品集 (thread_type: 1)				{					id: 1,					title: '现代简约风格家居设计作品，打造舒适生活空间',					author: '设计师张工',					viewCount: 23000,					likeCount: 1250,					commentCount: 89,					threadType: 1,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-1-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-1.jpg'					]				},				{					id: 2,					title: '欧式古典风格别墅设计，奢华与艺术的完美结合',					author: '设计工作室',					viewCount: 18000,					likeCount: 980,					commentCount: 67,					threadType: 1,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2.jpg'					]				},				// 案例集 (thread_type: 2)				{					id: 3,					title: '小户型改造：30平变60平的魔法，空间利用极致',					author: '改造专家',					viewCount: 32000,					likeCount: 2100,					commentCount: 156,					threadType: 2,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1.jpg'					]				},				{					id: 4,					title: '老房翻新案例分享，旧貌换新颜的装修历程',					author: '装修达人',					viewCount: 15000,					likeCount: 870,					commentCount: 45,					threadType: 2,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-2-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-2.jpg'					]				},				// 普通帖 (thread_type: 3)				{					id: 5,					title: '装修避坑经验分享，这些细节一定要注意',					author: '装修小白',					viewCount: 21000,					likeCount: 1560,					commentCount: 234,					threadType: 3,					coverUrl: '',					mediaUrls: [] // 无图片的帖子				},				{					id: 6,					title: '装修预算如何控制？我的省钱经验分享',					author: '理财达人',					viewCount: 8000,					likeCount: 540,					commentCount: 78,					threadType: 3,					coverUrl: '',					mediaUrls: [] // 无图片的帖子				},				// 材料展示 (thread_type: 4)				{					id: 7,					title: '进口大理石材料展示，天然纹理美不胜收',					author: '建材商城',					viewCount: 9000,					likeCount: 620,					commentCount: 34,					threadType: 4,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-1-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-1.jpg'					]				},				{					id: 8,					title: '环保涂料选购指南，健康家居从墙面开始',					author: '材料专家',					viewCount: 11000,					likeCount: 780,					commentCount: 56,					threadType: 4,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-2-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-2.jpg'					]				}			];						// 根据当前标签筛选			let filteredPosts = [...baseMockPosts];			const tabMapping = {				0: null, // 推荐 - 全部				1: 1,    // 作品集				2: 2,    // 案例集				3: 4,    // 材料展示				4: 3     // 普通帖			};						const currentThreadType = tabMapping[this.activeTab];			if (currentThreadType !== null) {				filteredPosts = baseMockPosts.filter(post => post.threadType === currentThreadType);			}						// 模拟分页：如果是第一页返回完整数据，否则返回空数组			if (this.pageParams.pageNum === 1) {				return filteredPosts;			} else {				return [];			}		},				// 加载分类和类型		async loadCategoriesAndTypes() {			try {				console.log('🔄 加载分类和类型...');								// 尝试调用API获取分类和类型				const [categoriesRes, typesRes] = await Promise.all([					getCategories(),					getThreadTypes()				]);								console.log('📋 分类响应:', categoriesRes);				console.log('📋 类型响应:', typesRes);								// 处理分类响应				this.categories = this.processApiResponse(categoriesRes, [					{ id: 1, name: '设计作品' },					{ id: 2, name: '装修案例' },					{ id: 3, name: '经验分享' },					{ id: 4, name: '材料知识' }				]);								// 处理类型响应 - 根据数据库thread_type				this.threadTypes = this.processApiResponse(typesRes, [					{ id: 1, name: '作品集' },					{ id: 2, name: '案例集' },					{ id: 3, name: '普通帖' },					{ id: 4, name: '材料展示' }				]);								console.log('✅ 最终分类数据:', this.categories);				console.log('✅ 最终类型数据:', this.threadTypes);							} catch (error) {				console.error('❌ 加载分类和类型失败:', error);				// 使用默认数据				this.categories = [					{ id: 1, name: '设计作品' },					{ id: 2, name: '装修案例' },					{ id: 3, name: '经验分享' },					{ id: 4, name: '材料知识' }				];				this.threadTypes = [					{ id: 1, name: '作品集' },					{ id: 2, name: '案例集' },					{ id: 3, name: '普通帖' },					{ id: 4, name: '材料展示' }				];			}		},				// 处理API响应数据		processApiResponse(response, defaultData) {			if (Array.isArray(response)) {				return response;			} else if (response && response.code === 200 && response.data) {				if (Array.isArray(response.data)) {					return response.data;				} else if (response.data.rows) {					return response.data.rows;				} else if (response.data.list) {					return response.data.list;				}			}			return defaultData;		},				// 获取帖子类型名称 - 根据数据库thread_type		getThreadTypeName(typeId) {			const type = this.threadTypes.find(item => item.id === typeId);			if (type) {				return type.name;			}						// 默认映射			const typeMap = {				1: '作品',				2: '案例', 				3: '普通',				4: '材料'			};			return typeMap[typeId] || '帖子';		},				// 加载更多		async loadMore() {			if (this.loading || !this.hasMore) return;						this.pageParams.pageNum++;			await this.loadPosts();		},				// 监听帖子点赞更新事件		listenPostLikeUpdates() {			// 移除之前的监听，避免重复监听			uni.$off('postLikeUpdated');						// 监听点赞更新事件			uni.$on('postLikeUpdated', (data) => {				console.log('📢 收到帖子点赞更新事件:', data);				if (data && data.postId) {					// 查找对应的帖子并更新点赞数					const postIndex = this.postList.findIndex(post => post.id == data.postId || post.thread_id == data.postId);					if (postIndex !== -1) {						this.postList[postIndex].likeCount = data.likeCount || 0;						console.log(`✅ 更新帖子 ${data.postId} 的点赞数为 ${data.likeCount}`);					}				}			});		},				// 停止监听点赞更新事件		stopListeningPostLikeUpdates() {			uni.$off('postLikeUpdated');		}	},		onLoad() {		// 页面加载时尝试获取缓存的定位信息		this.getCachedLocation();		// 加载分类和帖子		this.loadCategoriesAndTypes();		this.loadPosts();		// 监听帖子点赞更新事件		this.listenPostLikeUpdates();	},		onShow() {		// 页面显示时检查是否有新的定位信息		this.getCachedLocation();		// 恢复轮播图自动播放		this.resetBannerTimer();		// 监听帖子点赞更新事件		this.listenPostLikeUpdates();	},		onHide() {		// 页面隐藏时停止轮播图自动播放		if (this.bannerTimer) {			clearInterval(this.bannerTimer);		}	},		onPullDownRefresh() {		this.pageParams.pageNum = 1;		this.loadPosts().then(() => {			uni.stopPullDownRefresh();		});	},		onReachBottom() {		this.loadMore();	},		// 监听帖子列表变化，预加载图片详情	watch: {		postList: {			handler(newList) {				if (newList.length > 0) {					// 延迟预加载，避免阻塞主线程					setTimeout(() => {						this.preloadImageDetails();					}, 1000);				}			},			immediate: false,			deep: true		}	},		mounted() {		this.autoPlayBanner();	},		beforeUnmount() {		if (this.bannerTimer) {			clearInterval(this.bannerTimer);		}		// 移除事件监听		this.stopListeningPostLikeUpdates();	},		onUnload() {		// 页面卸载时移除事件监听		this.stopListeningPostLikeUpdates();	}}</script><style>
+<script>
+import { 
+	getPostList, 
+	getCategories, 
+	getThreadTypes,
+	getImageDetail,
+	formatFileSize
+} from '@/api/community.js'
+
+export default {
+	data() {
+		return {
+			// 定位相关数据
+			locationText: '选择位置',
+			searchKeyword: '',
+			
+			// 原有数据
+			activeMainMenu: 0,
+			activeTab: 0,
+			currentBanner: 0,
+			bannerTimer: null,
+			banners: [
+				{
+					title: '限时特惠！全屋定制8折起',
+					color: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+					link: '/pages/promotion'
+				},
+				{
+					title: '新用户专享 ¥1000装修礼包',
+					color: 'linear-gradient(135deg, #4834d4 0%, #686de0 100%)',
+					link: '/pages/newuser'
+				},
+				{
+					title: '设计师精品案例合集',
+					color: 'linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%)',
+					link: '/pages/designer'
+				},
+				{
+					title: '春季装修节 建材买一送一',
+					color: 'linear-gradient(135deg, #f368e0 0%, #ff9ff3 100%)',
+					link: '/pages/spring'
+				}
+			],
+			
+			// 帖子相关数据
+			postList: [], // 帖子列表
+			categories: [], // 分类列表
+			threadTypes: [], // 帖子类型列表
+			loading: false,
+			hasMore: true,
+			pageParams: {
+				pageNum: 1,
+				pageSize: 12,
+				keyword: '',
+				categoryId: null,
+				threadType: null
+			},
+			total: 0,
+			
+			// 图片详情相关数据
+			showImageInfo: false, // 是否显示图片信息
+			imageDetailsCache: new Map(), // 图片详情缓存
+			loadingImageDetails: new Set(), // 正在加载的图片详情
+			
+			// 帖子类型样式类映射 - 修复 :class 绑定问题
+			postTypeClasses: {
+				1: 'portfolio-tag',    // 作品集
+				2: 'case-tag',         // 案例集
+				3: 'normal-tag',       // 普通帖
+				4: 'material-tag'      // 材料展示
+			},
+			
+			// 防止重复点击
+			isNavigating: false
+		}
+	},
+	
+	methods: {
+		// 跳转到订单大厅页面
+		goToOrderHall() {
+			uni.navigateTo({
+				url: '/pages/order-hall/order-hall'
+			});
+		},
+		
+		// 跳转到定位页面
+		goToLocationPage() {
+			uni.navigateTo({
+				url: '/pages/location/location'
+			});
+		},
+		
+		// 跳转到商城页面
+		goToShopPage() {
+			uni.navigateTo({
+				url: '/pages/shop/shop-list'
+			});
+		},
+		
+		// 跳转到找监工页面
+		goToFindSupervisor() {
+			uni.navigateTo({
+				url: '/pages/find-supervisor/find-supervisor'
+			});
+		},
+		
+		// 跳转到找设计师页面
+		goToFindDesigner() {
+			uni.navigateTo({
+				url: '/pages/find-design/find-design'
+			});
+		},
+		
+		// 清空搜索
+		clearSearch() {
+			this.searchKeyword = '';
+			this.pageParams.keyword = '';
+			this.pageParams.pageNum = 1;
+			this.loadPosts();
+		},
+		
+		// 搜索帖子
+		async onSearch() {
+			this.pageParams.keyword = this.searchKeyword;
+			this.pageParams.pageNum = 1;
+			await this.loadPosts();
+		},
+		
+		// 查看帖子详情 - 优化后的跳转逻辑
+		async viewPostDetail(id) {
+			// 防止重复点击
+			if (this.isNavigating) {
+				return;
+			}
+			
+			try {
+				this.isNavigating = true;
+				console.log('📖 查看帖子详情，ID:', id);
+				
+				// 添加点击反馈
+				uni.vibrateShort({
+					success: () => {
+						console.log('振动反馈');
+					}
+				});
+				
+				// 显示加载提示
+				uni.showLoading({
+					title: '加载中...',
+					mask: true
+				});
+				
+				// 跳转到详情页
+				uni.navigateTo({
+					url: `/pages/post/detail?id=${id}`,
+					success: () => {
+						console.log('跳转成功');
+						uni.hideLoading();
+					},
+					fail: (error) => {
+						console.error('跳转失败:', error);
+						uni.hideLoading();
+						uni.showToast({
+							title: '跳转失败，请重试',
+							icon: 'none',
+							duration: 2000
+						});
+					},
+					complete: () => {
+						// 重置导航状态
+						setTimeout(() => {
+							this.isNavigating = false;
+						}, 500);
+					}
+				});
+			} catch (error) {
+				console.error('跳转异常:', error);
+				uni.hideLoading();
+				uni.showToast({
+					title: '跳转失败',
+					icon: 'none'
+				});
+				this.isNavigating = false;
+			}
+		},
+		
+		// 获取帖子图片URL - 直接使用 cover_url
+		getPostImageUrl(post) {
+			// 优先使用 cover_url（后端提供的预览图）
+			if (post.coverUrl) {
+				return post.coverUrl;
+			}
+			
+			// 如果没有 cover_url，使用 mediaUrls 中的第一张图片作为降级方案
+			if (post.mediaUrls && post.mediaUrls.length > 0) {
+				return post.mediaUrls[0];
+			}
+			
+			// 如果都没有图片，返回空字符串，显示无图片状态
+			return '';
+		},
+		
+		// 加载图片详情信息
+		async loadImageDetail(post) {
+			try {
+				// 如果已经在加载中，跳过
+				if (this.loadingImageDetails.has(post.id)) {
+					return;
+				}
+				
+				// 标记为正在加载详情
+				this.loadingImageDetails.add(post.id);
+				
+				console.log(`🔄 开始加载帖子 ${post.id} 的图片详情`);
+				
+				// 从图片URL中提取mediaId（假设URL中包含mediaId）
+				const imageUrl = post.coverUrl || (post.mediaUrls && post.mediaUrls[0]);
+				const mediaId = this.extractMediaIdFromUrl(imageUrl);
+				
+				if (mediaId) {
+					// 调用图片详情接口
+					const response = await getImageDetail(mediaId);
+					console.log(`📊 获取到图片详情:`, response);
+					
+					if (response && response.code === 200) {
+						const imageDetail = response.data;
+						
+						// 处理图片详情数据
+						const processedDetail = this.processImageDetail(imageDetail);
+						
+						// 更新帖子数据
+						this.$set(post, 'imageDetail', processedDetail);
+						this.$set(post, 'imageDetailLoaded', true);
+						
+						// 缓存图片详情
+						this.imageDetailsCache.set(post.id, processedDetail);
+						
+						console.log(`✅ 成功加载图片详情:`, processedDetail);
+					}
+				} else {
+					console.log(`⚠️ 无法从URL提取mediaId:`, imageUrl);
+					// 如果没有mediaId，创建基本的图片信息
+					this.createBasicImageInfo(post, imageUrl);
+				}
+				
+			} catch (error) {
+				console.error(`❌ 加载图片详情失败:`, error);
+				// 标记为详情加载失败，避免重复尝试
+				this.$set(post, 'imageDetailLoaded', true);
+			} finally {
+				this.loadingImageDetails.delete(post.id);
+			}
+		},
+		
+		// 从图片URL中提取mediaId
+		extractMediaIdFromUrl(imageUrl) {
+			if (!imageUrl) return null;
+			
+			// 假设URL格式为：https://domain.com/path/{mediaId}.jpg
+			// 或者：https://domain.com/path/{mediaId}
+			const urlParts = imageUrl.split('/');
+			const lastPart = urlParts[urlParts.length - 1];
+			
+			// 移除文件扩展名
+			const withoutExtension = lastPart.split('.')[0];
+			
+			// 检查是否是有效的ID格式（数字或特定格式）
+			if (/^\d+$/.test(withoutExtension)) {
+				return withoutExtension;
+			}
+			
+			// 如果是其他格式的ID，可以在这里添加更多解析逻辑
+			return null;
+		},
+		
+		// 处理图片详情数据
+		processImageDetail(imageDetail) {
+			if (!imageDetail) return null;
+			
+			return {
+				// 基本信息
+				id: imageDetail.id || imageDetail.mediaId,
+				filename: imageDetail.filename || imageDetail.fileName,
+				fileUrl: imageDetail.fileUrl || imageDetail.url,
+				
+				// 文件信息
+				fileSize: imageDetail.fileSize ? formatFileSize(imageDetail.fileSize) : '未知大小',
+				fileType: imageDetail.fileType || imageDetail.mimeType || 'image',
+				width: imageDetail.width,
+				height: imageDetail.height,
+				
+				// 关联信息
+				relatedType: imageDetail.relatedType,
+				relatedId: imageDetail.relatedId,
+				sequence: imageDetail.sequence,
+				stage: imageDetail.stage,
+				description: imageDetail.description,
+				
+				// 时间信息
+				createTime: imageDetail.createTime || imageDetail.create_time,
+				updateTime: imageDetail.updateTime || imageDetail.update_time,
+				
+				// 状态信息
+				status: imageDetail.status,
+				isDeleted: imageDetail.isDeleted || imageDetail.deleted
+			};
+		},
+		
+		// 创建基本的图片信息
+		createBasicImageInfo(post, imageUrl) {
+			try {
+				console.log(`🔄 创建基本图片信息:`, imageUrl);
+				
+				// 创建基本的图片信息
+				const basicInfo = {
+					fileUrl: imageUrl,
+					filename: this.extractFilenameFromUrl(imageUrl),
+					fileSize: '未知大小',
+					fileType: this.extractFileTypeFromUrl(imageUrl),
+					createTime: post.createTime || '未知时间'
+				};
+				
+				this.$set(post, 'imageDetail', basicInfo);
+				this.$set(post, 'imageDetailLoaded', true);
+				
+			} catch (error) {
+				console.error(`❌ 创建基本图片信息失败:`, error);
+				this.$set(post, 'imageDetailLoaded', true);
+			}
+		},
+		
+		// 从URL中提取文件名
+		extractFilenameFromUrl(url) {
+			if (!url) return '未知文件';
+			const parts = url.split('/');
+			return parts[parts.length - 1] || '未知文件';
+		},
+		
+		// 从URL中提取文件类型
+		extractFileTypeFromUrl(url) {
+			if (!url) return 'image';
+			const parts = url.split('.');
+			const extension = parts[parts.length - 1]?.toLowerCase();
+			
+			const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+			if (imageTypes.includes(extension)) {
+				return 'image';
+			}
+			
+			return extension || 'file';
+		},
+		
+		// 图片预览
+		previewImage(post) {
+			// 预览时使用原始图片URL（mediaUrls），而不是封面图
+			if (!post.mediaUrls || post.mediaUrls.length === 0) {
+				return;
+			}
+			
+			// 使用uni.previewImage进行图片预览
+			uni.previewImage({
+				urls: post.mediaUrls,
+				current: post.mediaUrls[0],
+				indicator: 'number',
+				loop: true,
+				success: () => {
+					console.log('图片预览成功');
+				},
+				fail: (error) => {
+					console.error('图片预览失败:', error);
+					uni.showToast({
+						title: '预览失败',
+						icon: 'none'
+					});
+				}
+			});
+		},
+		
+		// 图片加载失败处理
+		handleImageError(post, event) {
+			console.log('❌ 图片加载失败:', event);
+			post.imageError = true;
+			post.imageLoading = false;
+			
+			// 标记图片详情加载完成
+			this.$set(post, 'imageDetailLoaded', true);
+		},
+		
+		// 图片加载成功处理
+		handleImageLoad(post) {
+			console.log('✅ 图片加载成功');
+			post.imageError = false;
+			post.imageLoading = false;
+			
+			// 图片加载成功后，加载图片详情
+			if (!post.imageDetailLoaded) {
+				this.loadImageDetail(post);
+			}
+		},
+		
+		// 重试加载图片
+		retryLoadImage(post) {
+			post.imageError = false;
+			post.imageLoading = true;
+			post.imageDetailLoaded = false;
+			
+			this.$forceUpdate();
+		},
+		
+		// 切换显示图片信息
+		toggleImageInfo() {
+			this.showImageInfo = !this.showImageInfo;
+			uni.showToast({
+				title: this.showImageInfo ? '已显示图片信息' : '已隐藏图片信息',
+				icon: 'none',
+				duration: 1500
+			});
+		},
+		
+		// 批量预加载图片详情
+		preloadImageDetails() {
+			// 预加载前几个帖子的图片详情
+			const postsToPreload = this.postList.slice(0, 4);
+			
+			postsToPreload.forEach(post => {
+				if ((post.coverUrl || (post.mediaUrls && post.mediaUrls.length > 0)) && !post.imageDetailLoaded) {
+					this.loadImageDetail(post);
+				}
+			});
+		},
+		
+		// 切换轮播图
+		switchBanner(index) {
+			this.currentBanner = index;
+			this.resetBannerTimer();
+		},
+		
+		// 自动轮播
+		autoPlayBanner() {
+			this.bannerTimer = setInterval(() => {
+				this.currentBanner = (this.currentBanner + 1) % this.banners.length;
+			}, 3000);
+		},
+		
+		// 重置轮播定时器
+		resetBannerTimer() {
+			if (this.bannerTimer) {
+				clearInterval(this.bannerTimer);
+			}
+			this.autoPlayBanner();
+		},
+		
+		// 跳转到轮播图链接
+		goToBannerLink(link) {
+			uni.navigateTo({
+				url: link
+			});
+		},
+		
+		// 获取缓存的定位信息
+		getCachedLocation() {
+			try {
+				const cachedLocation = uni.getStorageSync('userLocation');
+				if (cachedLocation) {
+					this.locationText = cachedLocation.city || cachedLocation.address || '定位成功';
+				}
+			} catch (e) {
+				console.log('获取缓存定位失败:', e);
+			}
+		},
+		
+		// 切换标签 - 根据数据库thread_type字段调整
+		async switchTab(tabIndex) {
+			this.activeTab = tabIndex;
+			
+			const tabFilters = {
+				0: { threadType: null }, // 推荐 - 全部
+				1: { threadType: 1 },    // 作品集
+				2: { threadType: 2 },    // 案例集
+				3: { threadType: 4 },    // 材料展示 (数据库中是4)
+				4: { threadType: 3 }     // 普通帖 (数据库中是3)
+			};
+			
+			this.pageParams = {
+				...this.pageParams,
+				...tabFilters[tabIndex],
+				pageNum: 1
+			};
+			
+			await this.loadPosts();
+		},
+		
+		// 加载帖子列表
+		async loadPosts() {
+			try {
+				this.loading = true;
+				
+				// 构建查询参数
+				const queryParams = {
+					pageNum: this.pageParams.pageNum,
+					pageSize: this.pageParams.pageSize
+				};
+				
+				// 添加可选参数
+				if (this.pageParams.keyword) {
+					queryParams.keyword = this.pageParams.keyword;
+				}
+				if (this.pageParams.threadType) {
+					queryParams.threadType = this.pageParams.threadType;
+				}
+				if (this.pageParams.categoryId) {
+					queryParams.categoryId = this.pageParams.categoryId;
+				}
+				
+				console.log('🔍 发送请求参数:', queryParams);
+				
+				// 调用API获取帖子列表
+				const response = await getPostList(queryParams);
+				console.log('📨 API响应数据:', response);
+				
+				// 根据数据库结构处理响应
+				let posts = [];
+				let total = 0;
+				
+				// 处理响应数据
+				if (response && response.code === 200) {
+					// 如果响应有data字段
+					if (response.data) {
+						// 分页结构：data中有rows和total
+						if (response.data.rows && Array.isArray(response.data.rows)) {
+							posts = response.data.rows;
+							total = response.data.total || 0;
+						}
+						// 分页结构：data中有list和total
+						else if (response.data.list && Array.isArray(response.data.list)) {
+							posts = response.data.list;
+							total = response.data.total || 0;
+						}
+						// data本身就是数组
+						else if (Array.isArray(response.data)) {
+							posts = response.data;
+							total = posts.length;
+						}
+						// 其他结构
+						else {
+							posts = this.extractPostsFromResponse(response.data);
+							total = response.total || posts.length;
+						}
+					}
+					// 响应直接是数组
+					else if (Array.isArray(response)) {
+						posts = response;
+						total = response.length;
+					}
+				} else if (Array.isArray(response)) {
+					// 直接返回数组的情况
+					posts = response;
+					total = response.length;
+				} else {
+					console.warn('⚠️ 无法识别的响应结构:', response);
+					posts = [];
+					total = 0;
+				}
+				
+				console.log('📊 解析后的帖子数据:', posts);
+				
+				if (this.pageParams.pageNum === 1) {
+					this.postList = [];
+				}
+				
+				// 处理API返回的数据 - 根据数据库字段映射
+				const processedPosts = this.processPostData(posts);
+				this.postList = [...this.postList, ...processedPosts];
+				
+				// 更新分页信息
+				this.total = total;
+				this.hasMore = this.postList.length < total && posts.length === this.pageParams.pageSize;
+				
+				console.log('✅ 加载完成，当前帖子数:', this.postList.length, '是否有更多:', this.hasMore);
+				
+			} catch (error) {
+				console.error('❌ 加载帖子失败:', error);
+				// 出错时使用模拟数据作为降级方案
+				this.useMockDataAsFallback();
+				uni.showToast({
+					title: '加载失败，使用演示数据',
+					icon: 'none'
+				});
+			} finally {
+				this.loading = false;
+			}
+		},
+		
+		// 从响应对象中提取帖子数据
+		extractPostsFromResponse(response) {
+			const possibleKeys = ['rows', 'list', 'records', 'posts', 'data', 'items', 'content'];
+			
+			for (let key of possibleKeys) {
+				if (Array.isArray(response[key])) {
+					return response[key];
+				}
+			}
+			
+			return [];
+		},
+		
+		// 处理API返回的帖子数据 - 根据数据库字段映射
+		processPostData(posts) {
+			if (!posts || !Array.isArray(posts)) {
+				return [];
+			}
+			
+			return posts.map(post => {
+				// 根据API返回的数据结构处理
+				const processedPost = {
+					// 帖子ID
+					id: post.id || post.thread_id || Math.random().toString(36).substr(2, 9),
+					// 标题
+					title: post.title || '无标题',
+					// 作者信息
+					author: this.getAuthorName(post),
+					// 作者头像
+					authorAvatar: post.avatar || post.authorAvatar,
+					// 浏览量
+					views: this.formatViewCount(post.viewCount || post.view_count || 0),
+					viewCount: post.viewCount || post.view_count || 0,
+					// 点赞数
+					likeCount: post.likeCount || post.like_count || 0,
+					// 评论数
+					commentCount: post.commentCount || post.comment_count || 0,
+					// 帖子类型 - 根据数据库thread_type
+					threadType: post.threadType || post.thread_type || 3,
+					// 创建时间
+					createTime: post.createTime || post.create_time,
+					// 分类信息
+					categoryId: post.categoryId || post.category_id,
+					// 角色类型
+					roleType: post.roleType || post.role_type,
+					// 状态
+					status: post.status,
+					// 封面图URL - 后端提供的预览图
+					coverUrl: post.coverUrl || post.cover_url,
+					// 媒体URL数组 - 原始图片
+					mediaUrls: post.mediaUrls || post.media_urls || [],
+					// 图片加载状态
+					imageLoading: true,
+					imageError: false,
+					// 图片详情相关
+					imageDetail: null,
+					imageDetailLoaded: false,
+					// 模板数据
+					normalPost: post.normalPost,
+					portfolio: post.portfolio,
+					caseStudy: post.caseStudy,
+					materialShow: post.materialShow
+				};
+				
+				return processedPost;
+			});
+		},
+		
+		// 获取作者名称
+		getAuthorName(post) {
+			if (!post) return '匿名用户';
+			
+			// 常见字段别名
+			const possibleFields = [
+				post.authorName,
+				post.nickName,
+				post.nickname,
+				post.userName,
+				post.username,
+				post.author,
+				post.realName,
+				post.contactName
+			];
+			
+			// 嵌套的用户信息
+			if (post.user) {
+				possibleFields.push(
+					post.user.nickName,
+					post.user.nickname,
+					post.user.userName,
+					post.user.username,
+					post.user.realName
+				);
+			}
+			
+			const name = possibleFields
+				.map(item => {
+					if (typeof item === 'string') {
+						return item.trim();
+					}
+					return item;
+				})
+				.find(item => item);
+			if (name) {
+				return name;
+			}
+			
+			// 根据用户ID或其他信息生成默认名称
+			if (post.userId) {
+				return `用户${post.userId}`;
+			}
+			
+			// 根据角色类型返回默认名称
+			const roleType = post.roleType || post.role_type;
+			const roleNames = {
+				1: '普通用户',
+				2: '设计师',
+				3: '监理',
+				4: '材料商'
+			};
+			
+			return roleNames[roleType] || '匿名用户';
+		},
+		
+		// 格式化浏览量显示
+		formatViewCount(count) {
+			if (count >= 10000) {
+				return (count / 10000).toFixed(1) + '万';
+			} else if (count >= 1000) {
+				return (count / 1000).toFixed(1) + '千';
+			}
+			return count.toString();
+		},
+		
+		// 降级方案：使用模拟数据
+		useMockDataAsFallback() {
+			const mockPosts = this.getMockPosts();
+			
+			if (this.pageParams.pageNum === 1) {
+				this.postList = [];
+			}
+			
+			this.postList = [...this.postList, ...mockPosts];
+			this.hasMore = false;
+		},
+		
+		// 模拟帖子数据 - 根据API返回的数据结构
+		getMockPosts() {
+			const baseMockPosts = [
+				// 普通帖 (thread_type: 3) - 使用您提供的真实数据
+				{
+					id: 11,
+					title: '氨基酸更加灵活',
+					author: '用户102',
+					viewCount: 0,
+					likeCount: 0,
+					commentCount: 0,
+					threadType: 3,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/5c92c50d76b047308767329292ccddf7.jpg'
+					],
+					normalPost: {
+						normalPostId: "7",
+						postId: "11"
+					}
+				},
+				// 作品集 (thread_type: 1)
+				{
+					id: 1,
+					title: '现代简约风格家居设计作品，打造舒适生活空间',
+					author: '设计师张工',
+					viewCount: 23000,
+					likeCount: 1250,
+					commentCount: 89,
+					threadType: 1,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-1-preview.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-1.jpg'
+					]
+				},
+				{
+					id: 2,
+					title: '欧式古典风格别墅设计，奢华与艺术的完美结合',
+					author: '设计工作室',
+					viewCount: 18000,
+					likeCount: 980,
+					commentCount: 67,
+					threadType: 1,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2-preview.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2.jpg'
+					]
+				},
+				// 案例集 (thread_type: 2)
+				{
+					id: 3,
+					title: '小户型改造：30平变60平的魔法，空间利用极致',
+					author: '改造专家',
+					viewCount: 32000,
+					likeCount: 2100,
+					commentCount: 156,
+					threadType: 2,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1-preview.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1.jpg'
+					]
+				},
+				{
+					id: 4,
+					title: '老房翻新案例分享，旧貌换新颜的装修历程',
+					author: '装修达人',
+					viewCount: 15000,
+					likeCount: 870,
+					commentCount: 45,
+					threadType: 2,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-2-preview.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-2.jpg'
+					]
+				},
+				// 普通帖 (thread_type: 3)
+				{
+					id: 5,
+					title: '装修避坑经验分享，这些细节一定要注意',
+					author: '装修小白',
+					viewCount: 21000,
+					likeCount: 1560,
+					commentCount: 234,
+					threadType: 3,
+					coverUrl: '',
+					mediaUrls: [] // 无图片的帖子
+				},
+				{
+					id: 6,
+					title: '装修预算如何控制？我的省钱经验分享',
+					author: '理财达人',
+					viewCount: 8000,
+					likeCount: 540,
+					commentCount: 78,
+					threadType: 3,
+					coverUrl: '',
+					mediaUrls: [] // 无图片的帖子
+				},
+				// 材料展示 (thread_type: 4)
+				{
+					id: 7,
+					title: '进口大理石材料展示，天然纹理美不胜收',
+					author: '建材商城',
+					viewCount: 9000,
+					likeCount: 620,
+					commentCount: 34,
+					threadType: 4,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-1-preview.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-1.jpg'
+					]
+				},
+				{
+					id: 8,
+					title: '环保涂料选购指南，健康家居从墙面开始',
+					author: '材料专家',
+					viewCount: 11000,
+					likeCount: 780,
+					commentCount: 56,
+					threadType: 4,
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-2-preview.jpg',
+					mediaUrls: [
+						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-2.jpg'
+					]
+				}
+			];
+			
+			// 根据当前标签筛选
+			let filteredPosts = [...baseMockPosts];
+			const tabMapping = {
+				0: null, // 推荐 - 全部
+				1: 1,    // 作品集
+				2: 2,    // 案例集
+				3: 4,    // 材料展示
+				4: 3     // 普通帖
+			};
+			
+			const currentThreadType = tabMapping[this.activeTab];
+			if (currentThreadType !== null) {
+				filteredPosts = baseMockPosts.filter(post => post.threadType === currentThreadType);
+			}
+			
+			// 模拟分页：如果是第一页返回完整数据，否则返回空数组
+			if (this.pageParams.pageNum === 1) {
+				return filteredPosts;
+			} else {
+				return [];
+			}
+		},
+		
+		// 加载分类和类型
+		async loadCategoriesAndTypes() {
+			try {
+				console.log('🔄 加载分类和类型...');
+				
+				// 尝试调用API获取分类和类型
+				const [categoriesRes, typesRes] = await Promise.all([
+					getCategories(),
+					getThreadTypes()
+				]);
+				
+				console.log('📋 分类响应:', categoriesRes);
+				console.log('📋 类型响应:', typesRes);
+				
+				// 处理分类响应
+				this.categories = this.processApiResponse(categoriesRes, [
+					{ id: 1, name: '设计作品' },
+					{ id: 2, name: '装修案例' },
+					{ id: 3, name: '经验分享' },
+					{ id: 4, name: '材料知识' }
+				]);
+				
+				// 处理类型响应 - 根据数据库thread_type
+				this.threadTypes = this.processApiResponse(typesRes, [
+					{ id: 1, name: '作品集' },
+					{ id: 2, name: '案例集' },
+					{ id: 3, name: '普通帖' },
+					{ id: 4, name: '材料展示' }
+				]);
+				
+				console.log('✅ 最终分类数据:', this.categories);
+				console.log('✅ 最终类型数据:', this.threadTypes);
+				
+			} catch (error) {
+				console.error('❌ 加载分类和类型失败:', error);
+				// 使用默认数据
+				this.categories = [
+					{ id: 1, name: '设计作品' },
+					{ id: 2, name: '装修案例' },
+					{ id: 3, name: '经验分享' },
+					{ id: 4, name: '材料知识' }
+				];
+				this.threadTypes = [
+					{ id: 1, name: '作品集' },
+					{ id: 2, name: '案例集' },
+					{ id: 3, name: '普通帖' },
+					{ id: 4, name: '材料展示' }
+				];
+			}
+		},
+		
+		// 处理API响应数据
+		processApiResponse(response, defaultData) {
+			if (Array.isArray(response)) {
+				return response;
+			} else if (response && response.code === 200 && response.data) {
+				if (Array.isArray(response.data)) {
+					return response.data;
+				} else if (response.data.rows) {
+					return response.data.rows;
+				} else if (response.data.list) {
+					return response.data.list;
+				}
+			}
+			return defaultData;
+		},
+		
+		// 获取帖子类型名称 - 根据数据库thread_type
+		getThreadTypeName(typeId) {
+			const type = this.threadTypes.find(item => item.id === typeId);
+			if (type) {
+				return type.name;
+			}
+			
+			// 默认映射
+			const typeMap = {
+				1: '作品',
+				2: '案例', 
+				3: '普通',
+				4: '材料'
+			};
+			return typeMap[typeId] || '帖子';
+		},
+		
+		// 加载更多
+		async loadMore() {
+			if (this.loading || !this.hasMore) return;
+			
+			this.pageParams.pageNum++;
+			await this.loadPosts();
+		},
+		
+		// 监听帖子点赞更新事件
+		listenPostLikeUpdates() {
+			// 移除之前的监听，避免重复监听
+			uni.$off('postLikeUpdated');
+			
+			// 监听点赞更新事件
+			uni.$on('postLikeUpdated', (data) => {
+				console.log('📢 收到帖子点赞更新事件:', data);
+				if (data && data.postId) {
+					// 查找对应的帖子并更新点赞数
+					const postIndex = this.postList.findIndex(post => post.id == data.postId || post.thread_id == data.postId);
+					if (postIndex !== -1) {
+						this.postList[postIndex].likeCount = data.likeCount || 0;
+						console.log(`✅ 更新帖子 ${data.postId} 的点赞数为 ${data.likeCount}`);
+					}
+				}
+			});
+		},
+		
+		// 停止监听点赞更新事件
+		stopListeningPostLikeUpdates() {
+			uni.$off('postLikeUpdated');
+		}
+	},
+	
+	onLoad() {
+		// 页面加载时尝试获取缓存的定位信息
+		this.getCachedLocation();
+		// 加载分类和帖子
+		this.loadCategoriesAndTypes();
+		this.loadPosts();
+		// 监听帖子点赞更新事件
+		this.listenPostLikeUpdates();
+	},
+	
+	onShow() {
+		// 页面显示时检查是否有新的定位信息
+		this.getCachedLocation();
+		// 恢复轮播图自动播放
+		this.resetBannerTimer();
+		// 监听帖子点赞更新事件
+		this.listenPostLikeUpdates();
+	},
+	
+	onHide() {
+		// 页面隐藏时停止轮播图自动播放
+		if (this.bannerTimer) {
+			clearInterval(this.bannerTimer);
+		}
+	},
+	
+	onPullDownRefresh() {
+		this.pageParams.pageNum = 1;
+		this.loadPosts().then(() => {
+			uni.stopPullDownRefresh();
+		});
+	},
+	
+	onReachBottom() {
+		this.loadMore();
+	},
+	
+	// 监听帖子列表变化，预加载图片详情
+	watch: {
+		postList: {
+			handler(newList) {
+				if (newList.length > 0) {
+					// 延迟预加载，避免阻塞主线程
+					setTimeout(() => {
+						this.preloadImageDetails();
+					}, 1000);
+				}
+			},
+			immediate: false,
+			deep: true
+		}
+	},
+	
+	mounted() {
+		this.autoPlayBanner();
+	},
+	
+	beforeUnmount() {
+		if (this.bannerTimer) {
+			clearInterval(this.bannerTimer);
+		}
+		// 移除事件监听
+		this.stopListeningPostLikeUpdates();
+	},
+	
+	onUnload() {
+		// 页面卸载时移除事件监听
+		this.stopListeningPostLikeUpdates();
+	}
+}
+</script>
+
+<style>
 	/* 容器样式保持不变 */
 	.container {
 		max-width: 750px;

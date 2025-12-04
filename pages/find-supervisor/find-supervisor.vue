@@ -15,7 +15,13 @@
           placeholder="输入监工姓名搜索" 
           @input="handleSearch"
         />
-        <view class="search-icon">🔍</view>
+        <view class="search-icon-wrapper">
+          <image 
+            :src="'/static/images/搜索.svg'" 
+            mode="aspectFit" 
+            class="search-icon"
+          ></image>
+        </view>
       </view>
     </view>
     
@@ -76,15 +82,15 @@
           </view>
           <view class="supervisor-details">
             <view class="detail-item">
-              <view class="detail-icon">📁</view>
+              <image :src="'/static/images/案例-2.svg'" mode="aspectFit" class="detail-icon-image"></image>
               <view>案例: {{ supervisor.caseCount || 0 }}个</view>
             </view>
             <view class="detail-item">
-              <view class="detail-icon">✅</view>
+              <image :src="'/static/images/完成.svg'" mode="aspectFit" class="detail-icon-image"></image>
               <view>完成: {{ supervisor.completedOrders || 0 }}单</view>
             </view>
             <view class="detail-item">
-              <view class="detail-icon">📍</view>
+              <image :src="'/static/images/地址.svg'" mode="aspectFit" class="detail-icon-image"></image>
               <view>{{ supervisor.address || supervisor.city || '未知地区' }}</view>
             </view>
           </view>
@@ -724,11 +730,19 @@ export default {
   background: white;
 }
 
-.search-icon {
+.search-icon-wrapper {
   position: absolute;
   right: 30rpx;
-  color: #8b5cf6;
-  font-size: 32rpx;
+  width: 32rpx;
+  height: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-icon {
+  width: 100%;
+  height: 100%;
 }
 
 /* 监工列表 */
@@ -879,8 +893,9 @@ export default {
   gap: 8rpx;
 }
 
-.detail-icon {
-  font-size: 26rpx;
+.detail-icon-image {
+  width: 24rpx;
+  height: 24rpx;
 }
 
 .card-actions {
