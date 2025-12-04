@@ -25,7 +25,7 @@
     "style": {
       "navigationBarTitleText": "我的"
     }
-  }, {
+  },{
     "path": "pages/mine/address",
     "style": {
       "navigationBarTitleText": "收货地址"
@@ -60,7 +60,7 @@
     "style": {
       "navigationBarTitleText": "举报投诉"
     }
-  }, {
+  },{
     "path": "pages/common/webview/index",
     "style": {
       "navigationBarTitleText": "浏览网页"
@@ -70,187 +70,202 @@
     "style": {
       "navigationBarTitleText": "浏览文本"
     }
-  }, {
+  },{
     "path": "pages/chat/chatMain",
     "style": {
       "navigationBarTitleText": "聊天"
     }
-  }, {
+  },{
     "path": "pages/chat/chatList",
     "style": {
       "navigationBarTitleText": "聊天列表",
       "navigationStyle": "custom"
     }
-  }, {
+  },{
     "path": "pages/chat/chatDetail",
     "style": {
       "navigationBarTitleText": "聊天详情",
       "navigationStyle": "custom"
     }
-  }, {
+  },
+  {
     "path": "pages/mine/personal/index",
     "style": {
       "navigationBarTitleText": "个人中心"
     }
-  }, {
+  },{
     "path": "pages/mine/personal/nickname/index",
     "style": {
       "navigationBarTitleText": "修改昵称"
     }
-  }, {
+  },{
     "path": "pages/mine/personal/phone/index",
     "style": {
       "navigationBarTitleText": "修改号码1"
     }
-  }, {
+  },{
     "path": "pages/mine/personal/phone/verify_phone",
     "style": {
       "navigationBarTitleText": "修改号码2"
     }
-  }, {
+  },{
     "path": "pages/mine/personal/address/index",
     "style": {
       "navigationBarTitleText": "更改地址"
     }
-  }, {
+  },{
     "path": "pages/mine/personal/logoff/index",
     "style": {
       "navigationBarTitleText": "注销账户"
     }
-  }, {
+  },{
     "path": "pages/join/ShopJoin1",
     "style": {
       "navigationBarTitleText": "商家入驻1"
     }
-  }, {
+  },{
     "path": "pages/join/ShopJoin2",
     "style": {
       "navigationBarTitleText": "商家入驻2"
     }
-  }, {
+  },{
     "path": "pages/join/ShopJoin3",
     "style": {
       "navigationBarTitleText": "商家入驻3"
     }
-  }, {
+  },{
     "path": "pages/join/designJoin1",
     "style": {
       "navigationBarTitleText": "设计师入驻1"
     }
-  }, {
+  },{
     "path": "pages/join/designJoin2",
     "style": {
       "navigationBarTitleText": "设计师入驻2"
     }
-  }, {
+  },{
     "path": "pages/join/designJoin3",
     "style": {
       "navigationBarTitleText": "设计师入驻3"
     }
-  }, {
+  },{
     "path": "pages/join/supervisorJoin1",
     "style": {
       "navigationBarTitleText": "监工入驻1"
     }
-  }, {
+  },{
     "path": "pages/join/supervisorJoin2",
     "style": {
       "navigationBarTitleText": "监工入驻2"
     }
-  }, {
+  },{
     "path": "pages/join/supervisorJoin3",
     "style": {
       "navigationBarTitleText": "监工入驻3"
     }
-  }, {
-    "path": "pages/test",
-    "style": {
-      "navigationBarTitleText": "测试页面"
-    }
-  }, {
+  },
+  {
     "path": "pages/merchant/newshop",
     "style": {
       "navigationBarTitleText": "新产品上架"
     }
-  }, {
+  },
+  {
     "path": "pages/merchant/productupdate",
     "style": {
       "navigationBarTitleText": "产品修改"
     }
-  },  {
+  },
+  
+  {
     "path": "pages/post/post",
     "style": {
       "navigationBarTitleText": "发布帖子页面"
     }
-  }, {
+  },
+  {
     "path": "pages/post/detail",
     "style": {
       "navigationBarTitleText": "帖子详情页面"
     }
-  }, {
+  },
+  {
     "path": "pages/publish/index",
     "style": {
       "navigationBarTitleText": "发布页面"
     }
-  }, {
+  },
+  
+  {
     "path": "pages/mine/posted/posted",
     "style": {
       "navigationBarTitleText": "已发布页面"
     }
-  }, {
+  },
+  {
     "path": "pages/mine/switch/index",
     "style": {
       "navigationBarTitleText": "角色切换"
     }
-  },   {
+  },
+  {
     "path": "pages/shop/shop",
     "style": {
       "navigationBarTitleText": "商家商品页面"
     }
-  }, {
+  },
+  {
     "path": "pages/shop/add_shop",
     "style": {
       "navigationBarTitleText": "新商品上传页面"
     }
-  }, {
-    "path": "pages/shop/stock-management",
-    "style": {
-      "navigationBarTitleText": "库存管理"
-    }
-  }, {
+  },
+  {
     "path": "pages/shop/shop-list",
     "style": {
       "navigationBarTitleText": "购买居家建材页面"
     }
-  }, {
+  },
+  {
     "path": "pages/shop/cart",
     "style": {
       "navigationBarTitleText": "购物车"
     }
-  }, {
+  },
+  {
     "path": "pages/shop/product-detail",
     "style": {
       "navigationBarTitleText": "商品详情"
     }
-  }, {
+  },
+  {
+    "path": "pages/shop/cart",
+    "style": {
+      "navigationBarTitleText": "购物车"
+    }
+  },
+  {
     "path": "pages/shop/checkout",
     "style": {
       "navigationBarTitleText": "结算页面"
     }
-  }, {
+  },
+  {
     "path": "pages/shop/order-detail",
     "style": {
       "navigationBarTitleText": "普通用户订单详情页面"
     }
-  }, {
+  },
+  {
     "path": "pages/order/detail",
     "style": {
       "navigationBarTitleText": "商家订单详情页面"
     }
-  }, {
+  },
+  {
     "path": "pages/shop/manage",
     "style": {
-      "navigationBarTitleText": "店铺管理"
+      "navigationBarTitleText": "商家页面"
     }
   }, {
     "path": "pages/shop/shop-detail",
@@ -258,167 +273,216 @@
       "navigationBarTitleText": "商家详情"
     }
   }, {
+    "path": "pages/shop/manage",
+    "style": {
+      "navigationBarTitleText": "店铺管理"
+    }
+  },
+  {
     "path": "pages/post/order",
     "style": {
       "navigationBarTitleText": "发布总订单页面"
     }
-  }, {
+  },
+  {
     "path": "pages/order-hall/order-hall",
     "style": {
       "navigationBarTitleText": "订单大厅页面"
     }
-  }, {
+  },
+  {
     "path": "pages/mine/posted/order-posted",
     "style": {
       "navigationBarTitleText": "已发布需求页面"
     }
-  }, {
+  },
+  {
     "path": "pages/post/order-change",
     "style": {
       "navigationBarTitleText": "需求更改页面"
     }
-  }, {
+  },
+  {
     "path": "pages/order-hall/order-detail",
     "style": {
       "navigationBarTitleText": "订单详情页面"
     }
-  }, {
+  },
+  {
     "path": "pages/post/post-designorder",
     "style": {
       "navigationBarTitleText": "发起设计师订单页面"
     }
-  }, {
+  },
+  {
     "path": "pages/find-design/find-design",
     "style": {
       "navigationBarTitleText": "寻找设计师页面"
     }
-  }, {
+  },
+  {
     "path": "pages/find-supervisor/find-supervisor",
     "style": {
-      "navigationBarTitleText": "寻找监理页面"
+      "navigationBarTitleText": "寻找监理页面",
+      "enablePullDownRefresh": true,
+      "onReachBottomDistance": 50
     }
-  }, {
+  },
+  {
     "path": "pages/find-supervisor/supervisor-detail",
     "style": {
       "navigationBarTitleText": "监理详情页面"
     }
-  }, {
+  },
+  {
     "path": "pages/find-design/design-detail",
     "style": {
       "navigationBarTitleText": "设计师详情页面"
     }
-  }, {
+  },
+  {
     "path": "pages/design/upload",
     "style": {
       "navigationBarTitleText": "设计师上传文件页面"
     }
-  }, {
+  },
+  {
     "path": "pages/design/xgt",
     "style": {
       "navigationBarTitleText": "查看效果图文件页面"
     }
-  }, {
+  },
+  {
     "path": "pages/review/review",
     "style": {
       "navigationBarTitleText": "评价设计师订单页面"
     }
-  }, {
+  },
+  {
     "path": "pages/finishedorder-detail/finishedorder-detail",
     "style": {
       "navigationBarTitleText": "已完成订单的详情页面"
     }
-  }, {
-    "path": "pages/work/jianli-order",
-    "style": {
-      "navigationBarTitleText": "监理订单页面"
-    }
-  }, {
-    "path": "pages/work/order-choose",
-    "style": {
-      "navigationBarTitleText": "订单选择页面"
-    }
-  }, {
-    "path": "pages/work/material_supplier-order",
-    "style": {
-      "navigationBarTitleText": "商家订单页面"
-    }
-  }, {
-    "path": "pages/work/user-order",
-    "style": {
-      "navigationBarTitleText": "用户订单页面"
-    }
-  }, {
-    "path": "pages/order-hall/order-have",
-    "style": {
-      "navigationBarTitleText": "确认监理订单施工阶段页面"
-    }
-  }, {
-    "path": "pages/order-hall/design-update",
-    "style": {
-      "navigationBarTitleText": "监理订单监理上传阶段页面"
-    }
-  }, {
-    "path": "pages/order-hall/orderstage-qr",
-    "style": {
-      "navigationBarTitleText": "监理订单阶段确认页面"
-    }
-  }, {
-    "path": "pages/order-hall/design-gx",
-    "style": {
-      "navigationBarTitleText": "更新监理订单阶段页面"
-    }
-  }, {
-    "path": "pages/order-hall/designorder-work",
-    "style": {
-      "navigationBarTitleText": "监理上传每个监理订单阶段页面"
-    }
-  }, {
-    "path": "pages/mine/likes/likes",
-    "style": {
-      "navigationBarTitleText": "点赞页面"
-    }
-  }, {
-    "path": "pages/mine/favorites/favorites",
-    "style": {
-      "navigationBarTitleText": "收藏页面"
-    }
-  }, {
-    "path": "pages/mine/follows/follows",
-    "style": {
-      "navigationBarTitleText": "关注页面"
-    }
-  }],
+  },
+  {
+  	"path" : "pages/work/jianli-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/order-choose",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "订单选择页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/material_supplier-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "商家订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/work/user-order",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "用户订单页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/order-have",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "确认监理订单施工阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-update",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单监理上传阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/orderstage-qr",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单阶段确认页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/design-gx",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "更新监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/designorder-work",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理上传每个监理订单阶段页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/likes/likes",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "点赞页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/favorites/favorites",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "收藏页面"
+  	}
+  },
+  {
+  	"path" : "pages/mine/follows/follows",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "关注页面"
+  	}
+  }
+  ],
   "tabBar": {
     "color": "#000000",
     "selectedColor": "#000000",
     "borderStyle": "white",
     "backgroundColor": "#ffffff",
     "list": [{
-      "pagePath": "pages/index",
-      "iconPath": "static/images/tabbar/home.png",
-      "selectedIconPath": "static/images/tabbar/home_.png",
-      "text": "首页"
-    }, {
-      "pagePath": "pages/chat/chatList",
-      "iconPath": "/static/images/tabbar/message_.png",
-      "selectedIconPath": "/static/images/tabbar/message.png",
-      "text": "消息"
-    }, {
-      "pagePath": "pages/publish/index",
-      "iconPath": "/static/images/tabbar/publish.png",
-      "selectedIconPath": "/static/images/tabbar/publish_.png",
-      "text": "发布"
-    }, {
-      "pagePath": "pages/work/order-choose",
-      "iconPath": "/static/images/tabbar/design.png",
-      "selectedIconPath": "/static/images/tabbar/design_.png",
-      "text": "订单"
-    }, {
-      "pagePath": "pages/mine/index4",
-      "iconPath": "static/images/tabbar/mine.png",
-      "selectedIconPath": "static/images/tabbar/mine_.png",
-      "text": "我的"
-    }]
+        "pagePath": "pages/index",
+        "iconPath": "static/images/tabbar/home.png",
+        "selectedIconPath": "static/images/tabbar/home_.png",
+        "text": "首页"
+      }, {
+        "pagePath": "pages/chat/chatList",
+        "iconPath": "/static/images/tabbar/message_.png",
+        "selectedIconPath": "/static/images/tabbar/message.png",
+        "text": "消息"
+      },
+      {
+        "pagePath": "pages/publish/index",
+        "iconPath": "/static/images/tabbar/publish.png",
+        "selectedIconPath": "/static/images/tabbar/publish_.png",
+        "text": "发布"
+      },
+      {
+        "pagePath": "pages/work/order-choose",
+        "iconPath": "/static/images/tabbar/design.png",
+        "selectedIconPath": "/static/images/tabbar/design_.png",
+        "text": "订单"
+      },{
+        "pagePath": "pages/mine/index4",
+        "iconPath": "static/images/tabbar/mine.png",
+        "selectedIconPath": "static/images/tabbar/mine_.png",
+        "text": "我的"
+      }
+    ]
   },
   "globalStyle": {
     "navigationBarTextStyle": "black",

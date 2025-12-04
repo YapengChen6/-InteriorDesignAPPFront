@@ -83,7 +83,7 @@
 						<!-- 文件列表区域 -->
 						<view class="file-list" v-if="fileList.length > 0">
 							<view class="file-item" v-for="(file, index) in fileList" :key="index">
-								<view class="file-icon">
+								<view class="file-icon" :class="'file-type-' + file.type">
 									<text class="file-type-icon">{{ getFileTypeIcon(file.type) }}</text>
 								</view>
 								<view class="file-info">
@@ -92,11 +92,17 @@
 										<text class="file-size">{{ file.size }}</text>
 										<text class="file-format">{{ file.format }}</text>
 									</view>
+									<view class="file-status" v-if="file.previewLoading">
+										<view class="status-badge loading">
+											<text class="status-icon">⏳</text>
+											<text class="status-text">打开中...</text>
+										</view>
+									</view>
 								</view>
 								<view class="file-actions">
-									<button class="btn-action preview" @click="previewFile(file)" v-if="isPreviewable(file)">
+									<button class="btn-action preview" @click="previewFile(file, index)" :disabled="file.previewLoading">
 										<text class="btn-icon">👁️</text>
-										<text class="btn-text">预览</text>
+										<text class="btn-text">{{ file.previewLoading ? '打开中...' : '预览' }}</text>
 									</button>
 									<button class="btn-action download" @click="downloadFile(file)">
 										<text class="btn-icon">⬇️</text>
@@ -142,9 +148,23 @@
 								<view class="designer-name">{{ designerInfo.name }}</view>
 								<view class="designer-role">{{ designerInfo.role || '设计师' }}</view>
 							</view>
-							<view class="contact-btn" @click="contactDesigner">
-								联系设计师
-							</view>
+						</view>
+					</view>
+				</view>
+
+				<!-- 联系设计师卡片 -->
+				<view class="card" v-if="designerInfo.name && designerInfo.name !== '未知设计师'">
+					<view class="card-header">
+						<view class="card-icon">💬</view>
+						<text class="card-title">联系设计师</text>
+					</view>
+					<view class="card-body">
+						<view class="contact-content">
+							<text class="contact-desc">对方案有疑问？直接联系设计师沟通</text>
+							<button class="contact-btn" @click="contactDesigner">
+								<text class="contact-icon">💬</text>
+								<text class="contact-text">在线联系设计师</text>
+							</button>
 						</view>
 					</view>
 				</view>
@@ -174,63 +194,72 @@
 			</template>
 		</scroll-view>
 
-		<!-- 文件预览弹窗 - 仅用于不支持预览的文件类型 -->
-		<view class="preview-modal" v-if="showPreview">
-			<view class="preview-overlay" @click="closePreview"></view>
-			<view class="preview-content">
-				<view class="preview-header">
-					<text class="preview-title">{{ currentPreviewFile ? currentPreviewFile.name : '文件预览' }}</text>
-					<view class="preview-actions">
-						<button class="btn-close" @click="closePreview">
-							<text class="btn-icon">✕</text>
-						</button>
-					</view>
-				</view>
-				<view class="preview-body">
-					<view class="preview-unsupported">
-						<text class="unsupported-icon">📄</text>
-						<text class="unsupported-text">当前文件类型不支持在线预览</text>
-						<text class="unsupported-desc">请下载后使用本地应用打开</text>
-						<button class="btn-download-large" @click="downloadCurrentFile">
-							<text class="btn-icon">⬇️</text>
-							<text class="btn-text">下载文件</text>
-						</button>
-					</view>
+		<!-- 全局加载遮罩 -->
+		<view class="global-loading" v-if="loadingPreview">
+			<view class="loading-modal">
+				<view class="loading-content">
+					<view class="loading-spinner large"></view>
+					<text class="loading-text">文件打开中，请稍候...</text>
+					<text class="loading-subtext">请不要关闭页面</text>
 				</view>
 			</view>
 		</view>
 
-		<!-- 下载进度弹窗 -->
-		<view class="download-progress" v-if="showDownloadProgress">
-			<view class="progress-overlay"></view>
-			<view class="progress-content">
-				<view class="progress-spinner"></view>
-				<text class="progress-text">下载中...</text>
-				<text class="progress-subtext">{{ downloadFileName }}</text>
-			</view>
-		</view>
+		<!-- 简单提示组件 -->
+		<uni-popup ref="errorPopup" type="message">
+			<uni-popup-message 
+				type="error" 
+				:message="errorMessage" 
+				:duration="3000"
+			/>
+		</uni-popup>
 	</view>
 </template>
 
 <script>
 	import { getDesignSchemeList, updateDesignSchemeStatus } from '@/api/designScheme.js'
+	import uniPopup from '@/uni_modules/uni-popup/components/uni-popup/uni-popup.vue'
+	import uniPopupMessage from '@/uni_modules/uni-popup/components/uni-popup-message/uni-popup-message.vue'
+	import { isUserLoggedIn, handleNotLoggedIn, createConversationAndNavigate } from "@/utils/conversationHelper.js"
+	import { getUserById } from '@/api/users.js'
 
-	// 方案状态常量 - 根据接口文档定义
-	// 注意：确认按钮对应status=2，拒绝对应status=0
+	// 方案状态常量
 	const SCHEME_STATUS = {
-		PENDING: 1,      // 待确认/待审核
-		CONFIRMED: 2,    // 已确认/已通过 (确认按钮对应)
-		REJECTED: 0,     // 已拒绝/未通过 (拒绝按钮对应)
-		DELETED: 3       // 已删除
+		PENDING: 1,
+		CONFIRMED: 2,
+		REJECTED: 0,
+		DELETED: 3
 	}
 
 	// 方案类型常量
 	const SCHEME_TYPE = {
-		EFFECT_DRAWING: 1,    // 效果图
-		CONSTRUCTION_DRAWING: 2 // 施工设计图
+		EFFECT_DRAWING: 1,
+		CONSTRUCTION_DRAWING: 2
+	}
+	
+	// 文件类型常量
+	const FILE_TYPES = {
+		EFFECT: 1,
+		CONSTRUCTION: 2
+	}
+	
+	// 微信小程序支持的文档类型映射
+	const WECHAT_FILE_TYPES = {
+		'pdf': 'pdf',
+		'doc': 'doc',
+		'docx': 'doc',
+		'xls': 'xls',
+		'xlsx': 'xls',
+		'ppt': 'ppt',
+		'pptx': 'ppt'
 	}
 
 	export default {
+		components: {
+			uniPopup,
+			uniPopupMessage
+		},
+		
 		data() {
 			return {
 				// 页面参数
@@ -255,14 +284,13 @@
 				// 状态控制
 				loading: false,
 				submitting: false,
+				loadingPreview: false,
 				
-				// 预览相关
-				showPreview: false,
-				currentPreviewFile: null,
+				// 错误信息
+				errorMessage: '',
 				
-				// 下载相关
-				showDownloadProgress: false,
-				downloadFileName: '',
+				// 当前正在预览的文件索引
+				currentPreviewIndex: -1,
 				
 				// 导出常量到模板
 				SCHEME_STATUS: SCHEME_STATUS
@@ -270,12 +298,10 @@
 		},
 		
 		computed: {
-			// 方案类型文本
 			schemeTypeText() {
 				return this.schemeType === SCHEME_TYPE.EFFECT_DRAWING ? '效果图' : '施工设计图'
 			},
 			
-			// 状态相关计算属性
 			statusText() {
 				if (!this.schemeData) return ''
 				return this.getStatusText(this.schemeData.status)
@@ -313,30 +339,155 @@
 		},
 		
 		methods: {
-			// 初始化页面参数
+			// 在线联系设计师 - 完善版本
+			async contactDesigner() {
+				console.log('💬 客户开始联系设计师，订单ID:', this.orderId);
+				
+				// 1. 检查登录状态
+				if (!isUserLoggedIn()) {
+					handleNotLoggedIn();
+					return;
+				}
+				
+				// 2. 检查方案信息完整性
+				if (!this.schemeData || !this.schemeData.contractorId) {
+					console.error('❌ 方案信息不完整:', this.schemeData);
+					uni.showToast({
+						title: '方案信息无效',
+						icon: 'error',
+						duration: 2000
+					});
+					return;
+				}
+				
+				// 3. 获取设计师ID（承接方）
+				const designerId = this.schemeData.contractorId;
+				if (!designerId) {
+					uni.showToast({
+						title: '设计师信息不存在',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				// 4. 获取设计师详细信息
+				let designerName = this.designerInfo.name || '';
+				let designerAvatar = this.designerInfo.avatar || '';
+				
+				// 如果设计师信息不全，尝试通过API获取
+				if (!designerName || designerName === '未知设计师') {
+					try {
+						const designerInfo = await this.getDesignerInfoById(designerId);
+						designerName = designerInfo.name || '设计师';
+						designerAvatar = designerInfo.avatar || '';
+					} catch (error) {
+						console.warn('⚠️ 获取设计师详细信息失败:', error);
+					}
+				}
+				
+				// 5. 显示加载中
+				uni.showLoading({
+					title: '创建对话中...',
+					mask: true
+				});
+				
+				try {
+					console.log('💬 准备创建对话:', {
+						客户身份: '用户',
+						设计师ID: designerId,
+						设计师姓名: designerName,
+						订单ID: this.orderId,
+						方案类型: this.schemeTypeText
+					});
+					
+					// 6. 使用工具函数创建对话并跳转
+					await createConversationAndNavigate(
+						designerId,
+						designerName,
+						designerAvatar
+					);
+					
+					console.log('✅ 对话创建成功');
+					
+				} catch (error) {
+					console.error('❌ 创建对话失败:', error);
+					
+					// 错误处理
+					let errorMessage = '联系设计师失败';
+					if (error.message) {
+						if (error.message.includes('请先登录')) {
+							errorMessage = '请先登录';
+						} else if (error.message.includes('不能与自己')) {
+							errorMessage = '不能联系自己';
+						} else if (error.message.includes('权限')) {
+							errorMessage = '没有权限联系设计师';
+						} else if (error.message.includes('对方不存在')) {
+							errorMessage = '设计师信息不存在';
+						} else {
+							errorMessage = error.message;
+						}
+					}
+					
+					uni.showToast({
+						title: errorMessage,
+						icon: 'none',
+						duration: 3000
+					});
+					
+					// 如果是因为对话不存在，尝试直接跳转到聊天页面
+					if (error.message && error.message.includes('对话不存在')) {
+						console.log('⚠️ 尝试直接跳转到聊天页面');
+						setTimeout(() => {
+							uni.navigateTo({
+								url: `/pages/chat/chat?otherUserId=${designerId}&otherUserName=${encodeURIComponent(designerName)}&orderId=${this.orderId}`
+							});
+						}, 1000);
+					}
+				} finally {
+					// 7. 隐藏加载状态
+					uni.hideLoading();
+				}
+			},
+			
+			// 通过ID获取设计师信息
+			async getDesignerInfoById(designerId) {
+				try {
+					console.log('👤 获取设计师信息，ID:', designerId);
+					
+					const userResponse = await getUserById(designerId);
+					console.log('👤 设计师信息响应:', userResponse);
+					
+					if (userResponse && userResponse.code === 200 && userResponse.data) {
+						const userData = userResponse.data;
+						
+						return {
+							// 根据示例数据格式解析
+							name: userData.nickName || userData.userName || userData.name || '设计师',
+							avatar: userData.avatar || '/static/images/default-avatar.png',
+							phone: userData.phone || userData.userName || '',
+							role: '设计师'
+						};
+					} else {
+						throw new Error('未获取到设计师信息');
+					}
+				} catch (error) {
+					console.error('❌ 获取设计师信息失败:', error);
+					throw error;
+				}
+			},
+			
 			initPageParams(options) {
 				try {
-					// 解析参数
 					this.orderId = options.orderId ? parseInt(options.orderId) : null
 					this.schemeType = options.schemeType ? parseInt(options.schemeType) : SCHEME_TYPE.EFFECT_DRAWING
 					this.designerName = options.designerName ? decodeURIComponent(options.designerName) : ''
 					
-					console.log('🔍 解析后的参数:', {
-						orderId: this.orderId,
-						schemeType: this.schemeType,
-						designerName: this.designerName
-					})
-					
-					// 验证必要参数
 					if (!this.orderId) {
 						this.showParamsError()
 						return
 					}
 					
-					// 初始化设计师信息
 					this.initDesignerInfo()
-					
-					// 加载数据
 					this.loadSchemeData()
 					
 				} catch (error) {
@@ -345,9 +496,7 @@
 				}
 			},
 			
-			// 初始化设计师信息
 			initDesignerInfo() {
-				// 使用传递过来的设计师姓名
 				if (this.designerName) {
 					this.designerInfo.name = this.designerName
 					this.designerInfo.avatar = '/static/images/default-avatar.png'
@@ -355,7 +504,6 @@
 				}
 			},
 			
-			// 加载方案数据
 			async loadSchemeData() {
 				if (this.loading) return
 				
@@ -363,7 +511,6 @@
 				try {
 					console.log('📋 开始加载效果图方案数据，订单ID:', this.orderId, '方案类型:', this.schemeType)
 					
-					// 1. 根据订单ID和方案类型查询方案
 					const queryParams = {
 						pageNum: 1,
 						pageSize: 10,
@@ -377,7 +524,6 @@
 					if (schemeResult.code === 200 && schemeResult.data) {
 						let schemeList = []
 						
-						// 处理返回数据格式
 						if (schemeResult.data.records) {
 							schemeList = schemeResult.data.records
 						} else if (schemeResult.data.list) {
@@ -388,15 +534,23 @@
 							schemeList = schemeResult
 						}
 						
-						// 获取第一个效果图方案
 						if (schemeList.length > 0) {
 							this.schemeData = schemeList[0]
 							console.log('✅ 找到效果图方案:', this.schemeData)
-							console.log('🔍 方案状态:', this.schemeData.status)
 							
-							// 2. 构建文件列表
+							// 如果设计师信息不完整，尝试通过ID获取
+							if (!this.designerInfo.name && this.schemeData.contractorId) {
+								try {
+									const designerInfo = await this.getDesignerInfoById(this.schemeData.contractorId);
+									this.designerInfo.name = designerInfo.name;
+									this.designerInfo.avatar = designerInfo.avatar;
+									this.designerInfo.role = designerInfo.role;
+								} catch (error) {
+									console.warn('⚠️ 获取设计师信息失败，使用默认值:', error);
+								}
+							}
+							
 							this.buildFileList()
-							
 						} else {
 							console.log('❌ 未找到效果图方案')
 							this.schemeData = null
@@ -417,22 +571,20 @@
 				}
 			},
 			
-			// 构建文件列表
 			buildFileList() {
 				this.fileList = []
 				
-				// 如果有主图文件URL，添加到文件列表
 				if (this.schemeData.fileUrl) {
 					this.fileList.push({
 						url: this.schemeData.fileUrl,
 						name: '效果图设计方案',
 						type: this.getFileType(this.schemeData.fileUrl),
 						format: this.getFileFormat(this.schemeData.fileUrl),
-						size: this.getFileSize(this.schemeData.fileSize)
+						size: this.getFileSize(this.schemeData.fileSize),
+						previewLoading: false
 					})
 				}
 				
-				// 如果有其他文件URL，也添加到列表
 				if (this.schemeData.fileUrls && Array.isArray(this.schemeData.fileUrls)) {
 					this.schemeData.fileUrls.forEach((url, index) => {
 						this.fileList.push({
@@ -440,7 +592,8 @@
 							name: `效果图文件 ${index + 1}`,
 							type: this.getFileType(url),
 							format: this.getFileFormat(url),
-							size: '--'
+							size: '--',
+							previewLoading: false
 						})
 					})
 				}
@@ -448,31 +601,24 @@
 				console.log('📁 构建的文件列表:', this.fileList)
 			},
 			
-			// 获取文件类型
 			getFileType(url) {
 				if (!url) return 'unknown'
-				
-				// 清除URL参数
 				const cleanUrl = url.split('?')[0]
 				const ext = cleanUrl.split('.').pop().toLowerCase()
 				
 				const typeMap = {
-					// 图片类型
 					'jpg': 'image', 'jpeg': 'image', 'png': 'image', 
 					'gif': 'image', 'bmp': 'image', 'webp': 'image', 'svg': 'image',
-					// 文档类型
 					'pdf': 'pdf',
 					'doc': 'doc', 'docx': 'doc',
 					'xls': 'excel', 'xlsx': 'excel',
 					'ppt': 'ppt', 'pptx': 'ppt',
 					'txt': 'text',
-					// 压缩文件
-					'zip': 'zip', 'rar': 'zip', '7z': 'zip', 'tar': 'zip'
+					'zip': 'archive', 'rar': 'archive', '7z': 'archive', 'tar': 'archive'
 				}
-				return typeMap[ext] || 'unknown'
+				return typeMap[ext] || 'other'
 			},
 			
-			// 获取文件类型图标
 			getFileTypeIcon(fileType) {
 				const iconMap = {
 					'image': '🖼️',
@@ -481,13 +627,12 @@
 					'excel': '📊',
 					'ppt': '📑',
 					'text': '📃',
-					'zip': '📦',
-					'default': '📁'
+					'archive': '📦',
+					'other': '📎'
 				}
-				return iconMap[fileType] || iconMap.default
+				return iconMap[fileType] || '📎'
 			},
 			
-			// 获取文件格式
 			getFileFormat(url) {
 				if (!url) return '未知格式'
 				const ext = url.split('.').pop().toLowerCase()
@@ -505,12 +650,12 @@
 					'pptx': 'PPTX',
 					'txt': 'TXT',
 					'zip': 'ZIP',
-					'rar': 'RAR'
+					'rar': 'RAR',
+					'7z': '7Z'
 				}
 				return formatMap[ext] || ext.toUpperCase()
 			},
 			
-			// 获取文件大小
 			getFileSize(size) {
 				if (!size) return '--'
 				if (size < 1024) {
@@ -522,32 +667,11 @@
 				}
 			},
 			
-			// 判断文件是否可预览
-			isPreviewable(file) {
-				if (!file) return false
+			// 预览文件 - 使用与之前代码一致的预览逻辑
+			async previewFile(file, index) {
+				console.log('🔍 预览文件信息:', file)
 				
-				const fileType = file.type || this.getFileType(file.url)
-				// 支持预览的类型：图片、PDF
-				return fileType === 'image' || fileType === 'pdf'
-			},
-			
-			// 判断是否为图片文件
-			isImageFile(file) {
-				return file && file.type === 'image'
-			},
-			
-			// 判断是否为PDF文件
-			isPdfFile(file) {
-				return file && file.type === 'pdf'
-			},
-			
-			// 预览文件
-			previewFile(file) {
-				console.log('👁️ 预览文件:', file)
-				console.log('📄 文件URL:', file.url)
-				console.log('🔍 文件类型:', file.type)
-				
-				if (!file || !file.url) {
+				if (!file.url) {
 					uni.showToast({
 						title: '文件链接无效',
 						icon: 'none'
@@ -555,120 +679,158 @@
 					return
 				}
 				
-				// 验证URL是否有效
-				if (!this.isValidUrl(file.url)) {
-					uni.showToast({
-						title: '文件链接格式错误',
-						icon: 'none'
-					})
-					return
-				}
+				this.currentPreviewIndex = index
+				this.fileList[index].previewLoading = true
 				
-				// 根据文件类型选择不同的预览方式
-				const fileType = file.type || this.getFileType(file.url)
-				console.log('🎯 确定的文件类型:', fileType)
-				
-				if (fileType === 'image') {
-					// 图片使用uni-app原生预览
-					this.previewImage(file)
-				} else if (fileType === 'pdf') {
-					// PDF使用下载后打开的方式
-					this.previewPdf(file)
-				} else {
-					// 其他文件类型在弹窗中显示不支持预览
-					this.previewInModal(file)
-				}
-			},
-			
-			// 验证URL格式
-			isValidUrl(string) {
 				try {
-					new URL(string)
-					return true
-				} catch (_) {
-					return false
+					// 获取文件扩展名
+					const fileExt = this.getFileExtension(file.url)
+					
+					console.log('📄 开始预览文件:', {
+						url: file.url,
+						ext: fileExt,
+						type: file.type
+					})
+					
+					// 如果是图片，直接预览
+					if (file.type === 'image') {
+						await this.previewImageFile(file.url)
+					} 
+					// 如果是支持的文档类型（PDF、Word、Excel、PPT）
+					else if (WECHAT_FILE_TYPES[fileExt]) {
+						await this.previewDocumentFile(file.url, fileExt, file.name)
+					}
+					// 其他文件类型，提示下载
+					else {
+						await this.handleOtherFile(file, fileExt)
+					}
+					
+				} catch (error) {
+					console.error('❌ 预览文件失败:', error)
+					this.showError(this.getErrorMessage(error))
+				} finally {
+					// 重置加载状态
+					if (this.currentPreviewIndex === index) {
+						this.fileList[index].previewLoading = false
+						this.currentPreviewIndex = -1
+					}
 				}
 			},
 			
-			// 预览PDF文件
-			previewPdf(file) {
-				console.log('📄 开始预览PDF文件:', file.name)
-				
-				// 显示加载提示
-				uni.showLoading({
-					title: '加载中...',
-					mask: true
-				})
-				
-				uni.downloadFile({
-					url: file.url,
-					success: (res) => {
-						uni.hideLoading()
-						
-						if (res.statusCode === 200) {
-							const filePath = res.tempFilePath
-							console.log('✅ PDF下载成功，文件路径:', filePath)
-							
-							// 使用uni.openDocument打开PDF
-							uni.openDocument({
-								filePath: filePath,
-								fileType: 'pdf',
-								success: (res) => {
-									console.log('✅ 打开PDF文档成功')
-								},
-								fail: (err) => {
-									console.error('❌ 打开PDF失败:', err)
-									uni.showToast({
-										title: '打开文件失败',
-										icon: 'none'
-									})
-								}
-							})
-						} else {
-							throw new Error(`下载失败，状态码: ${res.statusCode}`)
+			// 获取文件扩展名
+			getFileExtension(url) {
+				const cleanUrl = url.split('?')[0]
+				const parts = cleanUrl.split('.')
+				return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+			},
+			
+			// 预览图片文件
+			async previewImageFile(url) {
+				return new Promise((resolve, reject) => {
+					uni.previewImage({
+						urls: [url],
+						current: 0,
+						success: () => {
+							console.log('✅ 图片预览成功')
+							resolve()
+						},
+						fail: (error) => {
+							console.error('❌ 图片预览失败:', error)
+							reject(new Error('图片预览失败'))
 						}
-					},
-					fail: (err) => {
-						uni.hideLoading()
-						console.error('❌ PDF下载失败:', err)
-						uni.showToast({
-							title: '文件加载失败',
-							icon: 'none'
-						})
-					}
+					})
 				})
 			},
 			
-			// 预览图片 - 使用uni-app原生预览
-			previewImage(file) {
-				uni.previewImage({
-					urls: [file.url],
-					current: 0,
-					indicator: 'default',
-					loop: false,
-					success: () => {
-						console.log('图片预览成功')
-					},
-					fail: (error) => {
-						console.error('图片预览失败:', error)
-						uni.showToast({
-							title: '图片加载失败',
-							icon: 'none'
-						})
-					}
+			// 预览文档文件（PDF、Word、Excel、PPT）
+			async previewDocumentFile(url, fileExt, fileName) {
+				return new Promise((resolve, reject) => {
+					this.loadingPreview = true
+					
+					uni.downloadFile({
+						url: url,
+						header: {
+							'Content-Type': 'application/octet-stream'
+						},
+						success: (res) => {
+							this.loadingPreview = false
+							console.log('✅ 文件下载成功:', res)
+							
+							if (res.statusCode === 200) {
+								const fileType = WECHAT_FILE_TYPES[fileExt] || 'pdf'
+								
+								uni.openDocument({
+									filePath: res.tempFilePath,
+									fileType: fileType,
+									showMenu: true,
+									success: () => {
+										console.log('✅ 文档打开成功')
+										resolve()
+									},
+									fail: (err) => {
+										console.error('❌ 文档打开失败:', err)
+										reject(new Error(`${fileExt.toUpperCase()}文件打开失败`))
+									}
+								})
+							} else {
+								reject(new Error(`下载失败，状态码: ${res.statusCode}`))
+							}
+						},
+						fail: (err) => {
+							this.loadingPreview = false
+							console.error('❌ 下载失败:', err)
+							reject(new Error(`下载请求失败: ${err.errMsg}`))
+						}
+					})
 				})
 			},
 			
-			// 在弹窗中预览（用于不支持的文件类型）
-			previewInModal(file) {
-				this.currentPreviewFile = file
-				this.showPreview = true
+			// 处理其他文件类型
+			async handleOtherFile(file, fileExt) {
+				return new Promise((resolve, reject) => {
+					uni.showModal({
+						title: '文件预览',
+						content: `${fileExt.toUpperCase()}文件无法在线预览，是否下载文件？`,
+						confirmText: '下载',
+						cancelText: '取消',
+						success: (res) => {
+							if (res.confirm) {
+								this.downloadFile(file)
+								resolve()
+							} else {
+								reject(new Error('用户取消操作'))
+							}
+						},
+						fail: () => {
+							reject(new Error('操作失败'))
+						}
+					})
+				})
 			},
 			
-			// 关闭预览
-			closePreview() {
-				this.showPreview = false
-				this.currentPreviewFile = null
+			// 获取错误信息
+			getErrorMessage(error) {
+				const msg = error.message || error.errMsg || '预览失败'
+				
+				if (msg.includes('404')) {
+					return '文件不存在或已被删除'
+				} else if (msg.includes('网络') || msg.includes('connect') || msg.includes('download')) {
+					return '网络连接失败，请检查网络设置'
+				} else if (msg.includes('不支持') || msg.includes('不支持的文件类型')) {
+					return '文件格式不支持在线预览'
+				} else if (msg.includes('用户取消')) {
+					return ''
+				} else {
+					return `预览失败: ${msg}`
+				}
+			},
+			
+			// 显示错误提示
+			showError(message) {
+				if (message) {
+					this.errorMessage = message
+					this.$refs.errorPopup.open()
+				}
 			},
 			
 			// 下载文件
@@ -683,9 +845,7 @@
 					return
 				}
 				
-				// 显示下载进度
-				this.downloadFileName = file.name
-				this.showDownloadProgress = true
+				this.loadingPreview = true
 				
 				try {
 					const downloadResult = await new Promise((resolve, reject) => {
@@ -697,7 +857,6 @@
 					})
 					
 					if (downloadResult.statusCode === 200) {
-						// 保存文件到本地
 						const saveResult = await new Promise((resolve, reject) => {
 							uni.saveFile({
 								tempFilePath: downloadResult.tempFilePath,
@@ -724,49 +883,14 @@
 						icon: 'none'
 					})
 				} finally {
-					this.showDownloadProgress = false
-					this.downloadFileName = ''
+					this.loadingPreview = false
 				}
 			},
 			
-			// 下载当前预览的文件
-			downloadCurrentFile() {
-				if (this.currentPreviewFile) {
-					this.downloadFile(this.currentPreviewFile)
-					this.closePreview()
-				}
-			},
-			
-			// 返回上一页
 			goBack() {
 				uni.navigateBack()
 			},
 			
-			// 联系设计师
-			contactDesigner() {
-				if (!this.designerInfo.name || this.designerInfo.name === '未知设计师') {
-					uni.showToast({
-						title: '暂无设计师信息',
-						icon: 'none'
-					})
-					return
-				}
-				
-				// 跳转到聊天页面
-				const designerId = this.schemeData.contractorId
-				if (designerId) {
-					uni.navigateTo({
-						url: `/pages/chat/designer?designerId=${designerId}`
-					})
-				} else {
-					uni.showToast({
-						title: '无法联系设计师',
-						icon: 'none'
-					})
-				}
-			},
-			
-			// 确认方案 - 对应 status=2
 			async confirmScheme() {
 				console.log('🟢 确认按钮被点击')
 				if (this.submitting || !this.schemeData) {
@@ -781,13 +905,12 @@
 					confirmColor: '#07C160',
 					success: async (res) => {
 						if (res.confirm) {
-							await this.updateSchemeStatus(SCHEME_STATUS.CONFIRMED, '客户确认效果图方案')
+							await this.updateSchemeStatus(SCHEME_STATUS.CONFIRMED)
 						}
 					}
 				})
 			},
 			
-			// 拒绝方案 - 对应 status=0
 			async rejectScheme() {
 				console.log('🔴 拒绝按钮被点击')
 				if (this.submitting || !this.schemeData) {
@@ -802,33 +925,28 @@
 					confirmColor: '#FF4757',
 					success: async (res) => {
 						if (res.confirm) {
-							await this.updateSchemeStatus(SCHEME_STATUS.REJECTED, '客户拒绝效果图方案')
+							await this.updateSchemeStatus(SCHEME_STATUS.REJECTED)
 						}
 					}
 				})
 			},
 			
-			// 更新方案状态
-			async updateSchemeStatus(status, description = '') {
+			async updateSchemeStatus(status) {
 				this.submitting = true
 				
 				try {
 					console.log('🔄 更新方案状态:', {
 						designSchemeId: this.schemeData.designSchemeId,
-						status: status,
-						description: description
+						status: status
 					})
 					
-					// 验证必要参数
 					if (!this.schemeData.designSchemeId) {
 						throw new Error('方案ID不存在，无法更新状态')
 					}
 					
-					// 调用API更新方案状态
 					const result = await updateDesignSchemeStatus(
 						this.schemeData.designSchemeId, 
-						status, 
-						description
+						status
 					)
 					
 					console.log('✅ 更新状态API响应:', result)
@@ -843,13 +961,8 @@
 							duration: 2000
 						})
 						
-						// 更新本地状态
 						this.schemeData.status = status
 						
-						// 显示状态更新提示
-						this.showStatusUpdateTips(status)
-						
-						// 刷新订单页面
 						setTimeout(() => {
 							this.refreshOrderPage()
 						}, 1500)
@@ -870,37 +983,15 @@
 				}
 			},
 			
-			// 显示状态更新后的提示
-			showStatusUpdateTips(status) {
-				const tipsMap = {
-					[SCHEME_STATUS.CONFIRMED]: {
-						title: '方案已确认',
-						content: '您已成功确认效果图方案，设计师将开始后续工作'
-					},
-					[SCHEME_STATUS.REJECTED]: {
-						title: '方案已拒绝',
-						content: '您已拒绝效果图方案，请及时与设计师沟通修改需求'
-					}
-				}
-				
-				const tip = tipsMap[status]
-				if (tip) {
-					console.log(`📢 ${tip.title}: ${tip.content}`)
-				}
-			},
-			
-			// 刷新订单页面
 			refreshOrderPage() {
 				try {
 					const pages = getCurrentPages()
 					if (pages.length >= 2) {
 						const prevPage = pages[pages.length - 2]
-						// 检查是否是订单页面
 						if (prevPage.route && prevPage.route.includes('order/my-order')) {
-							// 调用订单页面的刷新方法
 							if (prevPage.$vm && prevPage.$vm.loadOrderList) {
-								prevPage.$vm.pagination.pageNum = 1
-								prevPage.$vm.loadOrderList()
+								 prevPage.$vm.pagination.pageNum = 1
+								 prevPage.$vm.loadOrderList()
 							}
 						}
 					}
@@ -911,7 +1002,6 @@
 				}
 			},
 			
-			// 显示参数错误提示
 			showParamsError() {
 				uni.showModal({
 					title: '参数错误',
@@ -924,7 +1014,6 @@
 				})
 			},
 			
-			// 格式化时间
 			formatTime(timeStr) {
 				if (!timeStr) return '--'
 				if (typeof timeStr === 'number') {
@@ -934,7 +1023,6 @@
 				return timeStr
 			},
 			
-			// 获取状态文本
 			getStatusText(status) {
 				const statusMap = {
 					[SCHEME_STATUS.PENDING]: '待确认',
@@ -945,7 +1033,6 @@
 				return statusMap[status] || '未知状态'
 			},
 			
-			// 获取状态样式类
 			getStatusClass(status) {
 				const classMap = {
 					[SCHEME_STATUS.PENDING]: 'status-pending',
@@ -956,7 +1043,6 @@
 				return classMap[status] || ''
 			},
 			
-			// 获取状态卡片样式类
 			getStatusCardClass(status) {
 				const classMap = {
 					[SCHEME_STATUS.CONFIRMED]: 'tips-confirmed',
@@ -965,7 +1051,6 @@
 				return classMap[status] || ''
 			},
 			
-			// 获取状态图标
 			getStatusIcon(status) {
 				const iconMap = {
 					[SCHEME_STATUS.CONFIRMED]: '✅',
@@ -975,7 +1060,6 @@
 				return iconMap[status] || 'ℹ️'
 			},
 			
-			// 获取状态标题
 			getStatusTitle(status) {
 				const titleMap = {
 					[SCHEME_STATUS.CONFIRMED]: '方案已确认',
@@ -985,7 +1069,6 @@
 				return titleMap[status] || '方案状态'
 			},
 			
-			// 获取状态描述
 			getStatusDesc(status) {
 				const descMap = {
 					[SCHEME_STATUS.CONFIRMED]: '您已确认此效果图方案，设计师将开始后续工作',
@@ -998,4 +1081,656 @@
 	}
 </script>
 
-<style scoped>	.container {		min-height: 100vh;		background-color: #f8f9fa;	}		/* 顶部导航栏样式 */	.header-section {		position: sticky;		top: 0;		z-index: 999;		background: #fff;		padding: 32rpx 32rpx 24rpx;		border-bottom: 1rpx solid #e1e4e8;		display: flex;		align-items: center;	}		.header-back {		flex-shrink: 0;	}		.back-btn {		display: flex;		align-items: center;		padding: 16rpx 0;	}		.back-icon {		font-size: 48rpx;		color: #1890ff;		line-height: 1;	}		.back-text {		font-size: 32rpx;		color: #1890ff;		margin-left: 8rpx;	}		.header-title {		flex: 1;		text-align: center;		font-size: 36rpx;		font-weight: 600;		color: #1f2329;		margin-right: 120rpx;	}		/* 内容区域样式 */	.content {		height: calc(100vh - 120rpx);		padding: 24rpx;	}		/* 加载状态 */	.loading-state {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 120rpx 0;	}		.loading-spinner {		width: 64rpx;		height: 64rpx;		border: 4rpx solid transparent;		border-top: 4rpx solid #1890ff;		border-radius: 50%;		animation: spin 1s linear infinite;		margin-bottom: 24rpx;	}		.loading-text {		font-size: 28rpx;		color: #666;	}		/* 空状态 */	.empty-state {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 120rpx 0;		text-align: center;	}		.empty-icon {		font-size: 120rpx;		color: #ccc;		margin-bottom: 24rpx;	}		.empty-text {		font-size: 32rpx;		color: #999;		margin-bottom: 16rpx;	}		.empty-desc {		font-size: 28rpx;		color: #ccc;	}		/* 卡片样式 */	.card {		background: #fff;		border-radius: 20rpx;		margin-bottom: 24rpx;		overflow: hidden;		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);	}		.card-header {		display: flex;		align-items: center;		padding: 32rpx 32rpx 24rpx;		border-bottom: 1rpx solid #f0f0f0;	}		.card-icon {		font-size: 36rpx;		margin-right: 16rpx;	}		.card-title {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;	}		.card-subtitle {		font-size: 24rpx;		color: #999;		margin-left: auto;	}		.card-body {		padding: 32rpx;	}		/* 信息行样式 */	.info-row {		display: flex;		justify-content: space-between;		gap: 32rpx;		margin-bottom: 24rpx;	}		.info-row:last-child {		margin-bottom: 0;	}		.info-item {		flex: 1;	}		.info-label {		font-size: 28rpx;		color: #8f959e;		margin-bottom: 16rpx;	}		.info-value {		font-size: 28rpx;		color: #1f2329;		font-weight: 500;	}		.info-value.tag {		display: inline-block;		padding: 8rpx 16rpx;		border-radius: 8rpx;		font-size: 24rpx;	}		.status-pending {		background: #fff9e6;		color: #f39c12;	}		.status-confirmed {		background: #e6f7ff;		color: #1890ff;	}		.status-rejected {		background: #fff2f0;		color: #ff4757;	}		.status-deleted {		background: #f8f9fa;		color: #999;	}		/* 文件列表样式 */	.file-list {		margin-top: 8rpx;	}		.file-item {		display: flex;		align-items: center;		padding: 24rpx;		background: #f8f9fa;		border-radius: 12rpx;		margin-bottom: 16rpx;	}		.file-item:last-child {		margin-bottom: 0;	}		.file-icon {		margin-right: 20rpx;		flex-shrink: 0;	}		.file-type-icon {		font-size: 48rpx;	}		.file-info {		flex: 1;	}		.file-name {		font-size: 28rpx;		color: #1f2329;		font-weight: 500;		margin-bottom: 8rpx;	}		.file-meta {		display: flex;		gap: 16rpx;	}		.file-size, .file-format {		font-size: 24rpx;		color: #8f959e;	}		.file-actions {		flex-shrink: 0;		display: flex;		gap: 12rpx;	}		.btn-action {		padding: 12rpx 20rpx;		border: none;		border-radius: 8rpx;		font-size: 24rpx;		display: flex;		align-items: center;		gap: 8rpx;		transition: all 0.3s ease;	}		.btn-action.preview {		background: #1890ff;		color: #fff;	}		.btn-action.preview:active {		background: #0d7ae5;	}		.btn-action.download {		background: #07C160;		color: #fff;	}		.btn-action.download:active {		background: #06a652;	}		.btn-text {		font-size: 24rpx;	}		/* 空文件状态 */	.empty-files {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 80rpx 40rpx;		text-align: center;	}		.empty-icon {		font-size: 64rpx;		color: #ccc;		margin-bottom: 24rpx;	}		.empty-text {		font-size: 28rpx;		color: #999;	}		/* 方案说明内容 */	.description-content {		background: #f8f9fa;		border-radius: 12rpx;		padding: 24rpx;	}		.description-text {		font-size: 28rpx;		color: #1f2329;		line-height: 1.6;	}		/* 设计师信息样式 */	.designer-detail {		display: flex;		align-items: center;		gap: 24rpx;	}		.designer-avatar {		width: 120rpx;		height: 120rpx;		border-radius: 50%;		overflow: hidden;		background: #f0f0f0;		flex-shrink: 0;	}		.avatar-image {		width: 100%;		height: 100%;	}		.designer-info-content {		flex: 1;	}		.designer-name {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 8rpx;	}		.designer-role {		font-size: 26rpx;		color: #8f959e;	}		.contact-btn {		background: #1890ff;		color: #fff;		padding: 16rpx 24rpx;		border-radius: 8rpx;		font-size: 24rpx;		font-weight: 500;		cursor: pointer;		transition: background-color 0.3s ease;		flex-shrink: 0;	}		.contact-btn:active {		background: #0d7ae5;	}		/* 底部操作区域 */	.bottom-actions {		position: sticky;		bottom: 0;		background: #fff;		padding: 24rpx 32rpx 48rpx;		border-top: 1rpx solid #e1e4e8;		margin-top: 24rpx;	}		.action-buttons {		display: flex;		gap: 24rpx;	}		.btn {		flex: 1;		height: 96rpx;		border: none;		border-radius: 16rpx;		font-size: 32rpx;		font-weight: 500;		display: flex;		align-items: center;		justify-content: center;		transition: all 0.3s ease;		cursor: pointer;	}		.btn:active:not(:disabled) {		transform: scale(0.98);	}		.btn:disabled {		opacity: 0.6;		cursor: not-allowed;	}		.btn-reject {		background: #fff;		color: #ff4757;		border: 2rpx solid #ff4757;	}		.btn-reject:active:not(:disabled) {		background: #fff2f0;	}		.btn-confirm {		background: #07C160;		color: #fff;	}		.btn-confirm:active:not(:disabled) {		background: #06a652;	}		.btn-text {		font-size: 32rpx;		font-weight: 500;	}		/* 状态提示 */	.status-tips {		margin-top: 24rpx;	}		.tips-card {		background: #f8f9fa;		border-radius: 16rpx;		padding: 32rpx;		display: flex;		align-items: center;		gap: 24rpx;	}		.tips-confirmed {		background: #e6f7ff;		border-left: 8rpx solid #1890ff;	}		.tips-rejected {		background: #fff2f0;		border-left: 8rpx solid #ff4757;	}		.tips-icon {		font-size: 48rpx;		flex-shrink: 0;	}		.tips-content {		flex: 1;	}		.tips-title {		font-size: 28rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 8rpx;	}		.tips-desc {		font-size: 24rpx;		color: #666;		line-height: 1.4;	}		/* 预览弹窗样式 */	.preview-modal {		position: fixed;		top: 0;		left: 0;		right: 0;		bottom: 0;		z-index: 9999;		display: flex;		align-items: center;		justify-content: center;	}		.preview-overlay {		position: absolute;		top: 0;		left: 0;		right: 0;		bottom: 0;		background: rgba(0, 0, 0, 0.8);		backdrop-filter: blur(10px);	}		.preview-content {		position: relative;		background: #fff;		border-radius: 20rpx;		width: 90vw;		height: 80vh;		display: flex;		flex-direction: column;		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);		overflow: hidden;	}		.preview-header {		display: flex;		align-items: center;		justify-content: space-between;		padding: 32rpx;		border-bottom: 1rpx solid #e1e4e8;		background: #fafbfc;	}		.preview-title {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		flex: 1;		overflow: hidden;		text-overflow: ellipsis;		white-space: nowrap;	}		.preview-actions {		display: flex;		align-items: center;		gap: 16rpx;	}		.btn-close {		padding: 16rpx 24rpx;		border: none;		border-radius: 12rpx;		background: #8f959e;		color: #fff;		font-size: 26rpx;		display: flex;		align-items: center;		gap: 8rpx;		transition: all 0.3s ease;	}		.btn-close:active {		transform: scale(0.95);		background: #6a737d;	}		.preview-body {		flex: 1;		display: flex;		align-items: center;		justify-content: center;		overflow: hidden;	}		.preview-unsupported {		display: flex;		flex-direction: column;		align-items: center;		justify-content: center;		padding: 80rpx;		text-align: center;	}		.unsupported-icon {		font-size: 120rpx;		margin-bottom: 32rpx;	}		.unsupported-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		margin-bottom: 16rpx;	}		.unsupported-desc {		font-size: 28rpx;		color: #8f959e;		margin-bottom: 48rpx;	}		.btn-download-large {		padding: 24rpx 48rpx;		border: none;		border-radius: 16rpx;		background: linear-gradient(135deg, #1890ff, #36cfc9);		color: #fff;		font-size: 32rpx;		font-weight: 600;		display: flex;		align-items: center;		gap: 16rpx;		transition: all 0.3s ease;	}		.btn-download-large:active {		transform: scale(0.95);		background: linear-gradient(135deg, #0d7ae5, #2db8b3);	}		/* 下载进度样式 */	.download-progress {		position: fixed;		top: 0;		left: 0;		right: 0;		bottom: 0;		z-index: 10000;		display: flex;		align-items: center;		justify-content: center;	}		.progress-overlay {		position: absolute;		top: 0;		left: 0;		right: 0;		bottom: 0;		background: rgba(0, 0, 0, 0.6);	}		.progress-content {		position: relative;		background: #fff;		border-radius: 20rpx;		padding: 64rpx 48rpx;		text-align: center;		min-width: 300rpx;		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);	}		.progress-spinner {		width: 64rpx;		height: 64rpx;		border: 4rpx solid transparent;		border-top: 4rpx solid #1890ff;		border-radius: 50%;		animation: spin 1s linear infinite;		margin: 0 auto 24rpx;	}		.progress-text {		font-size: 32rpx;		font-weight: 600;		color: #1f2329;		display: block;		margin-bottom: 8rpx;	}		.progress-subtext {		font-size: 26rpx;		color: #8f959e;		display: block;	}		@keyframes spin {		0% { transform: rotate(0deg); }		100% { transform: rotate(360deg); }	}</style>
+<style scoped>
+	.container {
+		min-height: 100vh;
+		background-color: #f8f9fa;
+	}
+	
+	/* 顶部导航栏样式 */
+	.header-section {
+		position: sticky;
+		top: 0;
+		z-index: 999;
+		background: #fff;
+		padding: 32rpx 32rpx 24rpx;
+		border-bottom: 1rpx solid #e1e4e8;
+		display: flex;
+		align-items: center;
+	}
+	
+	.header-back {
+		flex-shrink: 0;
+	}
+	
+	.back-btn {
+		display: flex;
+		align-items: center;
+		padding: 16rpx 0;
+	}
+	
+	.back-icon {
+		font-size: 48rpx;
+		color: #1890ff;
+		line-height: 1;
+	}
+	
+	.back-text {
+		font-size: 32rpx;
+		color: #1890ff;
+		margin-left: 8rpx;
+	}
+	
+	.header-title {
+		flex: 1;
+		text-align: center;
+		font-size: 36rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-right: 120rpx;
+	}
+	
+	/* 内容区域样式 */
+	.content {
+		height: calc(100vh - 120rpx);
+		padding: 24rpx;
+	}
+	
+	/* 加载状态 */
+	.loading-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 120rpx 0;
+	}
+	
+	.loading-spinner {
+		width: 64rpx;
+		height: 64rpx;
+		border: 4rpx solid transparent;
+		border-top: 4rpx solid #1890ff;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 24rpx;
+	}
+	
+	.loading-text {
+		font-size: 28rpx;
+		color: #666;
+	}
+	
+	/* 空状态 */
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 120rpx 0;
+		text-align: center;
+	}
+	
+	.empty-icon {
+		font-size: 120rpx;
+		color: #ccc;
+		margin-bottom: 24rpx;
+	}
+	
+	.empty-text {
+		font-size: 32rpx;
+		color: #999;
+		margin-bottom: 16rpx;
+	}
+	
+	.empty-desc {
+		font-size: 28rpx;
+		color: #ccc;
+	}
+	
+	/* 卡片样式 */
+	.card {
+		background: #fff;
+		border-radius: 20rpx;
+		margin-bottom: 24rpx;
+		overflow: hidden;
+		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+	}
+	
+	.card-header {
+		display: flex;
+		align-items: center;
+		padding: 32rpx 32rpx 24rpx;
+		border-bottom: 1rpx solid #f0f0f0;
+	}
+	
+	.card-icon {
+		font-size: 36rpx;
+		margin-right: 16rpx;
+	}
+	
+	.card-title {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #1f2329;
+	}
+	
+	.card-subtitle {
+		font-size: 24rpx;
+		color: #999;
+		margin-left: auto;
+	}
+	
+	.card-body {
+		padding: 32rpx;
+	}
+	
+	/* 信息行样式 */
+	.info-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 32rpx;
+		margin-bottom: 24rpx;
+	}
+	
+	.info-row:last-child {
+		margin-bottom: 0;
+	}
+	
+	.info-item {
+		flex: 1;
+	}
+	
+	.info-label {
+		font-size: 28rpx;
+		color: #8f959e;
+		margin-bottom: 16rpx;
+	}
+	
+	.info-value {
+		font-size: 28rpx;
+		color: #1f2329;
+		font-weight: 500;
+	}
+	
+	.info-value.tag {
+		display: inline-block;
+		padding: 8rpx 16rpx;
+		border-radius: 8rpx;
+		font-size: 24rpx;
+	}
+	
+	.status-pending {
+		background: #fff9e6;
+		color: #f39c12;
+	}
+	
+	.status-confirmed {
+		background: #e6f7ff;
+		color: #1890ff;
+	}
+	
+	.status-rejected {
+		background: #fff2f0;
+		color: #ff4757;
+	}
+	
+	.status-deleted {
+		background: #f8f9fa;
+		color: #999;
+	}
+	
+	/* 文件列表样式 */
+	.file-list {
+		margin-top: 8rpx;
+	}
+	
+	.file-item {
+		display: flex;
+		align-items: center;
+		padding: 24rpx;
+		background: #f8f9fa;
+		border-radius: 12rpx;
+		margin-bottom: 16rpx;
+	}
+	
+	.file-item:last-child {
+		margin-bottom: 0;
+	}
+	
+	.file-icon {
+		width: 80rpx;
+		height: 80rpx;
+		border-radius: 16rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-right: 20rpx;
+		flex-shrink: 0;
+	}
+	
+	/* 文件类型图标样式 */
+	.file-type-image {
+		background: linear-gradient(135deg, #ff4d4f, #ff7875);
+	}
+	
+	.file-type-pdf {
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+	}
+	
+	.file-type-doc {
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+	}
+	
+	.file-type-excel {
+		background: linear-gradient(135deg, #52c41a, #73d13d);
+	}
+	
+	.file-type-ppt {
+		background: linear-gradient(135deg, #722ed1, #9254de);
+	}
+	
+	.file-type-text {
+		background: linear-gradient(135deg, #fa8c16, #ffa940);
+	}
+	
+	.file-type-archive {
+		background: linear-gradient(135deg, #fa541c, #ff7a45);
+	}
+	
+	.file-type-other {
+		background: linear-gradient(135deg, #8c8c8c, #bfbfbf);
+	}
+	
+	.file-type-unknown {
+		background: linear-gradient(135deg, #8c8c8c, #bfbfbf);
+	}
+	
+	.file-type-icon {
+		font-size: 40rpx;
+	}
+	
+	.file-info {
+		flex: 1;
+		min-width: 0;
+	}
+	
+	.file-name {
+		font-size: 28rpx;
+		color: #1f2329;
+		font-weight: 500;
+		margin-bottom: 8rpx;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	
+	.file-meta {
+		display: flex;
+		gap: 16rpx;
+		margin-bottom: 8rpx;
+	}
+	
+	.file-size, .file-format {
+		font-size: 24rpx;
+		color: #8f959e;
+	}
+	
+	.file-format {
+		background: rgba(24, 144, 255, 0.1);
+		padding: 2rpx 8rpx;
+		border-radius: 6rpx;
+		font-size: 22rpx;
+	}
+	
+	.file-status {
+		margin-top: 4rpx;
+	}
+	
+	.status-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 6rpx;
+		padding: 4rpx 12rpx;
+		border-radius: 20rpx;
+		font-size: 22rpx;
+		font-weight: 500;
+	}
+	
+	.status-badge.loading {
+		background: rgba(255, 193, 7, 0.1);
+		color: #f39c12;
+		border: 1rpx solid rgba(243, 156, 18, 0.3);
+	}
+	
+	.status-icon {
+		font-size: 20rpx;
+	}
+	
+	.file-actions {
+		flex-shrink: 0;
+		display: flex;
+		gap: 12rpx;
+	}
+	
+	.btn-action {
+		padding: 12rpx 20rpx;
+		border: none;
+		border-radius: 8rpx;
+		font-size: 24rpx;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4rpx;
+		transition: all 0.3s ease;
+		min-width: 80rpx;
+		background: transparent;
+	}
+	
+	.btn-action:active:not(:disabled) {
+		transform: scale(0.95);
+	}
+	
+	.btn-action:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	
+	.btn-action.preview:active:not(:disabled) {
+		background: rgba(24, 144, 255, 0.1);
+	}
+	
+	.btn-action.download:active:not(:disabled) {
+		background: rgba(7, 193, 96, 0.1);
+	}
+	
+	.btn-icon {
+		font-size: 24rpx;
+	}
+	
+	.btn-text {
+		font-size: 20rpx;
+		color: #8f959e;
+		font-weight: 500;
+	}
+	
+	/* 空文件状态 */
+	.empty-files {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 80rpx 40rpx;
+		text-align: center;
+	}
+	
+	.empty-icon {
+		font-size: 64rpx;
+		color: #ccc;
+		margin-bottom: 24rpx;
+	}
+	
+	.empty-text {
+		font-size: 28rpx;
+		color: #999;
+	}
+	
+	/* 方案说明内容 */
+	.description-content {
+		background: #f8f9fa;
+		border-radius: 12rpx;
+		padding: 24rpx;
+	}
+	
+	.description-text {
+		font-size: 28rpx;
+		color: #1f2329;
+		line-height: 1.6;
+	}
+	
+	/* 设计师信息样式 */
+	.designer-detail {
+		display: flex;
+		align-items: center;
+		gap: 24rpx;
+	}
+	
+	.designer-avatar {
+		width: 120rpx;
+		height: 120rpx;
+		border-radius: 50%;
+		overflow: hidden;
+		background: #f0f0f0;
+		flex-shrink: 0;
+	}
+	
+	.avatar-image {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.designer-info-content {
+		flex: 1;
+	}
+	
+	.designer-name {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 8rpx;
+	}
+	
+	.designer-role {
+		font-size: 26rpx;
+		color: #8f959e;
+	}
+	
+	/* 联系设计师卡片样式 */
+	.contact-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 24rpx;
+		text-align: center;
+	}
+	
+	.contact-desc {
+		font-size: 28rpx;
+		color: #666;
+		line-height: 1.5;
+	}
+	
+	.contact-btn {
+		background: #1890ff;
+		color: #fff;
+		padding: 20rpx 40rpx;
+		border-radius: 12rpx;
+		font-size: 28rpx;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		display: flex;
+		align-items: center;
+		gap: 10rpx;
+		border: none;
+	}
+	
+	.contact-btn:active {
+		background: #0d7ae5;
+		transform: scale(0.98);
+	}
+	
+	.contact-icon {
+		font-size: 28rpx;
+	}
+	
+	.contact-text {
+		font-size: 28rpx;
+		font-weight: 500;
+	}
+	
+	/* 底部操作区域 */
+	.bottom-actions {
+		position: sticky;
+		bottom: 0;
+		background: #fff;
+		padding: 24rpx 32rpx 48rpx;
+		border-top: 1rpx solid #e1e4e8;
+		margin-top: 24rpx;
+	}
+	
+	.action-buttons {
+		display: flex;
+		gap: 24rpx;
+	}
+	
+	.btn {
+		flex: 1;
+		height: 96rpx;
+		border: none;
+		border-radius: 16rpx;
+		font-size: 32rpx;
+		font-weight: 500;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.3s ease;
+		cursor: pointer;
+	}
+	
+	.btn:active:not(:disabled) {
+		transform: scale(0.98);
+	}
+	
+	.btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	
+	.btn-reject {
+		background: #fff;
+		color: #ff4757;
+		border: 2rpx solid #ff4757;
+	}
+	
+	.btn-reject:active:not(:disabled) {
+		background: #fff2f0;
+	}
+	
+	.btn-confirm {
+		background: #07C160;
+		color: #fff;
+	}
+	
+	.btn-confirm:active:not(:disabled) {
+		background: #06a652;
+	}
+	
+	.btn-text {
+		font-size: 32rpx;
+		font-weight: 500;
+	}
+	
+	/* 状态提示 */
+	.status-tips {
+		margin-top: 24rpx;
+	}
+	
+	.tips-card {
+		background: #f8f9fa;
+		border-radius: 16rpx;
+		padding: 32rpx;
+		display: flex;
+		align-items: center;
+		gap: 24rpx;
+	}
+	
+	.tips-confirmed {
+		background: #e6f7ff;
+		border-left: 8rpx solid #1890ff;
+	}
+	
+	.tips-rejected {
+		background: #fff2f0;
+		border-left: 8rpx solid #ff4757;
+	}
+	
+	.tips-icon {
+		font-size: 48rpx;
+		flex-shrink: 0;
+	}
+	
+	.tips-content {
+		flex: 1;
+	}
+	
+	.tips-title {
+		font-size: 28rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 8rpx;
+	}
+	
+	.tips-desc {
+		font-size: 24rpx;
+		color: #666;
+		line-height: 1.4;
+	}
+	
+	/* 全局加载遮罩 */
+	.global-loading {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(10px);
+		z-index: 9999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.loading-modal {
+		background: #fff;
+		border-radius: 24rpx;
+		padding: 64rpx 48rpx;
+		text-align: center;
+		max-width: 500rpx;
+		box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+		border: 1rpx solid rgba(225, 228, 232, 0.8);
+	}
+	
+	.loading-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+	
+	.loading-spinner.large {
+		width: 64rpx;
+		height: 64rpx;
+		border: 4rpx solid transparent;
+		border-top: 4rpx solid #1890ff;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+		margin-bottom: 24rpx;
+	}
+	
+	.loading-text {
+		font-size: 32rpx;
+		font-weight: 600;
+		color: #1f2329;
+		margin-bottom: 8rpx;
+	}
+	
+	.loading-subtext {
+		font-size: 26rpx;
+		color: #8f959e;
+	}
+	
+	@keyframes spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
+	}
+</style>

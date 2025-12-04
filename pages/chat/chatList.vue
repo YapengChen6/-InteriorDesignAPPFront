@@ -7,6 +7,9 @@
         <view class="header-content">
           <text class="title">消息中心</text>
           <view class="header-actions">
+            <view class="action-btn refresh" hover-class="btn-hover" @click="refreshChatList" style="margin-right: 15rpx;">
+              <text class="refresh-icon">🔄</text>
+            </view>
             <view class="action-btn" hover-class="btn-hover" @click="startNewChat">
               <text class="plus-icon">+</text>
             </view>
@@ -77,6 +80,14 @@
             mode="aspectFill" 
             @error="handleImageError"
           ></image>
+          <!-- 在线状态指示器 -->
+          <OnlineStatusIndicator
+            :isOnline="getOnlineStatus(chat.otherUserId)"
+            :showStatus="true"
+            :showText="false"
+            size="small"
+            class="online-status-overlay"
+          />
           <!-- 未读角标 -->
           <view v-if="chat && chat.unreadCount > 0" class="unread-badge">
             {{ chat.unreadCount > 99 ? '99+' : chat.unreadCount }}
@@ -140,9 +151,14 @@ import { updateCategoryCount, filterChatsByCategory } from '@/utils/chatDataUtil
 import { searchUsers, getRoleSwitchInfo } from '@/api/users.js'
 import { getConversationList, createOrGetConversation } from '@/api/conversation.js'
 import { getUnreadCount } from '@/api/message_new.js'
+import { batchGetUserOnlineStatus } from '@/api/onlineStatus.js'
+import OnlineStatusIndicator from '@/components/OnlineStatusIndicator.vue'
 
 export default {
   name: 'ChatList',
+  components: {
+    OnlineStatusIndicator
+  },
   data() {
     return {
       // --- 核心数据 ---
@@ -167,7 +183,10 @@ export default {
       loading: false,
       hasMore: true,
       addChatPhone: '',
-      addingChat: false
+      addingChat: false,
+      
+      // --- 在线状态 ---
+      onlineStatusMap: {} // 存储用户在线状态 {userId: {isOnline: boolean, lastActiveTime: string}}
     }
   },
   
@@ -210,22 +229,71 @@ export default {
   methods: {
     // 初始化用户并加载数据
     initUserAndLoad() {
-      const storedUserId = uni.getStorageSync('userId')
-      this.currentUserId = storedUserId ? parseInt(storedUserId) : 0
+      // 尝试多种方式获取用户ID
+      let userId = uni.getStorageSync('userId')
+      if (!userId) {
+        const userInfo = uni.getStorageSync('userInfo')
+        if (userInfo && userInfo.userId) {
+          userId = userInfo.userId
+          // 同步存储userId
+          uni.setStorageSync('userId', userId.toString())
+        }
+      }
+      
+      this.currentUserId = userId ? parseInt(userId) : 0
       
       const storedRole = uni.getStorageSync('currentRoleType')
       if (storedRole) {
         this.currentRoleType = storedRole
       }
       
-      console.log('📱 刷新列表，用户ID:', this.currentUserId)
+      console.log('📱 初始化用户信息，用户ID:', this.currentUserId)
+      
+      if (!this.currentUserId) {
+        console.warn('⚠️ 用户ID为空，可能需要重新登录')
+        uni.showModal({
+          title: '提示',
+          content: '用户信息异常，请重新登录',
+          showCancel: false,
+          success: () => {
+            uni.reLaunch({ url: '/pages/register' })
+          }
+        })
+        return
+      }
+      
       this.loadConversationList()
+    },
+    
+    // 手动刷新聊天列表
+    async refreshChatList() {
+      console.log('🔄 手动刷新聊天列表')
+      uni.showLoading({ title: '刷新中...', mask: true })
+      
+      try {
+        // 重新加载对话列表（包含在线状态）
+        await this.loadConversationList()
+        
+        uni.hideLoading()
+        uni.showToast({
+          title: '刷新成功',
+          icon: 'success'
+        })
+      } catch (error) {
+        uni.hideLoading()
+        console.error('❌ 刷新失败:', error)
+        uni.showToast({
+          title: '刷新失败',
+          icon: 'none'
+        })
+      }
     },
 
     // --- 核心：加载会话列表 ---
     async loadConversationList() {
       this.loading = true
       console.log('📋 开始加载聊天列表...')
+      console.log('📋 当前用户ID:', this.currentUserId)
       
       try {
         // 1. 获取会话列表
@@ -233,13 +301,25 @@ export default {
         
         if (conversationRes.code === 200 && conversationRes.data) {
           const conversations = conversationRes.data.rows || conversationRes.data || []
+          console.log('📊 获取到', conversations.length, '个对话')
+          
+          if (conversations.length === 0) {
+            this.chats = []
+            this.filteredChats = []
+            this.updateCategoryCount()
+            return
+          }
           
           // 2. 并行处理每个会话的用户信息 (提高加载速度)
           const processPromises = conversations.map(conv => this.processConversation(conv))
           const processedChats = (await Promise.all(processPromises)).filter(item => item !== null)
           
           // 3. 按时间倒序排列（新消息在前）
-          processedChats.sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime())
+          processedChats.sort((a, b) => {
+            const timeA = new Date(a.lastMessageTime || 0).getTime()
+            const timeB = new Date(b.lastMessageTime || 0).getTime()
+            return timeB - timeA
+          })
           
           this.chats = processedChats
           console.log('📋 聊天列表加载完成，共', this.chats.length, '个对话')
@@ -247,15 +327,21 @@ export default {
           // 4. 加载未读消息数
           await this.loadUnreadCounts()
           
-          // 5. 更新 UI 统计和过滤
+          // 5. 加载在线状态
+          await this.loadOnlineStatuses()
+          
+          // 6. 更新 UI 统计和过滤
           this.updateCategoryCount()
           this.filterChats()
+        } else {
+          console.error('❌ 对话列表API返回错误:', conversationRes)
+          throw new Error(conversationRes.msg || '获取对话列表失败')
         }
       } catch (error) {
         console.error('❌ 加载聊天列表失败:', error)
         // 仅在没有任何数据时提示错误
         if(this.chats.length === 0) {
-            uni.showToast({ title: '加载失败', icon: 'none' })
+            uni.showToast({ title: '加载失败: ' + error.message, icon: 'none' })
         }
       } finally {
         this.loading = false
@@ -290,11 +376,14 @@ export default {
             } 
           })
           
+          // 同时刷新在线状态
+          await this.loadOnlineStatuses()
+          
           // 更新分类计数和过滤
           this.updateCategoryCount()
           this.filterChats()
           
-          console.log('✅ 未读数更新完成')
+          console.log('✅ 未读数和在线状态更新完成')
         }
       } catch (error) {
         console.error('❌ 加载未读消息数失败:', error)
@@ -304,34 +393,52 @@ export default {
     // --- 核心：处理单条会话 (直接使用后端返回的对方用户信息) ---
     async processConversation(conv) {
       try {
-        // 后端已经返回了对方用户的完整信息，直接使用即可
-        const otherUserId = conv.otherUserId
-        const otherUserName = conv.otherUserName || `用户${otherUserId}`
-        const otherUserAvatar = conv.otherUserAvatar ? processAvatarUrl(conv.otherUserAvatar, '/static/images/default-avatar.png') : '/static/images/default-avatar.png'
+        
+        // 确定对方用户ID
+        let otherUserId = conv.otherUserId
+        if (!otherUserId) {
+          // 如果后端没有直接返回otherUserId，需要根据当前用户ID计算
+          if (conv.userId1 === this.currentUserId) {
+            otherUserId = conv.userId2
+          } else if (conv.userId2 === this.currentUserId) {
+            otherUserId = conv.userId1
+          } else {
+            console.warn('⚠️ 无法确定对方用户ID:', conv)
+            return null
+          }
+        }
+        
+        // 检查是否是与自己的对话
+        if (otherUserId === this.currentUserId) {
+          console.warn('⚠️ 跳过与自己的对话:', conv.conversationId)
+          return null
+        }
+        
+        const otherUserName = conv.otherUserName || conv.name || `用户${otherUserId}`
+        const otherUserAvatar = conv.otherUserAvatar ? 
+          processAvatarUrl(conv.otherUserAvatar, '/static/images/default-avatar.png') : 
+          '/static/images/default-avatar.png'
         const otherUserRole = conv.otherUserRole || 1
         
-        console.log('📋 处理会话:', {
-          conversationId: conv.conversationId,
-          otherUserId,
-          otherUserName,
-          currentUserId: this.currentUserId
-        })
-        
-        return {
+        const processedConv = {
           id: conv.conversationId,
           conversationId: conv.conversationId,
           name: otherUserName,
           avatar: otherUserAvatar,
           lastMessage: conv.lastMessage || '暂无消息',
-          lastMessageTime: conv.lastMessageTime,
+          lastMessageTime: conv.lastMessageTime || conv.createTime,
           unreadCount: conv.unreadCount ? parseInt(conv.unreadCount) : 0, 
           userRole: otherUserRole,
           userId1: conv.userId1,
           userId2: conv.userId2,
           otherUserId: otherUserId,
         }
+        
+
+        
+        return processedConv
       } catch (error) {
-        console.error('❌ 处理单条会话出错:', error)
+        console.error('❌ 处理单条会话出错:', error, conv)
         return null
       }
     },
@@ -369,6 +476,48 @@ export default {
     
     handleImageError(e) {
       // 图片加载失败，Image组件会显示默认图或空白，此处可扩展
+    },
+    
+    // --- 在线状态相关方法 ---
+    getOnlineStatus(userId) {
+      if (!userId || !this.onlineStatusMap[userId]) {
+        return false
+      }
+      return this.onlineStatusMap[userId].isOnline || false
+    },
+    
+    // 批量加载对话对方的在线状态
+    async loadOnlineStatuses() {
+      if (this.chats.length === 0) {
+        return
+      }
+      
+      try {
+        // 提取所有对方用户ID
+        const otherUserIds = this.chats
+          .map(chat => chat.otherUserId)
+          .filter(userId => userId && userId !== this.currentUserId)
+        
+        if (otherUserIds.length === 0) {
+          return
+        }
+        
+        console.log('📊 批量查询在线状态，用户数量:', otherUserIds.length)
+        
+        // 批量查询在线状态
+        const response = await batchGetUserOnlineStatus(otherUserIds)
+        
+        if (response.code === 200 && response.data) {
+          // 更新在线状态映射
+          this.onlineStatusMap = { ...this.onlineStatusMap, ...response.data }
+          console.log('✅ 在线状态加载完成')
+        } else {
+          console.warn('⚠️ 在线状态查询返回异常:', response)
+        }
+      } catch (error) {
+        console.error('❌ 加载在线状态失败:', error)
+        // 失败时不影响聊天列表的正常显示
+      }
     },
 
     loadMore() {
@@ -516,6 +665,17 @@ page {
   margin-top: -4rpx;
 }
 
+.refresh-icon {
+  color: #fff;
+  font-size: 32rpx;
+}
+
+.action-btn.refresh {
+  background-color: #28a745;
+  width: 56rpx;
+  height: 56rpx;
+}
+
 /* 搜索框优化 */
 .search-wrapper {
   padding: 12rpx 32rpx 24rpx;
@@ -623,6 +783,18 @@ page {
 .avatar-container {
   position: relative;
   margin-right: 32rpx; /* 增加间距 */
+}
+
+/* 在线状态指示器覆盖层 */
+.online-status-overlay {
+  position: absolute;
+  bottom: 2rpx;
+  right: 2rpx;
+  z-index: 3;
+  background-color: #fff;
+  border-radius: 50%;
+  padding: 2rpx;
+  box-shadow: 0 0 4rpx rgba(0,0,0,0.1);
 }
 
 .chat-avatar {

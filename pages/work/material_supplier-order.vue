@@ -159,25 +159,25 @@
     
     <!-- 发货弹窗 -->
     <uni-popup ref="shipPopup" type="center">
-      <view class="ship-form">
-        <view class="form-item">
-          <text class="form-label">物流公司：</text>
+        <view class="ship-form">
+          <view class="form-item">
+            <text class="form-label">物流公司：</text>
           <uni-easyinput
-            class="form-input"
+              class="form-input" 
             type="text"
-            v-model="shipForm.shippingCompany"
-            placeholder="请输入物流公司名称"
-          />
-        </view>
-        <view class="form-item">
-          <text class="form-label">物流单号：</text>
+              v-model="shipForm.shippingCompany" 
+              placeholder="请输入物流公司名称"
+            />
+          </view>
+          <view class="form-item">
+            <text class="form-label">物流单号：</text>
           <uni-easyinput
-            class="form-input"
+              class="form-input" 
             type="text"
-            v-model="shipForm.trackingNumber"
-            placeholder="请输入物流单号"
-          />
-        </view>
+              v-model="shipForm.trackingNumber" 
+              placeholder="请输入物流单号"
+            />
+          </view>
         <view class="ship-actions">
           <button class="btn secondary" @click="cancelShip">取消</button>
           <button class="btn primary" @click="confirmShip">确认发货</button>
