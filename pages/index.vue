@@ -209,1293 +209,7 @@
 		</view>
 	</view>
 </template>
-
-<script>
-	import { orderService } from '@/api/order.js'
-	import { projectService } from '@/api/project.js'
-	import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'
-	import { getDesignSchemeList, saveNullScheme } from '@/api/designScheme.js'
-	import { isUserLoggedIn, handleNotLoggedIn, createConversationAndNavigate } from "@/utils/conversationHelper.js"
-	
-	// 方案类型常量
-	const SCHEME_TYPE = {
-		EFFECT_DRAWING: "1",
-		CONSTRUCTION_DRAWING: "2"
-	}
-	
-	export default {
-		data() {
-			return {
-				// 订单状态筛选
-				activeStatus: '',
-				loading: false,
-				refreshing: false,
-				hasMore: true,
-				
-				// 用户信息
-				userInfo: {
-					userId: null,
-					phone: '',
-					name: '',
-					avatar: '',
-					address: '',
-					role: '', // 用户角色：customer/designer/supervisor
-					roleName: '' // 角色名称
-				},
-				
-				// 分页参数
-				pagination: {
-					pageNum: 1,
-					pageSize: 10,
-					total: 0
-				},
-				
-				// 订单列表数据
-				orderList: [],
-				
-				// 订单状态数量统计
-				statusCount: {
-					'0': 0,
-					'1': 0,
-					'2': 0,
-					'3': 0,
-					'4': 0 // 新增：待付款状态统计
-				}
-			}
-		},
-		computed: {
-			// 过滤后的订单列表（用于待付款筛选和类型过滤）
-			filteredOrderList() {
-				// 修改：首先过滤只显示contractorId与当前用户ID相同的订单
-				const myOrders = this.orderList.filter(order => {
-					// 检查contractorId是否存在且与当前用户ID相同
-					const currentUserId = String(this.userInfo.userId || '');
-					const contractorId = String(order.contractorId || '');
-					
-					// 同时确保是设计师订单 (type=1)
-					return contractorId === currentUserId && order.type === 1;
-				});
-				
-				console.log('🔍 我的订单筛选结果:', {
-					totalOrders: this.orderList.length,
-					myOrdersCount: myOrders.length,
-					currentUserId: this.userInfo.userId,
-					filteredOrders: myOrders.map(o => ({
-						orderId: o.orderId,
-						contractorId: o.contractorId,
-						type: o.type
-					}))
-				});
-				
-				// 然后根据状态筛选
-				if (this.activeStatus === '4') {
-					// 筛选待付款订单
-					return myOrders.filter(order => this.isWaitingPayment(order));
-				}
-				
-				if (this.activeStatus !== '') {
-					return myOrders.filter(order => order.status.toString() === this.activeStatus);
-				}
-				
-				return myOrders;
-			}
-		},
-		onLoad() {
-			console.log('🚀 设计师订单页面加载');
-			this.loadCurrentUserInfo();
-		},
-		onShow() {
-			console.log('🔄 设计师订单页面显示，刷新数据');
-			if (this.userInfo.userId) {
-				this.pagination.pageNum = 1;
-				this.loadOrderList();
-			}
-		},
-		methods: {
-			// 返回首页
-			goBack() {
-				console.log('🔙 返回首页');
-				uni.switchTab({
-					url: '/pages/index'
-				});
-			},
-
-			// 判断是否为待付款订单
-			isWaitingPayment(order) {
-				return order.status === 1 &&                    // 进行中
-					   order.contractStatus === 2 &&           // 合同已确认
-					   order.effectDrawingStatus === '2' &&    // 效果图已完成
-					   order.constructionDrawingStatus === '2'; // 施工设计图已完成
-			},
-
-			// 设计师专属状态文本
-			getDesignerStatusText(order) {
-				if (this.isWaitingPayment(order)) {
-					return '待付款';
-				}
-				return this.getStatusText(order.status);
-			},
-
-			// 查看订单详情
-			viewOrderDetail(orderId) {
-				const order = this.orderList.find(item => item.orderId === orderId);
-				if (!order) {
-					uni.showToast({
-						title: '订单信息不存在',
-						icon: 'none'
-					});
-					return;
-				}
-				
-				console.log('📋 查看订单详情，订单ID:', orderId, '订单状态:', order.status);
-				
-				// 设计师查看订单详情
-				uni.navigateTo({
-					url: `/pages/order-hall/order-detail?id=${orderId}`
-				});
-			},
-
-			// 统一的错误处理方法
-			handleApiError(error, defaultMessage = '操作失败') {
-				console.error('API Error:', error);
-				
-				let message = defaultMessage;
-				if (error && error.errMsg) {
-					message = error.errMsg;
-				} else if (error && error.message) {
-					message = error.message;
-				} else if (typeof error === 'string') {
-					message = error;
-				}
-				
-				uni.showToast({
-					title: message,
-					icon: 'none',
-					duration: 3000
-				});
-				
-				return message;
-			},
-
-			// 加载当前用户信息 - 使用原来的 getUserProfile() 方法
-			async loadCurrentUserInfo() {
-				try {
-					console.log('👤 开始获取当前用户信息（使用 getUserProfile）...');
-					
-					// 同时获取用户基本信息和角色信息
-					const [userRes, roleRes] = await Promise.all([
-						getUserProfile(),  // 使用原来的方法获取当前用户信息
-						getCurrentRole()
-					]);
-					
-					if (userRes.code === 200) {
-						this.userInfo = userRes.data;
-						
-						// 添加角色信息
-						if (roleRes.code === 200 && roleRes.data) {
-							this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'designer';
-							this.userInfo.roleName = roleRes.data.roleName || '';
-						} else {
-							this.userInfo.role = 'designer'; // 默认角色
-							this.userInfo.roleName = '设计师';
-						}
-						
-						console.log('👤 当前用户信息加载完成:', {
-							userId: this.userInfo.userId,
-							name: this.userInfo.name,
-							role: this.userInfo.role,
-							roleName: this.userInfo.roleName
-						});
-						
-						// 确保用户信息存储到缓存
-						this.ensureUserInfoInStorage();
-						
-						this.loadOrderList();
-					} else {
-						console.error('获取当前用户信息失败:', userRes.msg);
-						this.handleApiError(userRes.msg, '获取用户信息失败');
-					}
-				} catch (error) {
-					console.error('❌ 获取当前用户信息失败:', error);
-					this.handleApiError(error, '获取用户信息失败');
-				}
-			},
-			
-			// 确保用户信息存储到缓存
-			ensureUserInfoInStorage() {
-				try {
-					// 如果用户信息存在，存储到缓存
-					if (this.userInfo && this.userInfo.userId) {
-						// 存储完整用户信息
-						uni.setStorageSync('userInfo', this.userInfo);
-						
-						// 单独存储用户ID（确保是字符串）
-						if (this.userInfo.userId) {
-							const userIdStr = String(this.userInfo.userId);
-							uni.setStorageSync('userId', userIdStr);
-							console.log('✅ 存储用户ID到缓存:', userIdStr);
-						}
-						
-						// 存储到全局数据
-						if (getApp().globalData) {
-							getApp().globalData.userInfo = this.userInfo;
-						}
-						
-						console.log('✅ 用户信息已更新到缓存:', {
-							userId: this.userInfo.userId,
-							name: this.userInfo.name
-						});
-						
-						return true;
-					}
-					
-					// 检查缓存是否存在
-					const cachedUserInfo = uni.getStorageSync('userInfo');
-					const cachedUserId = uni.getStorageSync('userId');
-					
-					if (!cachedUserInfo || !cachedUserId) {
-						console.warn('⚠️ 缓存中用户信息不完整');
-						return false;
-					}
-					
-					return true;
-					
-				} catch (storageError) {
-					console.error('❌ 存储用户信息失败:', storageError);
-					return false;
-				}
-			},
-			
-			// 加载订单列表 - 已修改：将当前用户ID作为contractorId传给接口
-			async loadOrderList() {
-				if (this.loading || !this.userInfo.userId) return
-				
-				try {
-					this.loading = true
-					
-					// 构建查询参数，包含contractorId
-					const queryParams = {
-						pageNum: this.pagination.pageNum,
-						pageSize: this.pagination.pageSize,
-						contractorId: this.userInfo.userId  // 关键修改：添加contractorId参数
-					}
-					
-					// 添加状态筛选（除了待付款状态）
-					if (this.activeStatus !== '' && this.activeStatus !== '4') {
-						queryParams.status = this.activeStatus
-					}
-					
-					console.log('📋 加载设计师订单列表 - 查询参数:', {
-						contractorId: queryParams.contractorId,
-						status: queryParams.status,
-						pageNum: queryParams.pageNum,
-						pageSize: queryParams.pageSize,
-						activeStatus: this.activeStatus
-					})
-					
-					// 修改：调用订单列表接口，传入包含contractorId的参数
-					const result = await orderService.getOrderList(queryParams)
-					console.log('✅ 设计师订单列表响应:', result)
-					
-					let list = []
-					let total = 0
-					
-					// 解析响应数据（根据你的API返回格式调整）
-					if (result && result.code === 200) {
-						// 情况1：data中有records和total（标准分页格式）
-						if (result.data && result.data.records) {
-							list = result.data.records
-							total = result.data.total
-						} 
-						// 情况2：data中有list和total
-						else if (result.data && result.data.list) {
-							list = result.data.list
-							total = result.data.total
-						}
-						// 情况3：data直接是数组
-						else if (Array.isArray(result.data)) {
-							list = result.data
-							total = result.data.length
-						}
-						// 情况4：result本身就是records数组（非标准格式）
-						else if (result.records) {
-							list = result.records
-							total = result.total || result.records.length
-						}
-						// 情况5：result本身就是list数组
-						else if (result.list) {
-							list = result.list
-							total = result.total || result.list.length
-						}
-						// 情况6：data是对象但不是分页结构
-						else if (result.data && typeof result.data === 'object') {
-							// 尝试从data中提取数组
-							for (let key in result.data) {
-								if (Array.isArray(result.data[key])) {
-									list = result.data[key]
-									break
-								}
-							}
-							total = list.length
-						}
-					} 
-					// 如果API返回的是数组（非标准格式）
-					else if (Array.isArray(result)) {
-						list = result
-						total = result.length
-					}
-					// 如果API返回的是对象但不是标准格式
-					else if (result && typeof result === 'object') {
-						// 尝试查找数组字段
-						const arrayFields = ['records', 'list', 'data', 'items']
-						for (let field of arrayFields) {
-							if (Array.isArray(result[field])) {
-								list = result[field]
-								total = result.total || result[field].length
-								break
-							}
-						}
-					}
-					
-					console.log('📊 解析后的订单列表:', {
-						listCount: list.length,
-						total: total,
-						sample: list.length > 0 ? list[0] : null
-					})
-					
-					// 如果没有获取到数据，显示空状态
-					if (list.length === 0) {
-						console.log('📭 未获取到订单数据')
-						if (this.pagination.pageNum === 1) {
-							this.orderList = []
-						}
-						this.pagination.total = total
-						this.hasMore = false
-						this.updateStatusCount()
-						return
-					}
-					
-					console.log('🔄 开始获取订单对应的详细信息...')
-					const ordersWithDetails = []
-					
-					// 并行获取所有订单的详细信息
-					const detailPromises = list.map(async (order) => {
-						let projectInfo = {}
-						let publisherInfo = {}
-						
-						// 获取项目详情
-						if (order.projectId) {
-							try {
-								projectInfo = await this.getProjectDetail(order.projectId) || {}
-							} catch (error) {
-								console.error(`获取订单 ${order.orderId} 的项目详情失败:`, error)
-							}
-						}
-						
-						// 获取客户信息
-						if (order.userId) {
-							try {
-								// 使用 getUserById 方法获取其他用户信息
-								publisherInfo = await this.getUserInfoById(order.userId) || {}
-							} catch (error) {
-								console.error(`获取订单 ${order.orderId} 的发布人信息失败:`, error)
-							}
-						}
-						
-						let orderWithDetails = {
-							...order,
-							projectInfo,
-							publisherInfo,
-							loadingEffect: false,
-							loadingConstruction: false,
-							effectButtonText: '检查中...',
-							showConstructionButton: false,
-							effectDrawingStatus: null,
-							constructionDrawingStatus: null
-						}
-						
-						// 如果合同已确认，检查设计方案状态
-						if (order.contractStatus === 2) {
-							await this.checkAndSetDesignSchemeButtons(orderWithDetails);
-						}
-						
-						return orderWithDetails
-					})
-					
-					// 等待所有详细信息获取完成
-					const orders = await Promise.all(detailPromises)
-					ordersWithDetails.push(...orders)
-					
-					console.log('✅ 设计师订单数据整合完成，共', ordersWithDetails.length, '条订单')
-					
-					// 更新订单列表
-					if (this.pagination.pageNum === 1) {
-						this.orderList = ordersWithDetails
-					} else {
-						// 去重：避免重复添加相同的订单
-						const existingIds = new Set(this.orderList.map(o => o.orderId))
-						const newOrders = ordersWithDetails.filter(o => !existingIds.has(o.orderId))
-						this.orderList = [...this.orderList, ...newOrders]
-					}
-					
-					// 更新分页信息
-					this.pagination.total = total
-					this.hasMore = this.orderList.length < total
-					
-					// 更新状态统计
-					this.updateStatusCount()
-					
-					console.log('📈 订单列表更新完成:', {
-						currentCount: this.orderList.length,
-						total: this.pagination.total,
-						hasMore: this.hasMore
-					})
-					
-				} catch (error) {
-					console.error('❌ 加载订单列表失败:', error)
-					this.handleApiError(error, '加载订单列表失败')
-				} finally {
-					this.loading = false
-					this.refreshing = false
-				}
-			},
-			
-			// 获取其他用户信息的方法 - 只能使用 getUserById(userId)
-			async getUserInfoById(userId) {
-				if (!userId) {
-					console.warn('用户ID为空');
-					return {
-						name: '',
-						phone: '',
-						avatar: '/static/images/default-avatar.png',
-						role: ''
-					};
-				}
-				
-				try {
-					console.log('👤 使用 getUserById 获取用户信息，用户ID:', userId);
-					
-					// 只能使用 getUserById 方法获取其他用户信息
-					const result = await getUserById(userId);
-					console.log('✅ getUserById 原始结果:', result);
-					
-					// 解析API响应
-					let userData = null;
-					
-					// 处理不同的响应格式
-					if (result && typeof result === 'object') {
-						// 标准格式：{code: 200, data: {...}}
-						if (result.code === 200) {
-							userData = result.data || {};
-						}
-						// 非标准格式：直接是用户数据
-						else if (!result.code && (result.name || result.phone || result.avatar)) {
-							userData = result;
-						}
-						// 其他格式：尝试从可能的位置获取数据
-						else if (result.data) {
-							userData = result.data;
-						}
-					}
-					
-					if (!userData) {
-						console.warn('⚠️ 无法从响应中解析用户数据，使用默认值');
-						userData = {};
-					}
-					
-					console.log('✅ 解析后的用户数据:', userData);
-					
-					// 根据示例数据结构调整字段映射
-					return {
-						name: userData.nickName || userData.name || userData.nickname || userData.username || '',
-						phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '',
-						avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png',
-						role: userData.role || userData.userType || ''
-					};
-					
-				} catch (error) {
-					console.error('❌ 使用 getUserById 获取用户信息失败:', error);
-					// 返回默认用户信息（空值，避免显示"未知用户"）
-					return {
-						name: '',
-						phone: '',
-						avatar: '/static/images/default-avatar.png',
-						role: ''
-					};
-				}
-			},
-			
-			// 检查并设置设计方案按钮状态
-			async checkAndSetDesignSchemeButtons(order) {
-				try {
-					console.log(`🔍 检查订单 ${order.orderId} 的设计方案状态`);
-					
-					const effectDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
-					const constructionDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
-					
-					console.log(`📊 订单 ${order.orderId} 方案状态:`, {
-						效果图状态: effectDrawingStatus,
-						施工设计图状态: constructionDrawingStatus
-					});
-					
-					if (!effectDrawingStatus) {
-						order.effectButtonText = '上传效果图';
-						order.showConstructionButton = false;
-					} else if (effectDrawingStatus === "1") {
-						order.effectButtonText = '效果图待确认';
-						order.showConstructionButton = false;
-					} else if (effectDrawingStatus === "2") {
-						if (!constructionDrawingStatus) {
-							order.effectButtonText = '效果图已完成';
-							order.showConstructionButton = true;
-						} else if (constructionDrawingStatus === "1") {
-							order.effectButtonText = '效果图已完成';
-							order.showConstructionButton = false;
-						} else if (constructionDrawingStatus === "2") {
-							order.effectButtonText = '设计方案已完成';
-							order.showConstructionButton = false;
-						}
-					}
-					
-					console.log(`✅ 订单 ${order.orderId} 按钮设置:`, {
-						effectButtonText: order.effectButtonText,
-						showConstructionButton: order.showConstructionButton
-					});
-					
-				} catch (error) {
-					console.error(`❌ 检查设计方案按钮状态失败:`, error);
-					order.effectButtonText = '上传效果图';
-					order.showConstructionButton = false;
-				}
-			},
-			
-			// 上传效果图
-			async uploadEffectDrawing(order) {
-				try {
-					console.log('🎨 开始上传效果图，订单ID:', order.orderId);
-					
-					order.loadingEffect = true;
-					
-					const effectDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
-					
-					if (effectDrawingStatus) {
-						uni.showToast({
-							title: '效果图已存在',
-							icon: 'none'
-						});
-						order.loadingEffect = false;
-						return;
-					}
-					
-					uni.showModal({
-						title: '上传效果图',
-						content: '确定要上传效果图设计方案吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								await this.createDesignScheme(order.orderId, SCHEME_TYPE.EFFECT_DRAWING);
-							}
-							order.loadingEffect = false;
-						},
-						fail: () => {
-							order.loadingEffect = false;
-						}
-					});
-					
-				} catch (error) {
-					order.loadingEffect = false;
-					console.error('❌ 上传效果图失败:', error);
-					this.handleApiError(error, '上传效果图失败');
-				}
-			},
-			
-			// 上传施工设计图
-			async uploadConstructionDrawing(order) {
-				try {
-					console.log('🏗️ 开始上传施工设计图，订单ID:', order.orderId);
-					
-					order.loadingConstruction = true;
-					
-					const constructionDrawingStatus = await this.checkDesignSchemeStatus(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
-					
-					if (constructionDrawingStatus) {
-						uni.showToast({
-							title: '施工设计图已存在',
-							icon: 'none'
-						});
-						order.loadingConstruction = false;
-						return;
-					}
-					
-					uni.showModal({
-						title: '上传施工设计图',
-						content: '确定要上传施工设计图吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								await this.createDesignScheme(order.orderId, SCHEME_TYPE.CONSTRUCTION_DRAWING);
-							}
-							order.loadingConstruction = false;
-						},
-						fail: () => {
-							order.loadingConstruction = false;
-						}
-					});
-					
-				} catch (error) {
-					order.loadingConstruction = false;
-					console.error('❌ 上传施工设计图失败:', error);
-					this.handleApiError(error, '上传施工设计图失败');
-				}
-			},
-			
-			// 检查设计方案状态
-			async checkDesignSchemeStatus(orderId, schemeType) {
-				try {
-					console.log(`🔍 检查设计方案状态，订单ID: ${orderId}, 方案类型: ${schemeType}`);
-					
-					const queryParams = {
-						pageNum: 1,
-						pageSize: 100,
-						orderId: orderId
-					};
-					
-					const result = await getDesignSchemeList(queryParams);
-					console.log('📋 设计方案查询结果:', result);
-					
-					let list = [];
-					if (result && result.code === 200) {
-						if (result.data) {
-							if (Array.isArray(result.data)) {
-								list = result.data;
-							} 
-							else if (result.data.records) {
-								list = result.data.records;
-							}
-							else if (result.data.list) {
-								list = result.data.list;
-							}
-							else if (Array.isArray(result.data.data)) {
-								list = result.data.data;
-							}
-						}
-					} else if (Array.isArray(result)) {
-						list = result;
-					}
-					
-					console.log('📋 解析后的方案列表:', list);
-					
-					const scheme = list.find(scheme => {
-						const type = scheme.schemeType || scheme.type;
-						const schemeTypeStr = String(schemeType);
-						const typeStr = String(type);
-						
-						console.log(`🔍 方案类型比较: ${schemeTypeStr} === ${typeStr}`, schemeTypeStr === typeStr);
-						
-						return schemeTypeStr === typeStr;
-					});
-					
-					if (scheme) {
-						console.log(`✅ 找到方案:`, {
-							schemeId: scheme.designSchemeId,
-							schemeType: scheme.schemeType,
-							status: scheme.status
-						});
-						return String(scheme.status); 
-					} else {
-						console.log(`❌ 未找到类型为 ${schemeType} 的方案`);
-						return null;
-					}
-					
-				} catch (error) {
-					console.error(`❌ 检查设计方案状态失败:`, error);
-					return null;
-				}
-			},
-			
-			// 创建设计方案
-			async createDesignScheme(orderId, schemeType) {
-				try {
-					console.log('🆕 创建设计方案:', { orderId, schemeType });
-					
-					uni.showLoading({ title: '创建方案中...' });
-					
-					const nullSchemeResult = await saveNullScheme();
-					
-					if (nullSchemeResult.code === 200) {
-						const schemeId = nullSchemeResult.data;
-						
-						uni.hideLoading();
-						
-						console.log('✅ 空白方案创建成功，方案ID:', schemeId);
-						
-						this.navigateToUploadPage(orderId, schemeId, schemeType);
-						
-					} else {
-						throw new Error(nullSchemeResult.msg || '创建空白方案失败');
-					}
-					
-				} catch (error) {
-					uni.hideLoading();
-					console.error('❌ 创建设计方案失败:', error);
-					this.handleApiError(error, '创建设计方案失败');
-				}
-			},
-			
-			// 跳转到上传页面
-			navigateToUploadPage(orderId, schemeId, schemeType) {
-				const schemeTypeText = schemeType === SCHEME_TYPE.EFFECT_DRAWING ? 'effect' : 'construction';
-				const pageTitle = schemeType === SCHEME_TYPE.EFFECT_DRAWING ? '效果图上传' : '施工设计图上传';
-				
-				uni.navigateTo({
-					url: `/pages/design/upload?orderId=${orderId}&schemeId=${schemeId}&schemeType=${schemeTypeText}&title=${pageTitle}`
-				});
-			},
-
-			// 查看合同
-			async viewContract(order) {
-				try {
-					console.log('📄 查看合同，订单ID:', order.orderId);
-					console.log('📄 合同URL:', order.contractUrl);
-					
-					if (order.contractUrl) {
-						uni.previewImage({
-							urls: [order.contractUrl],
-							current: order.contractUrl,
-							success: () => {
-								console.log('✅ 合同预览成功');
-							},
-							fail: (error) => {
-								console.error('❌ 合同预览失败:', error);
-								this.handleApiError(error, '合同预览失败');
-							}
-						});
-					} else {
-						uni.showToast({
-							title: '合同文件不存在',
-							icon: 'none'
-						});
-					}
-				} catch (error) {
-					console.error('❌ 查看合同失败:', error);
-					this.handleApiError(error, '查看合同失败');
-				}
-			},
-
-			// 设计师上传/修改合同图片
-			async uploadContract(orderId, isModify = false) {
-				try {
-					console.log(`📄 开始${isModify ? '修改' : '上传'}合同图片，订单ID:`, orderId);
-					
-					const imageRes = await this.chooseContractImage();
-					if (!imageRes.tempFilePaths || imageRes.tempFilePaths.length === 0) {
-						console.log('❌ 用户取消选择图片');
-						return;
-					}
-
-					const imagePath = imageRes.tempFilePaths[0];
-					const imageFile = imageRes.tempFiles[0];
-
-					console.log('🖼️ 选择的图片信息:', {
-						path: imagePath,
-						size: imageFile.size,
-						type: imageFile.type,
-						name: imageFile.name
-					});
-
-					const maxSize = 10 * 1024 * 1024;
-					if (imageFile.size > maxSize) {
-						uni.showToast({
-							title: '图片大小不能超过10MB',
-							icon: 'none'
-						});
-						return;
-					}
-
-					uni.showLoading({ 
-						title: `${isModify ? '修改' : '上传'}合同中...`,
-						mask: true
-					});
-
-					// 1. 上传合同图片到媒体服务
-					const uploadResult = await this.uploadContractImageDirect(orderId, imagePath);
-					
-					if (uploadResult && uploadResult.code === 200) {
-						console.log(`✅ 合同图片${isModify ? '修改' : '上传'}成功:`, uploadResult);
-						
-						// 2. 获取上传成功的图片URL
-						const contractUrl = uploadResult.data?.url || uploadResult.data?.fileUrl;
-						console.log('📸 合同图片URL:', contractUrl);
-						
-						if (contractUrl) {
-							// 3. 使用专用接口同时更新合同URL和状态
-							uni.showLoading({ title: '更新合同信息...' });
-							
-							try {
-								// 合同状态设为1（待确认）
-								const updateResult = await orderService.updateContractUrlAndContractStatus(
-									orderId, 
-									contractUrl, 
-									1  // contractStatus = 1 (合同待确认)
-									);
-								
-								console.log('✅ 合同URL和状态更新成功:', updateResult);
-								
-								uni.hideLoading();
-								
-								uni.showToast({
-									title: `合同${isModify ? '修改' : '上传'}成功`,
-									icon: 'success',
-									duration: 2000
-								});
-								
-								// 刷新列表
-								this.pagination.pageNum = 1;
-								this.loadOrderList();
-								
-							} catch (updateError) {
-								uni.hideLoading();
-								console.error('❌ 更新合同URL和状态失败:', updateError);
-								this.handleApiError(updateError, '更新合同信息失败');
-							}
-						} else {
-							throw new Error('未获取到合同图片URL');
-						}
-						
-					} else {
-						throw new Error(uploadResult?.msg || `${isModify ? '修改' : '上传'}失败`);
-					}
-					
-				} catch (error) {
-					uni.hideLoading();
-					console.error(`❌ 合同${isModify ? '修改' : '上传'}失败:`, error);
-					this.handleApiError(error, `${isModify ? '修改' : '上传'}失败`);
-				}
-			},
-
-			// 选择合同图片
-			chooseContractImage() {
-				return new Promise((resolve, reject) => {
-					uni.chooseImage({
-						count: 1,
-						sizeType: ['compressed', 'original'],
-						sourceType: ['album', 'camera'],
-						success: (res) => {
-							console.log('🖼️ 选择的合同图片:', res);
-							resolve(res);
-						},
-						fail: (error) => {
-							console.error('❌ 选择图片失败:', error);
-							reject(new Error('选择图片失败: ' + error.errMsg));
-						}
-					});
-				});
-			},
-
-			// 修复后的上传方法
-			async uploadContractImageDirect(orderId, filePath) {
-				return new Promise((resolve, reject) => {
-					const token = uni.getStorageSync('token');
-					if (!token) {
-						reject(new Error('用户未登录'));
-						return;
-					}
-
-					const formData = {
-						relatedType: 9,
-						relatedId: orderId,
-						description: '订单合同图片',
-						stage: 'CONTRACT',
-						sequence: 0
-					};
-
-					console.log('📤 上传合同图片到8081端口:', { 
-						orderId, 
-						filePath, 
-						formData,
-						baseURL: 'http://localhost:8081'
-					});
-
-					const uploadTask = uni.uploadFile({
-						url: 'http://localhost:8081/api/media/upload',
-						filePath: filePath,
-						name: 'file',
-						formData: formData,
-						header: {
-							'Authorization': 'Bearer ' + token,
-						},
-						success: (res) => {
-							console.log('📡 上传响应状态码:', res.statusCode);
-							console.log('📡 上传响应数据:', res.data);
-							
-							if (res.statusCode === 200) {
-								try {
-									const data = JSON.parse(res.data);
-									console.log('📡 解析后的响应:', data);
-									if (data.code === 200) {
-										resolve(data);
-									} else {
-										reject(new Error(data.msg || '上传失败'));
-									}
-								} catch (e) {
-									console.error('❌ JSON解析错误:', e, '原始响应:', res.data);
-									reject(new Error('服务器响应格式错误'));
-								}
-							} else {
-								reject(new Error(`上传失败，状态码: ${res.statusCode}`));
-							}
-						},
-						fail: (error) => {
-							console.error('❌ 上传请求失败:', error);
-							reject(new Error('网络请求失败: ' + error.errMsg));
-						}
-					});
-
-					uploadTask.onProgressUpdate((res) => {
-						console.log('📊 上传进度:', res.progress + '%');
-						if (res.progress < 100) {
-							uni.showLoading({
-								title: `上传中 ${res.progress}%`,
-								mask: true
-							});
-						} else {
-							uni.hideLoading();
-						}
-					});
-				});
-			},
-
-			// 测试上传功能
-			async testUploadFunctionality() {
-				try {
-					console.log('🧪 测试上传功能...');
-					
-					const imageRes = await this.chooseContractImage();
-					if (!imageRes.tempFilePaths || imageRes.tempFilePaths.length === 0) {
-						console.log('❌ 测试：用户取消选择图片');
-						return;
-					}
-					
-					const testImagePath = imageRes.tempFilePaths[0];
-					console.log('🖼️ 测试图片路径:', testImagePath);
-					
-					let testOrderId = 1;
-					if (this.orderList.length > 0) {
-						testOrderId = this.orderList[0].orderId;
-					}
-					
-					console.log('🚀 开始测试上传，订单ID:', testOrderId);
-					uni.showLoading({ title: '测试上传中...' });
-					
-					const result = await this.uploadContractImageDirect(testOrderId, testImagePath);
-					console.log('✅ 测试上传成功:', result);
-					
-					uni.hideLoading();
-					uni.showToast({
-						title: '上传测试成功',
-						icon: 'success'
-					});
-					
-				} catch (error) {
-					uni.hideLoading();
-					console.error('❌ 测试上传失败:', error);
-					this.handleApiError(error, '测试上传失败');
-				}
-			},
-			
-			// 切换订单状态
-			changeStatus(status) {
-				this.activeStatus = status
-				this.pagination.pageNum = 1
-				this.hasMore = true
-				this.orderList = []
-				this.loadOrderList()
-			},
-			
-			// 获取状态文本
-			getStatusText(status) {
-				return orderService.getOrderStatusText(status)
-			},
-			
-			// 获取订单类型文本
-			getOrderTypeText(type) {
-				return orderService.getOrderTypeText(type)
-			},
-			
-			// 格式化时间
-			formatTime(timeStr) {
-				if (!timeStr) return ''
-				if (typeof timeStr === 'number') {
-					const date = new Date(timeStr)
-					return date.toLocaleDateString()
-				}
-				return timeStr.split(' ')[0]
-			},
-			
-			// 格式化日期
-			formatDate(dateStr) {
-				if (!dateStr) return ''
-				if (dateStr.includes('T')) {
-					return dateStr.split('T')[0]
-				}
-				return dateStr.split(' ')[0]
-			},
-			
-			// 根据项目ID获取项目详情
-			async getProjectDetail(projectId) {
-				if (!projectId) {
-					console.warn('项目ID为空')
-					return null
-				}
-				
-				try {
-					console.log('📋 获取项目详情，项目ID:', projectId)
-					const projectDetail = await projectService.getProjectDetail(projectId)
-					console.log('✅ 项目详情获取成功:', projectDetail)
-					return projectDetail
-				} catch (error) {
-					console.error('❌ 获取项目详情失败:', error)
-					return null
-				}
-			},
-			
-			// 更新状态统计（只统计contractorId与当前用户ID相同的订单）
-			updateStatusCount() {
-				// 重置统计
-				this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 }
-				
-				// 只统计contractorId与当前用户ID相同的订单
-				const myOrders = this.orderList.filter(order => {
-					const currentUserId = String(this.userInfo.userId || '');
-					const contractorId = String(order.contractorId || '');
-					return contractorId === currentUserId && order.type === 1;
-				});
-				
-				myOrders.forEach(order => {
-					const status = order.status.toString()
-					if (this.statusCount[status] !== undefined) {
-						this.statusCount[status]++
-					}
-					
-					// 统计待付款订单数量
-					if (this.isWaitingPayment(order)) {
-						this.statusCount['4']++
-					}
-				})
-				
-				console.log('📊 我的订单状态统计:', this.statusCount)
-			},
-			
-			// 加载更多
-			loadMore() {
-				if (this.loading || !this.hasMore) return
-				this.pagination.pageNum++
-				this.loadOrderList()
-			},
-			
-			// 下拉刷新
-			onRefresh() {
-				if (this.refreshing) return
-				this.refreshing = true
-				this.pagination.pageNum = 1
-				this.hasMore = true
-				this.orderList = []
-				this.loadOrderList()
-			},
-			
-			// 完善的在线咨询方法 - 设计师联系客户
-			async onlineConsult(order) {
-				console.log('💬 设计师开始在线咨询客户，订单:', order);
-				
-				try {
-					// 1. 检查登录状态
-					if (!isUserLoggedIn()) {
-						handleNotLoggedIn();
-						return;
-					}
-					
-					// 2. 检查订单信息完整性
-					if (!order || !order.userId) {
-						console.error('❌ 订单信息不完整:', order);
-						uni.showToast({
-							title: '订单信息无效',
-							icon: 'error',
-							duration: 2000
-						});
-						return;
-					}
-					
-					// 3. 确认当前用户身份
-					const currentUserId = String(this.userInfo.userId || '');
-					const contractorId = String(order.contractorId || '');
-					const customerId = String(order.userId || '');
-					
-					console.log('👤 身份确认:', {
-						当前用户ID: currentUserId,
-						订单客户ID: customerId,
-						承接方ID: contractorId,
-						当前用户角色: this.userInfo.role,
-						页面类型: '设计师订单页面'
-					});
-					
-					// 4. 验证当前用户是否是订单承接方（设计师）
-					if (currentUserId !== contractorId) {
-						console.warn('⚠️ 当前用户不是订单承接方，权限验证失败');
-						uni.showToast({
-							title: '权限不足，只能联系自己承接的订单',
-							icon: 'none',
-							duration: 2000
-						});
-						return;
-					}
-					
-					// 5. 确定联系对象：设计师联系客户
-					let targetUserId = customerId;
-					let targetUserName = '';
-					let targetUserAvatar = '';
-					
-					// 6. 防止联系自己
-					if (String(targetUserId) === String(currentUserId)) {
-						console.warn('⚠️ 尝试联系自己:', {
-							当前用户ID: currentUserId,
-							目标用户ID: targetUserId
-						});
-						uni.showToast({
-							title: '不能联系自己',
-							icon: 'none',
-							duration: 2000
-						});
-						return;
-					}
-					
-					// 7. 获取客户信息
-					try {
-						const customerInfo = await this.getUserInfoById(targetUserId);
-						targetUserName = customerInfo.name || '客户';
-						targetUserAvatar = customerInfo.avatar || '';
-					} catch (error) {
-						console.warn('⚠️ 获取客户信息失败:', error);
-						// 使用默认值
-						targetUserName = '客户';
-						targetUserAvatar = '';
-					}
-					
-					console.log('📞 设计师准备联系客户:', {
-						客户ID: targetUserId,
-						客户姓名: targetUserName,
-						设计师ID: currentUserId,
-						订单ID: order.orderId
-					});
-					
-					// 8. 显示加载状态
-					uni.showLoading({
-						title: '创建对话中...',
-						mask: true
-					});
-					
-					try {
-						// 9. 使用工具函数创建对话并跳转
-						await createConversationAndNavigate(
-							targetUserId,
-							targetUserName,
-							targetUserAvatar || ''
-						);
-						
-						console.log('✅ 对话创建成功，跳转聊天页面');
-						
-					} catch (conversationError) {
-						console.error('❌ 创建对话失败:', conversationError);
-						
-						// 错误处理
-						let errorMessage = '创建对话失败';
-						if (conversationError.message) {
-							if (conversationError.message.includes('请先登录')) {
-								errorMessage = '请先登录';
-							} else if (conversationError.message.includes('不能与自己')) {
-								errorMessage = '不能联系自己';
-							} else if (conversationError.message.includes('权限')) {
-								errorMessage = '没有权限联系该用户';
-							} else if (conversationError.message.includes('对方不存在')) {
-								errorMessage = '对方用户不存在';
-							} else {
-								errorMessage = conversationError.message;
-							}
-						}
-						
-						uni.showToast({
-							title: errorMessage,
-							icon: 'none',
-							duration: 3000
-						});
-						
-						// 如果是因为对话不存在，尝试直接跳转到聊天页面
-						if (conversationError.message && conversationError.message.includes('对话不存在')) {
-							console.log('⚠️ 尝试直接跳转到聊天页面');
-							setTimeout(() => {
-								uni.navigateTo({
-									url: `/pages/chat/chat?otherUserId=${targetUserId}&otherUserName=${encodeURIComponent(targetUserName)}`
-								});
-							}, 1000);
-						}
-					} finally {
-						// 10. 隐藏加载状态
-						uni.hideLoading();
-					}
-					
-				} catch (error) {
-					console.error('❌ 联系客户失败:', error);
-					
-					uni.showToast({
-						title: '联系失败，请稍后重试',
-						icon: 'none',
-						duration: 3000
-					});
-				}
-			},
-			
-			// 取消订单
-			async cancelOrder(orderId) {
-				try {
-					uni.showModal({
-						title: '确认取消',
-						content: '确定要取消这个订单吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								uni.showLoading({ title: '取消中...' })
-								await orderService.cancelOrder(orderId)
-								uni.hideLoading()
-								uni.showToast({
-									title: '订单已取消',
-									icon: 'success'
-								})
-								this.pagination.pageNum = 1
-								this.loadOrderList()
-							}
-						}
-					})
-				} catch (error) {
-					uni.hideLoading()
-					this.handleApiError(error, '取消订单失败')
-				}
-			},
-			
-			// 跳转到消息页面
-			goToMessage() {
-				uni.navigateTo({
-					url: '/pages/message/message'
-				})
-			}
-		},
-		
-		onPullDownRefresh() {
-			this.onRefresh()
-			uni.stopPullDownRefresh()
-		},
-		
-		onReachBottom() {
-			this.loadMore()
-		}
-	}
-</script>
-<style>
+<script>import { 	getPostList, 	getCategories, 	getThreadTypes,	getImageDetail,	formatFileSize} from '@/api/community.js'export default {	data() {		return {			// 定位相关数据			locationText: '选择位置',			searchKeyword: '',						// 原有数据			activeMainMenu: 0,			activeTab: 0,			currentBanner: 0,			bannerTimer: null,			banners: [				{					title: '限时特惠！全屋定制8折起',					color: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',					link: '/pages/promotion'				},				{					title: '新用户专享 ¥1000装修礼包',					color: 'linear-gradient(135deg, #4834d4 0%, #686de0 100%)',					link: '/pages/newuser'				},				{					title: '设计师精品案例合集',					color: 'linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%)',					link: '/pages/designer'				},				{					title: '春季装修节 建材买一送一',					color: 'linear-gradient(135deg, #f368e0 0%, #ff9ff3 100%)',					link: '/pages/spring'				}			],						// 帖子相关数据			postList: [], // 帖子列表			categories: [], // 分类列表			threadTypes: [], // 帖子类型列表			loading: false,			hasMore: true,			pageParams: {				pageNum: 1,				pageSize: 12,				keyword: '',				categoryId: null,				threadType: null			},			total: 0,						// 图片详情相关数据			showImageInfo: false, // 是否显示图片信息			imageDetailsCache: new Map(), // 图片详情缓存			loadingImageDetails: new Set(), // 正在加载的图片详情						// 帖子类型样式类映射 - 修复 :class 绑定问题			postTypeClasses: {				1: 'portfolio-tag',    // 作品集				2: 'case-tag',         // 案例集				3: 'normal-tag',       // 普通帖				4: 'material-tag'      // 材料展示			},						// 防止重复点击			isNavigating: false		}	},		methods: {		// 跳转到订单大厅页面		goToOrderHall() {			uni.navigateTo({				url: '/pages/order-hall/order-hall'			});		},				// 跳转到定位页面		goToLocationPage() {			uni.navigateTo({				url: '/pages/location/location'			});		},				// 跳转到商城页面		goToShopPage() {			uni.navigateTo({				url: '/pages/shop/shop-list'			});		},				// 跳转到找监工页面		goToFindSupervisor() {			uni.navigateTo({				url: '/pages/find-supervisor/find-supervisor'			});		},				// 跳转到找设计师页面		goToFindDesigner() {			uni.navigateTo({				url: '/pages/find-design/find-design'			});		},				// 清空搜索		clearSearch() {			this.searchKeyword = '';			this.pageParams.keyword = '';			this.pageParams.pageNum = 1;			this.loadPosts();		},				// 搜索帖子		async onSearch() {			this.pageParams.keyword = this.searchKeyword;			this.pageParams.pageNum = 1;			await this.loadPosts();		},				// 查看帖子详情 - 优化后的跳转逻辑		async viewPostDetail(id) {			// 防止重复点击			if (this.isNavigating) {				return;			}						try {				this.isNavigating = true;				console.log('📖 查看帖子详情，ID:', id);								// 添加点击反馈				uni.vibrateShort({					success: () => {						console.log('振动反馈');					}				});								// 显示加载提示				uni.showLoading({					title: '加载中...',					mask: true				});								// 跳转到详情页				uni.navigateTo({					url: `/pages/post/detail?id=${id}`,					success: () => {						console.log('跳转成功');						uni.hideLoading();					},					fail: (error) => {						console.error('跳转失败:', error);						uni.hideLoading();						uni.showToast({							title: '跳转失败，请重试',							icon: 'none',							duration: 2000						});					},					complete: () => {						// 重置导航状态						setTimeout(() => {							this.isNavigating = false;						}, 500);					}				});			} catch (error) {				console.error('跳转异常:', error);				uni.hideLoading();				uni.showToast({					title: '跳转失败',					icon: 'none'				});				this.isNavigating = false;			}		},				// 获取帖子图片URL - 直接使用 cover_url		getPostImageUrl(post) {			// 优先使用 cover_url（后端提供的预览图）			if (post.coverUrl) {				return post.coverUrl;			}						// 如果没有 cover_url，使用 mediaUrls 中的第一张图片作为降级方案			if (post.mediaUrls && post.mediaUrls.length > 0) {				return post.mediaUrls[0];			}						// 如果都没有图片，返回空字符串，显示无图片状态			return '';		},				// 加载图片详情信息		async loadImageDetail(post) {			try {				// 如果已经在加载中，跳过				if (this.loadingImageDetails.has(post.id)) {					return;				}								// 标记为正在加载详情				this.loadingImageDetails.add(post.id);								console.log(`🔄 开始加载帖子 ${post.id} 的图片详情`);								// 从图片URL中提取mediaId（假设URL中包含mediaId）				const imageUrl = post.coverUrl || (post.mediaUrls && post.mediaUrls[0]);				const mediaId = this.extractMediaIdFromUrl(imageUrl);								if (mediaId) {					// 调用图片详情接口					const response = await getImageDetail(mediaId);					console.log(`📊 获取到图片详情:`, response);										if (response && response.code === 200) {						const imageDetail = response.data;												// 处理图片详情数据						const processedDetail = this.processImageDetail(imageDetail);												// 更新帖子数据						this.$set(post, 'imageDetail', processedDetail);						this.$set(post, 'imageDetailLoaded', true);												// 缓存图片详情						this.imageDetailsCache.set(post.id, processedDetail);												console.log(`✅ 成功加载图片详情:`, processedDetail);					}				} else {					console.log(`⚠️ 无法从URL提取mediaId:`, imageUrl);					// 如果没有mediaId，创建基本的图片信息					this.createBasicImageInfo(post, imageUrl);				}							} catch (error) {				console.error(`❌ 加载图片详情失败:`, error);				// 标记为详情加载失败，避免重复尝试				this.$set(post, 'imageDetailLoaded', true);			} finally {				this.loadingImageDetails.delete(post.id);			}		},				// 从图片URL中提取mediaId		extractMediaIdFromUrl(imageUrl) {			if (!imageUrl) return null;						// 假设URL格式为：https://domain.com/path/{mediaId}.jpg			// 或者：https://domain.com/path/{mediaId}			const urlParts = imageUrl.split('/');			const lastPart = urlParts[urlParts.length - 1];						// 移除文件扩展名			const withoutExtension = lastPart.split('.')[0];						// 检查是否是有效的ID格式（数字或特定格式）			if (/^\d+$/.test(withoutExtension)) {				return withoutExtension;			}						// 如果是其他格式的ID，可以在这里添加更多解析逻辑			return null;		},				// 处理图片详情数据		processImageDetail(imageDetail) {			if (!imageDetail) return null;						return {				// 基本信息				id: imageDetail.id || imageDetail.mediaId,				filename: imageDetail.filename || imageDetail.fileName,				fileUrl: imageDetail.fileUrl || imageDetail.url,								// 文件信息				fileSize: imageDetail.fileSize ? formatFileSize(imageDetail.fileSize) : '未知大小',				fileType: imageDetail.fileType || imageDetail.mimeType || 'image',				width: imageDetail.width,				height: imageDetail.height,								// 关联信息				relatedType: imageDetail.relatedType,				relatedId: imageDetail.relatedId,				sequence: imageDetail.sequence,				stage: imageDetail.stage,				description: imageDetail.description,								// 时间信息				createTime: imageDetail.createTime || imageDetail.create_time,				updateTime: imageDetail.updateTime || imageDetail.update_time,								// 状态信息				status: imageDetail.status,				isDeleted: imageDetail.isDeleted || imageDetail.deleted			};		},				// 创建基本的图片信息		createBasicImageInfo(post, imageUrl) {			try {				console.log(`🔄 创建基本图片信息:`, imageUrl);								// 创建基本的图片信息				const basicInfo = {					fileUrl: imageUrl,					filename: this.extractFilenameFromUrl(imageUrl),					fileSize: '未知大小',					fileType: this.extractFileTypeFromUrl(imageUrl),					createTime: post.createTime || '未知时间'				};								this.$set(post, 'imageDetail', basicInfo);				this.$set(post, 'imageDetailLoaded', true);							} catch (error) {				console.error(`❌ 创建基本图片信息失败:`, error);				this.$set(post, 'imageDetailLoaded', true);			}		},				// 从URL中提取文件名		extractFilenameFromUrl(url) {			if (!url) return '未知文件';			const parts = url.split('/');			return parts[parts.length - 1] || '未知文件';		},				// 从URL中提取文件类型		extractFileTypeFromUrl(url) {			if (!url) return 'image';			const parts = url.split('.');			const extension = parts[parts.length - 1]?.toLowerCase();						const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];			if (imageTypes.includes(extension)) {				return 'image';			}						return extension || 'file';		},				// 图片预览		previewImage(post) {			// 预览时使用原始图片URL（mediaUrls），而不是封面图			if (!post.mediaUrls || post.mediaUrls.length === 0) {				return;			}						// 使用uni.previewImage进行图片预览			uni.previewImage({				urls: post.mediaUrls,				current: post.mediaUrls[0],				indicator: 'number',				loop: true,				success: () => {					console.log('图片预览成功');				},				fail: (error) => {					console.error('图片预览失败:', error);					uni.showToast({						title: '预览失败',						icon: 'none'					});				}			});		},				// 图片加载失败处理		handleImageError(post, event) {			console.log('❌ 图片加载失败:', event);			post.imageError = true;			post.imageLoading = false;						// 标记图片详情加载完成			this.$set(post, 'imageDetailLoaded', true);		},				// 图片加载成功处理		handleImageLoad(post) {			console.log('✅ 图片加载成功');			post.imageError = false;			post.imageLoading = false;						// 图片加载成功后，加载图片详情			if (!post.imageDetailLoaded) {				this.loadImageDetail(post);			}		},				// 重试加载图片		retryLoadImage(post) {			post.imageError = false;			post.imageLoading = true;			post.imageDetailLoaded = false;						this.$forceUpdate();		},				// 切换显示图片信息		toggleImageInfo() {			this.showImageInfo = !this.showImageInfo;			uni.showToast({				title: this.showImageInfo ? '已显示图片信息' : '已隐藏图片信息',				icon: 'none',				duration: 1500			});		},				// 批量预加载图片详情		preloadImageDetails() {			// 预加载前几个帖子的图片详情			const postsToPreload = this.postList.slice(0, 4);						postsToPreload.forEach(post => {				if ((post.coverUrl || (post.mediaUrls && post.mediaUrls.length > 0)) && !post.imageDetailLoaded) {					this.loadImageDetail(post);				}			});		},				// 切换轮播图		switchBanner(index) {			this.currentBanner = index;			this.resetBannerTimer();		},				// 自动轮播		autoPlayBanner() {			this.bannerTimer = setInterval(() => {				this.currentBanner = (this.currentBanner + 1) % this.banners.length;			}, 3000);		},				// 重置轮播定时器		resetBannerTimer() {			if (this.bannerTimer) {				clearInterval(this.bannerTimer);			}			this.autoPlayBanner();		},				// 跳转到轮播图链接		goToBannerLink(link) {			uni.navigateTo({				url: link			});		},				// 获取缓存的定位信息		getCachedLocation() {			try {				const cachedLocation = uni.getStorageSync('userLocation');				if (cachedLocation) {					this.locationText = cachedLocation.city || cachedLocation.address || '定位成功';				}			} catch (e) {				console.log('获取缓存定位失败:', e);			}		},				// 切换标签 - 根据数据库thread_type字段调整		async switchTab(tabIndex) {			this.activeTab = tabIndex;						const tabFilters = {				0: { threadType: null }, // 推荐 - 全部				1: { threadType: 1 },    // 作品集				2: { threadType: 2 },    // 案例集				3: { threadType: 4 },    // 材料展示 (数据库中是4)				4: { threadType: 3 }     // 普通帖 (数据库中是3)			};						this.pageParams = {				...this.pageParams,				...tabFilters[tabIndex],				pageNum: 1			};						await this.loadPosts();		},				// 加载帖子列表		async loadPosts() {			try {				this.loading = true;								// 构建查询参数				const queryParams = {					pageNum: this.pageParams.pageNum,					pageSize: this.pageParams.pageSize				};								// 添加可选参数				if (this.pageParams.keyword) {					queryParams.keyword = this.pageParams.keyword;				}				if (this.pageParams.threadType) {					queryParams.threadType = this.pageParams.threadType;				}				if (this.pageParams.categoryId) {					queryParams.categoryId = this.pageParams.categoryId;				}								console.log('🔍 发送请求参数:', queryParams);								// 调用API获取帖子列表				const response = await getPostList(queryParams);				console.log('📨 API响应数据:', response);								// 根据数据库结构处理响应				let posts = [];				let total = 0;								// 处理响应数据				if (response && response.code === 200) {					// 如果响应有data字段					if (response.data) {						// 分页结构：data中有rows和total						if (response.data.rows && Array.isArray(response.data.rows)) {							posts = response.data.rows;							total = response.data.total || 0;						}						// 分页结构：data中有list和total						else if (response.data.list && Array.isArray(response.data.list)) {							posts = response.data.list;							total = response.data.total || 0;						}						// data本身就是数组						else if (Array.isArray(response.data)) {							posts = response.data;							total = posts.length;						}						// 其他结构						else {							posts = this.extractPostsFromResponse(response.data);							total = response.total || posts.length;						}					}					// 响应直接是数组					else if (Array.isArray(response)) {						posts = response;						total = response.length;					}				} else if (Array.isArray(response)) {					// 直接返回数组的情况					posts = response;					total = response.length;				} else {					console.warn('⚠️ 无法识别的响应结构:', response);					posts = [];					total = 0;				}								console.log('📊 解析后的帖子数据:', posts);								if (this.pageParams.pageNum === 1) {					this.postList = [];				}								// 处理API返回的数据 - 根据数据库字段映射				const processedPosts = this.processPostData(posts);				this.postList = [...this.postList, ...processedPosts];								// 更新分页信息				this.total = total;				this.hasMore = this.postList.length < total && posts.length === this.pageParams.pageSize;								console.log('✅ 加载完成，当前帖子数:', this.postList.length, '是否有更多:', this.hasMore);							} catch (error) {				console.error('❌ 加载帖子失败:', error);				// 出错时使用模拟数据作为降级方案				this.useMockDataAsFallback();				uni.showToast({					title: '加载失败，使用演示数据',					icon: 'none'				});			} finally {				this.loading = false;			}		},				// 从响应对象中提取帖子数据		extractPostsFromResponse(response) {			const possibleKeys = ['rows', 'list', 'records', 'posts', 'data', 'items', 'content'];						for (let key of possibleKeys) {				if (Array.isArray(response[key])) {					return response[key];				}			}						return [];		},				// 处理API返回的帖子数据 - 根据数据库字段映射		processPostData(posts) {			if (!posts || !Array.isArray(posts)) {				return [];			}						return posts.map(post => {				// 根据API返回的数据结构处理				const processedPost = {					// 帖子ID					id: post.id || post.thread_id || Math.random().toString(36).substr(2, 9),					// 标题					title: post.title || '无标题',					// 作者信息					author: this.getAuthorName(post),					// 作者头像					authorAvatar: post.avatar || post.authorAvatar,					// 浏览量					views: this.formatViewCount(post.viewCount || post.view_count || 0),					viewCount: post.viewCount || post.view_count || 0,					// 点赞数					likeCount: post.likeCount || post.like_count || 0,					// 评论数					commentCount: post.commentCount || post.comment_count || 0,					// 帖子类型 - 根据数据库thread_type					threadType: post.threadType || post.thread_type || 3,					// 创建时间					createTime: post.createTime || post.create_time,					// 分类信息					categoryId: post.categoryId || post.category_id,					// 角色类型					roleType: post.roleType || post.role_type,					// 状态					status: post.status,					// 封面图URL - 后端提供的预览图					coverUrl: post.coverUrl || post.cover_url,					// 媒体URL数组 - 原始图片					mediaUrls: post.mediaUrls || post.media_urls || [],					// 图片加载状态					imageLoading: true,					imageError: false,					// 图片详情相关					imageDetail: null,					imageDetailLoaded: false,					// 模板数据					normalPost: post.normalPost,					portfolio: post.portfolio,					caseStudy: post.caseStudy,					materialShow: post.materialShow				};								return processedPost;			});		},				// 获取作者名称		getAuthorName(post) {			// 如果有直接的用户名字段			if (post.nickname || post.userName || post.author) {				return post.nickname || post.userName || post.author;			}						// 根据用户ID或其他信息生成默认名称			if (post.userId) {				return `用户${post.userId}`;			}						// 根据角色类型返回默认名称			const roleType = post.roleType || post.role_type;			const roleNames = {				1: '普通用户',				2: '设计师',				3: '监理',				4: '材料商'			};						return roleNames[roleType] || '匿名用户';		},				// 格式化浏览量显示		formatViewCount(count) {			if (count >= 10000) {				return (count / 10000).toFixed(1) + '万';			} else if (count >= 1000) {				return (count / 1000).toFixed(1) + '千';			}			return count.toString();		},				// 降级方案：使用模拟数据		useMockDataAsFallback() {			const mockPosts = this.getMockPosts();						if (this.pageParams.pageNum === 1) {				this.postList = [];			}						this.postList = [...this.postList, ...mockPosts];			this.hasMore = false;		},				// 模拟帖子数据 - 根据API返回的数据结构		getMockPosts() {			const baseMockPosts = [				// 普通帖 (thread_type: 3) - 使用您提供的真实数据				{					id: 11,					title: '氨基酸更加灵活',					author: '用户102',					viewCount: 0,					likeCount: 0,					commentCount: 0,					threadType: 3,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/5c92c50d76b047308767329292ccddf7.jpg'					],					normalPost: {						normalPostId: "7",						postId: "11"					}				},				// 作品集 (thread_type: 1)				{					id: 1,					title: '现代简约风格家居设计作品，打造舒适生活空间',					author: '设计师张工',					viewCount: 23000,					likeCount: 1250,					commentCount: 89,					threadType: 1,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-1-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-1.jpg'					]				},				{					id: 2,					title: '欧式古典风格别墅设计，奢华与艺术的完美结合',					author: '设计工作室',					viewCount: 18000,					likeCount: 980,					commentCount: 67,					threadType: 1,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2.jpg'					]				},				// 案例集 (thread_type: 2)				{					id: 3,					title: '小户型改造：30平变60平的魔法，空间利用极致',					author: '改造专家',					viewCount: 32000,					likeCount: 2100,					commentCount: 156,					threadType: 2,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1.jpg'					]				},				{					id: 4,					title: '老房翻新案例分享，旧貌换新颜的装修历程',					author: '装修达人',					viewCount: 15000,					likeCount: 870,					commentCount: 45,					threadType: 2,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-2-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-2.jpg'					]				},				// 普通帖 (thread_type: 3)				{					id: 5,					title: '装修避坑经验分享，这些细节一定要注意',					author: '装修小白',					viewCount: 21000,					likeCount: 1560,					commentCount: 234,					threadType: 3,					coverUrl: '',					mediaUrls: [] // 无图片的帖子				},				{					id: 6,					title: '装修预算如何控制？我的省钱经验分享',					author: '理财达人',					viewCount: 8000,					likeCount: 540,					commentCount: 78,					threadType: 3,					coverUrl: '',					mediaUrls: [] // 无图片的帖子				},				// 材料展示 (thread_type: 4)				{					id: 7,					title: '进口大理石材料展示，天然纹理美不胜收',					author: '建材商城',					viewCount: 9000,					likeCount: 620,					commentCount: 34,					threadType: 4,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-1-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-1.jpg'					]				},				{					id: 8,					title: '环保涂料选购指南，健康家居从墙面开始',					author: '材料专家',					viewCount: 11000,					likeCount: 780,					commentCount: 56,					threadType: 4,					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-2-preview.jpg',					mediaUrls: [						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/material-2.jpg'					]				}			];						// 根据当前标签筛选			let filteredPosts = [...baseMockPosts];			const tabMapping = {				0: null, // 推荐 - 全部				1: 1,    // 作品集				2: 2,    // 案例集				3: 4,    // 材料展示				4: 3     // 普通帖			};						const currentThreadType = tabMapping[this.activeTab];			if (currentThreadType !== null) {				filteredPosts = baseMockPosts.filter(post => post.threadType === currentThreadType);			}						// 模拟分页：如果是第一页返回完整数据，否则返回空数组			if (this.pageParams.pageNum === 1) {				return filteredPosts;			} else {				return [];			}		},				// 加载分类和类型		async loadCategoriesAndTypes() {			try {				console.log('🔄 加载分类和类型...');								// 尝试调用API获取分类和类型				const [categoriesRes, typesRes] = await Promise.all([					getCategories(),					getThreadTypes()				]);								console.log('📋 分类响应:', categoriesRes);				console.log('📋 类型响应:', typesRes);								// 处理分类响应				this.categories = this.processApiResponse(categoriesRes, [					{ id: 1, name: '设计作品' },					{ id: 2, name: '装修案例' },					{ id: 3, name: '经验分享' },					{ id: 4, name: '材料知识' }				]);								// 处理类型响应 - 根据数据库thread_type				this.threadTypes = this.processApiResponse(typesRes, [					{ id: 1, name: '作品集' },					{ id: 2, name: '案例集' },					{ id: 3, name: '普通帖' },					{ id: 4, name: '材料展示' }				]);								console.log('✅ 最终分类数据:', this.categories);				console.log('✅ 最终类型数据:', this.threadTypes);							} catch (error) {				console.error('❌ 加载分类和类型失败:', error);				// 使用默认数据				this.categories = [					{ id: 1, name: '设计作品' },					{ id: 2, name: '装修案例' },					{ id: 3, name: '经验分享' },					{ id: 4, name: '材料知识' }				];				this.threadTypes = [					{ id: 1, name: '作品集' },					{ id: 2, name: '案例集' },					{ id: 3, name: '普通帖' },					{ id: 4, name: '材料展示' }				];			}		},				// 处理API响应数据		processApiResponse(response, defaultData) {			if (Array.isArray(response)) {				return response;			} else if (response && response.code === 200 && response.data) {				if (Array.isArray(response.data)) {					return response.data;				} else if (response.data.rows) {					return response.data.rows;				} else if (response.data.list) {					return response.data.list;				}			}			return defaultData;		},				// 获取帖子类型名称 - 根据数据库thread_type		getThreadTypeName(typeId) {			const type = this.threadTypes.find(item => item.id === typeId);			if (type) {				return type.name;			}						// 默认映射			const typeMap = {				1: '作品',				2: '案例', 				3: '普通',				4: '材料'			};			return typeMap[typeId] || '帖子';		},				// 加载更多		async loadMore() {			if (this.loading || !this.hasMore) return;						this.pageParams.pageNum++;			await this.loadPosts();		},				// 监听帖子点赞更新事件		listenPostLikeUpdates() {			// 移除之前的监听，避免重复监听			uni.$off('postLikeUpdated');						// 监听点赞更新事件			uni.$on('postLikeUpdated', (data) => {				console.log('📢 收到帖子点赞更新事件:', data);				if (data && data.postId) {					// 查找对应的帖子并更新点赞数					const postIndex = this.postList.findIndex(post => post.id == data.postId || post.thread_id == data.postId);					if (postIndex !== -1) {						this.postList[postIndex].likeCount = data.likeCount || 0;						console.log(`✅ 更新帖子 ${data.postId} 的点赞数为 ${data.likeCount}`);					}				}			});		},				// 停止监听点赞更新事件		stopListeningPostLikeUpdates() {			uni.$off('postLikeUpdated');		}	},		onLoad() {		// 页面加载时尝试获取缓存的定位信息		this.getCachedLocation();		// 加载分类和帖子		this.loadCategoriesAndTypes();		this.loadPosts();		// 监听帖子点赞更新事件		this.listenPostLikeUpdates();	},		onShow() {		// 页面显示时检查是否有新的定位信息		this.getCachedLocation();		// 恢复轮播图自动播放		this.resetBannerTimer();		// 监听帖子点赞更新事件		this.listenPostLikeUpdates();	},		onHide() {		// 页面隐藏时停止轮播图自动播放		if (this.bannerTimer) {			clearInterval(this.bannerTimer);		}	},		onPullDownRefresh() {		this.pageParams.pageNum = 1;		this.loadPosts().then(() => {			uni.stopPullDownRefresh();		});	},		onReachBottom() {		this.loadMore();	},		// 监听帖子列表变化，预加载图片详情	watch: {		postList: {			handler(newList) {				if (newList.length > 0) {					// 延迟预加载，避免阻塞主线程					setTimeout(() => {						this.preloadImageDetails();					}, 1000);				}			},			immediate: false,			deep: true		}	},		mounted() {		this.autoPlayBanner();	},		beforeUnmount() {		if (this.bannerTimer) {			clearInterval(this.bannerTimer);		}		// 移除事件监听		this.stopListeningPostLikeUpdates();	},		onUnload() {		// 页面卸载时移除事件监听		this.stopListeningPostLikeUpdates();	}}</script><style>
 	/* 容器样式保持不变 */
 	.container {
 		max-width: 750px;
