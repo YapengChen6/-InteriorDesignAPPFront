@@ -9,7 +9,6 @@
     <!-- 搜索区域 -->
     <view class="search-section">
       <view class="search-box">
-        <view class="search-icon">🔍</view>
         <input
             type="text"
             class="search-input"
@@ -17,6 +16,13 @@
             v-model="searchQuery"
             @input="onSearchInput"
         />
+        <view class="search-icon-wrapper">
+          <image 
+            :src="'/static/images/搜索.svg'" 
+            mode="aspectFit" 
+            class="search-icon"
+          ></image>
+        </view>
         <view v-if="searchQuery" class="clear-icon" @tap="clearSearch">×</view>
       </view>
     </view>
@@ -140,16 +146,19 @@
               <!-- 其他信息 -->
               <view class="designer-stats">
                 <view class="stat-item">
-                  <view class="stat-icon">📁</view>
+                  <image :src="'/static/images/案例-2.svg'" mode="aspectFit" class="stat-icon-image"></image>
                   <view class="stat-value">{{ designer.caseCount || 0 }}套案例</view>
                 </view>
                 <view class="stat-item">
-                  <view class="stat-icon">📍</view>
+                  <image :src="'/static/images/地址.svg'" mode="aspectFit" class="stat-icon-image"></image>
                   <view class="stat-value">{{ designer.address || '全国' }}</view>
                 </view>
               </view>
               
-              <view class="designer-phone">{{ designer.phone || '电话未提供' }}</view>
+              <view class="designer-phone">
+                <image :src="'/static/images/电话.svg'" mode="aspectFit" class="phone-icon"></image>
+                <text class="phone-text">{{ designer.phone || '电话未提供' }}</text>
+              </view>
             </view>
           </view>
           
@@ -735,13 +744,14 @@ page {
 .search-input {
   flex: 1;
   height: 80rpx;
-  padding: 0 80rpx 0 80rpx;
+  padding: 0 40rpx;
   border: 2rpx solid #e0e0e0;
   border-radius: 40rpx;
   font-size: 28rpx;
   background-color: #f8f8f8;
   outline: none;
   transition: all 0.3s ease;
+  padding-right: 80rpx; /* 为右侧图标留出空间 */
 }
 
 .search-input:focus {
@@ -750,16 +760,24 @@ page {
   box-shadow: 0 0 0 4rpx rgba(106, 17, 203, 0.1);
 }
 
-.search-icon {
+.search-icon-wrapper {
   position: absolute;
-  left: 30rpx;
-  font-size: 32rpx;
-  color: #999;
+  right: 30rpx;
+  width: 32rpx;
+  height: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-icon {
+  width: 100%;
+  height: 100%;
 }
 
 .clear-icon {
   position: absolute;
-  right: 30rpx;
+  right: 70rpx; /* 调整位置，避免与搜索图标重叠 */
   font-size: 40rpx;
   color: #999;
   width: 40rpx;
@@ -1047,9 +1065,9 @@ page {
   gap: 8rpx;
 }
 
-.stat-icon {
-  font-size: 26rpx;
-  color: #6a11cb;
+.stat-icon-image {
+  width: 24rpx;
+  height: 24rpx;
 }
 
 .stat-value {
@@ -1063,11 +1081,15 @@ page {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  
-  &::before {
-    content: '📱';
-    font-size: 24rpx;
-  }
+}
+
+.phone-icon {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.phone-text {
+  flex: 1;
 }
 
 .action-buttons {
