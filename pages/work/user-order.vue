@@ -1,19 +1,5 @@
 <template>
 	<view class="container">
-		<!-- 顶部标题栏 -->
-		<view class="header-section">
-			<view class="back-btn" @click="goBack">
-				<text class="back-icon">←</text>
-				<text class="back-text">返回</text>
-			</view>
-			<view class="header-title">我的订单</view>
-			<view class="header-actions">
-				<view class="action-item" @click="goToMessage">
-					<text class="action-icon">💬</text>
-				</view>
-			</view>
-		</view>
-		
 		<!-- 订单状态筛选 -->
 		<view class="status-filter">
 			<scroll-view class="filter-scroll" scroll-x="true">

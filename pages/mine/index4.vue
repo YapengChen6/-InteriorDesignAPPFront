@@ -63,7 +63,7 @@
 					<view class="menu-item" @tap="handleMenuClick('查看订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">查看订单</text>
@@ -76,7 +76,7 @@
 					<view class="menu-item" @tap="handleMenuClick('收货地址')">
 						<view class="menu-item-left">
 							<view class="menu-icon blue">
-								<text class="iconfont icon-map-marker"></text>
+								<image class="menu-icon-img" src="/static/icons/收货地址.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">收货地址</text>
@@ -104,7 +104,7 @@
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -132,7 +132,7 @@
 					<view class="menu-item" @tap="handleMenuClick('商家页面')">
 						<view class="menu-item-left">
 							<view class="menu-icon green">
-								<text class="iconfont icon-store"></text>
+								<image class="menu-icon-img" src="/static/icons/商家页面.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">商家页面</text>
@@ -145,7 +145,7 @@
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -160,7 +160,7 @@
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
 							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+								<image class="menu-icon-img" src="/static/icons/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -191,7 +191,7 @@
 				<view class="menu-item" @tap="goToPersonalCenter">
 					<view class="menu-item-left">
 						<view class="menu-icon purple">
-							<text class="iconfont icon-cog"></text>
+							<image class="menu-icon-img" src="/static/icons/个人中心.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">个人中心</text>
@@ -205,7 +205,7 @@
 				<view class="menu-item" @tap="handleMenuClick('举报投诉')">
 					<view class="menu-item-left">
 						<view class="menu-icon red">
-							<text class="iconfont icon-flag"></text>
+							<image class="menu-icon-img" src="/static/icons/举报投诉.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">举报投诉</text>
@@ -218,7 +218,7 @@
 				<view class="menu-item" @tap="handleMenuClick('隐私与安全')">
 					<view class="menu-item-left">
 						<view class="menu-icon red">
-							<text class="iconfont icon-shield-alt"></text>
+							<image class="menu-icon-img" src="/static/icons/隐私安全.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">隐私与安全</text>
@@ -244,7 +244,7 @@
 				<view class="menu-item" @tap="handleMenuClick('关于我们')">
 					<view class="menu-item-left">
 						<view class="menu-icon gray">
-							<text class="iconfont icon-info-circle"></text>
+							<image class="menu-icon-img" src="/static/icons/关于我们.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">关于我们</text>
@@ -637,7 +637,7 @@
 						});
 						break;
 					
-					// 不同角色的“我的订单”
+					// 不同角色的"我的订单"
 					case '我的订单':
 						// 根据当前角色类型跳转到不同的订单页面
 						if (this.currentRoleType === 'material_supplier') {
@@ -969,4 +969,10 @@
 	.icon-cube:before { content: "\e612"; }
 	.icon-folder:before { content: "\e613"; }
 	.icon-user-check:before { content: "\e614"; }
+	
+	/* SVG图标样式 */
+	.menu-icon-img {
+		width: 48rpx;
+		height: 48rpx;
+	}
 </style>
