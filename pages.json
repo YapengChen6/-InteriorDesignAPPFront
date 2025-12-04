@@ -443,7 +443,18 @@
   	{
   		"navigationBarTitleText" : "监理订单阶段日志上传页面"
   	}
-  }
+  },
+  {
+      "path": "pages/shop/after-sale",
+      "style": {
+        "navigationBarTitleText": "申请售后"
+      }
+    }, {
+      "path": "pages/shop/after-sale-list",
+      "style": {
+        "navigationBarTitleText": "售后记录"
+      }
+    }
   ],
   "tabBar": {
     "color": "#000000",
