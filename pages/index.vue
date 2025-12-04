@@ -41,7 +41,7 @@
 			      @click="goToFindDesigner()">
 				<view class="menu-icon">
 					<!-- 找设计师 图片 -->
-					<image src="/static/images/找设计师.svg" mode="aspectFit" class="menu-image"></image>
+					<image src="/static/images/找设计师 .svg" mode="aspectFit" class="menu-image"></image>
 				</view>
 				<text>找设计师</text>
 			</view>

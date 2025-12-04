@@ -108,6 +108,25 @@
 					</view>
 				</view>
 
+				<!-- 视频展示区域 -->
+				<view class="post-videos" v-if="getVideoList().length > 0">
+					<view 
+						class="video-wrapper" 
+						v-for="(video, vIndex) in getVideoList()" 
+						:key="vIndex"
+					>
+						<video
+							class="post-video"
+							:src="video"
+							:poster="post.coverUrl || getImageList()[0] || ''"
+							controls
+							:enable-progress-gesture="true"
+							:show-center-play-btn="true"
+							@error="handleVideoError"
+						></video>
+					</view>
+				</view>
+
 				<!-- 帖子内容 -->
 				<view class="post-body">
 					<view class="content-text">
@@ -303,7 +322,9 @@ export default {
 	computed: {
 		// 是否有图片
 		hasImages() {
-			return (this.post && this.post.mediaUrls && this.post.mediaUrls.length > 0) || (this.post && this.post.coverUrl)
+			if (!this.post) return false
+			const imgs = this.getImageList()
+			return (imgs && imgs.length > 0) || !!this.post.coverUrl
 		},
 		
 		// 内容是否为富文本（包含 HTML 标签）
@@ -760,9 +781,13 @@ export default {
 		// 获取图片列表（统一处理 mediaUrls 和 coverUrl）
 		getImageList() {
 			if (!this.post) return []
-			
-			if (this.post.mediaUrls && this.post.mediaUrls.length > 0) {
-				return this.post.mediaUrls
+
+			const urls = Array.isArray(this.post.mediaUrls) ? this.post.mediaUrls : []
+			// 过滤出图片（非视频）
+			const imageUrls = urls.filter(url => !this.isVideoUrl(url))
+
+			if (imageUrls.length > 0) {
+				return imageUrls
 			} else if (this.post.coverUrl) {
 				return [this.post.coverUrl]
 			}
@@ -835,9 +860,29 @@ export default {
 			}, 3000)
 		},
 		
+		// 简单判断是否为视频URL
+		isVideoUrl(url) {
+			if (!url || typeof url !== 'string') return false
+			return /\.(mp4|mov|wmv|avi|flv|m3u8|webm)$/i.test(url)
+		},
+
+		// 获取视频列表（从 mediaUrls 中筛选视频）
+		getVideoList() {
+			if (!this.post || !Array.isArray(this.post.mediaUrls)) return []
+			return this.post.mediaUrls.filter(url => this.isVideoUrl(url))
+		},
+		
 		// 获取帖子图片URL
 		getPostImageUrl(post) {
-			return post.coverUrl || (post.mediaUrls && post.mediaUrls[0]) || ''
+			if (!post) return ''
+			if (post.coverUrl) return post.coverUrl
+
+			if (post.mediaUrls && post.mediaUrls.length > 0) {
+				// 相关推荐里只显示图片封面，过滤掉视频
+				const firstImg = post.mediaUrls.find(u => !this.isVideoUrl(u))
+				return firstImg || post.mediaUrls[0]
+			}
+			return ''
 		},
 		
 		// 图片加载处理
@@ -847,6 +892,10 @@ export default {
 		
 		handleImageError() {
 			console.log('图片加载失败')
+		},
+
+		handleVideoError(e) {
+			console.log('视频加载失败', e)
 		},
 		
 		// 返回上一页
@@ -1249,6 +1298,28 @@ export default {
 	border-radius: 20rpx;
 	font-size: 24rpx;
 	z-index: 10;
+}
+
+/* 视频展示 */
+.post-videos {
+	padding: 0 15px 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.video-wrapper {
+	width: 100%;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #000;
+}
+
+.post-video {
+	width: 100%;
+	height: 220px;
+	object-fit: contain;
+	background-color: #000;
 }
 
 /* 帖子正文 */

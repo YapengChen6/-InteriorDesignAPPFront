@@ -337,14 +337,14 @@ export default {
           title: '提交成功',
           content: this.getSuccessMessage(submitData.requiredRoles),
           showCancel: false,
-          confirmText: '确定',
+          confirmText: '知道了',
           success: (res) => {
             if (res.confirm) {
-              // 重置表单
+              // 重置表单数据
               this.resetFormData()
-              // 跳转到已发布需求页面
-              uni.navigateTo({
-                url: '/pages/mine/posted/order-posted'
+              // 返回上一页
+              uni.navigateBack({
+                delta: 1
               })
             }
           }

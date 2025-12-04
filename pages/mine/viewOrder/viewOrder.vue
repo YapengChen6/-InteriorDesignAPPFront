@@ -145,6 +145,8 @@
 </template>
 
 <script>
+const ORDER_EVENT = 'productOrderUpdated'
+
 import * as orderApi from '@/api/product-order.js'
 
 	export default {
@@ -159,7 +161,11 @@ import * as orderApi from '@/api/product-order.js'
 		},
   onLoad() {
     this.loadOrders()
+    uni.$on(ORDER_EVENT, this.handleOrderEvent)
   },
+  onUnload() {
+    uni.$off(ORDER_EVENT, this.handleOrderEvent)
+		},
 		methods: {
     async loadOrders() {
       this.loading = true
@@ -177,6 +183,12 @@ import * as orderApi from '@/api/product-order.js'
         this.loading = false
         this.refreshing = false
       }
+    },
+    handleOrderEvent() {
+      this.loadOrders()
+    },
+    notifyOrderChange() {
+      uni.$emit(ORDER_EVENT)
     },
     changeStatus(status) {
       this.activeStatus = status
@@ -220,7 +232,7 @@ import * as orderApi from '@/api/product-order.js'
     },
     viewOrderDetail(orderId) {
       uni.navigateTo({
-        url: `/pages/shop/order-detail?orderId=${orderId}`
+        url: `/pages/order/detail?id=${orderId}&type=user`
       })
     },
     async payOrder(orderId) {
@@ -235,7 +247,7 @@ import * as orderApi from '@/api/product-order.js'
             uni.hideLoading()
             if (result && result.code === 200) {
               uni.showToast({ title: '付款成功', icon: 'success' })
-              this.loadOrders()
+              this.notifyOrderChange()
             } else {
               uni.showToast({ title: result?.msg || '付款失败', icon: 'none' })
             }
@@ -259,7 +271,7 @@ import * as orderApi from '@/api/product-order.js'
             uni.hideLoading()
             if (result && result.code === 200) {
               uni.showToast({ title: '已确认收货', icon: 'success' })
-              this.loadOrders()
+              this.notifyOrderChange()
             } else {
               uni.showToast({ title: result?.msg || '操作失败', icon: 'none' })
             }
@@ -283,7 +295,7 @@ import * as orderApi from '@/api/product-order.js'
             uni.hideLoading()
             if (result && result.code === 200) {
               uni.showToast({ title: '订单已取消', icon: 'success' })
-              this.loadOrders()
+              this.notifyOrderChange()
             } else {
               uni.showToast({ title: result?.msg || '取消失败', icon: 'none' })
             }

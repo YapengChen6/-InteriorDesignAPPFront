@@ -163,6 +163,11 @@
     "style": {
       "navigationBarTitleText": "监工入驻3"
     }
+  },{
+    "path": "pages/test",
+    "style": {
+      "navigationBarTitleText": "测试页面"
+    }
   },
   {
     "path": "pages/merchant/newshop",

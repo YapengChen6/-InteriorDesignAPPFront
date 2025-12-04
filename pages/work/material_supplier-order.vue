@@ -158,39 +158,38 @@
     </scroll-view>
     
     <!-- 发货弹窗 -->
-    <uni-popup ref="shipPopup" type="dialog">
-      <uni-popup-dialog 
-        type="input" 
-        placeholder="请输入物流公司"
-        v-model="shipForm.shippingCompany"
-        title="发货信息"
-        @confirm="confirmShip"
-        @close="cancelShip"
-      >
+    <uni-popup ref="shipPopup" type="center">
         <view class="ship-form">
           <view class="form-item">
             <text class="form-label">物流公司：</text>
-            <input 
+          <uni-easyinput
               class="form-input" 
+            type="text"
               v-model="shipForm.shippingCompany" 
               placeholder="请输入物流公司名称"
             />
           </view>
           <view class="form-item">
             <text class="form-label">物流单号：</text>
-            <input 
+          <uni-easyinput
               class="form-input" 
+            type="text"
               v-model="shipForm.trackingNumber" 
               placeholder="请输入物流单号"
             />
           </view>
+        <view class="ship-actions">
+          <button class="btn secondary" @click="cancelShip">取消</button>
+          <button class="btn primary" @click="confirmShip">确认发货</button>
         </view>
-      </uni-popup-dialog>
+      </view>
     </uni-popup>
   </view>
 </template>
 
 <script>
+const ORDER_EVENT = 'productOrderUpdated'
+
 import * as orderApi from '@/api/product-order.js'
 
 export default {
@@ -210,9 +209,22 @@ export default {
   
   onLoad() {
     this.loadOrders()
+    uni.$on(ORDER_EVENT, this.handleOrderEvent)
+  },
+  
+  onUnload() {
+    uni.$off(ORDER_EVENT, this.handleOrderEvent)
   },
   
   methods: {
+    handleOrderEvent() {
+      this.loadOrders()
+    },
+    
+    notifyOrderChange() {
+      uni.$emit(ORDER_EVENT)
+    },
+    
     // 加载订单列表
     async loadOrders() {
       this.loading = true
@@ -299,7 +311,7 @@ export default {
             icon: 'success'
           })
           this.$refs.shipPopup.close()
-          this.loadOrders()
+          this.notifyOrderChange()
         } else {
           uni.showToast({
             title: res?.msg || '发货失败',

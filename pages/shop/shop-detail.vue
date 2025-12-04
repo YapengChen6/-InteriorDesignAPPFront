@@ -21,10 +21,10 @@
             <text class="rating-text">{{ shop.rating.toFixed(1) }}</text>
           </view>
           <view class="shop-status-row">
-            <text class="shop-status" :class="getShopStatusClass()">
+            <text class="shop-status" :class="shopStatusClass">
               {{ getShopStatusText() }}
             </text>
-            <text class="online-status" :class="getOnlineStatusClass()">
+            <text class="online-status" :class="onlineStatusClass">
               {{ getOnlineStatusText() }}
             </text>
           </view>
@@ -49,6 +49,13 @@
           <text class="detail-label">营业时间</text>
           <text class="detail-value">{{ shop.businessHours }}</text>
         </view>
+      </view>
+
+      <!-- 联系商家按钮 -->
+      <view class="shop-contact-bar">
+        <button class="contact-merchant-btn" @click.stop="contactMerchant">
+          联系商家
+        </button>
       </view>
     </view>
 
@@ -123,6 +130,7 @@
 import * as shopApi from '@/api/shop.js'
 import * as productApi from '@/api/product.js'
 import * as userApi from '@/api/users.js'
+import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from '@/utils/conversationHelper.js'
 
 export default {
   data() {
@@ -151,6 +159,17 @@ export default {
       setTimeout(() => {
         uni.navigateBack()
       }, 1500)
+    }
+  },
+  computed: {
+    shopStatusClass() {
+      if (!this.shop) return ''
+      return this.shop.shopStatus === 1 ? 'status-normal' : 'status-disabled'
+    },
+    onlineStatusClass() {
+      if (!this.shop) return ''
+      const status = this.shop.onlineStatus || '0'
+      return `online-${status}`
     }
   },
   methods: {
@@ -296,6 +315,76 @@ export default {
       uni.navigateTo({
         url: `/pages/shop/product-detail?id=${spuId}`
       })
+    },
+
+    // 联系商家
+    contactMerchant() {
+      if (!this.shop) {
+        uni.showToast({
+          title: '商家信息不存在',
+          icon: 'none'
+        })
+        return
+      }
+
+      const hasPhone = !!this.shop.contactPhone
+      const itemList = hasPhone ? ['拨打电话', '在线咨询'] : ['在线咨询']
+
+      uni.showActionSheet({
+        itemList,
+        success: (res) => {
+          const index = res.tapIndex
+          if (hasPhone) {
+            if (index === 0) {
+              this.callMerchant()
+            } else if (index === 1) {
+              this.onlineConsultMerchant()
+            }
+          } else {
+            if (index === 0) {
+              this.onlineConsultMerchant()
+            }
+          }
+        }
+      })
+    },
+
+    // 拨打商家电话
+    callMerchant() {
+      const phone = this.shop && this.shop.contactPhone
+      if (!phone) {
+        uni.showToast({
+          title: '该商家未提供电话',
+          icon: 'none'
+        })
+        return
+      }
+
+      uni.makePhoneCall({
+        phoneNumber: phone
+      })
+    },
+
+    // 在线咨询商家（参考联系设计师逻辑）
+    async onlineConsultMerchant() {
+      if (!isUserLoggedIn()) {
+        handleNotLoggedIn()
+        return
+      }
+
+      if (!this.shop || !this.shop.userId) {
+        uni.showToast({
+          title: '商家用户信息缺失',
+          icon: 'none'
+        })
+        return
+      }
+
+      await createConversationAndNavigate(
+        this.shop.userId,
+        this.shop.shopName || '商家',
+        this.shop.shopAvatar || ''
+      )
     }
   }
 }
@@ -402,6 +491,26 @@ export default {
 
 .shop-detail-card {
   padding: 30rpx 40rpx;
+}
+
+.shop-contact-bar {
+  padding: 0 40rpx 30rpx 40rpx;
+}
+
+.contact-merchant-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #6a11cb, #a78bfa);
+  color: #ffffff;
+  border: none;
+  border-radius: 40rpx;
+  padding: 22rpx 0;
+  font-size: 30rpx;
+  font-weight: 500;
+}
+
+.contact-merchant-btn:active {
+  opacity: 0.9;
+  transform: scale(0.98);
 }
 
 .detail-item {

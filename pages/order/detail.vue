@@ -65,10 +65,82 @@
         </text>
       </view>
     </view>
+
+    <view class="section card" v-if="showLogisticsSection">
+      <view class="section-title">物流信息</view>
+      <view class="field-row">
+        <text class="field-label">物流公司</text>
+        <text class="field-value">{{ order.shippingCompany || '-' }}</text>
+      </view>
+      <view class="field-row">
+        <text class="field-label">物流单号</text>
+        <text class="field-value">{{ order.trackingNumber || '-' }}</text>
+      </view>
+      <view class="field-row" v-if="order.shippedTime">
+        <text class="field-label">发货时间</text>
+        <text class="field-value">{{ formatTime(order.shippedTime) }}</text>
+      </view>
+      <view class="field-row" v-if="order.deliveredTime">
+        <text class="field-label">送达时间</text>
+        <text class="field-value">{{ formatTime(order.deliveredTime) }}</text>
+      </view>
+    </view>
+
+    <view class="action-bar" v-if="pageType === 'user'">
+      <button
+        class="action-btn primary"
+        v-if="order.orderStatus === 'PENDING'"
+        @click="handlePayOrder"
+      >确认付款</button>
+      <button
+        class="action-btn primary"
+        v-else-if="order.orderStatus === 'SHIPPED'"
+        @click="handleConfirmReceipt"
+      >确认收货</button>
+    </view>
+
+    <view class="action-bar" v-else-if="pageType === 'shop'">
+      <button
+        class="action-btn primary"
+        v-if="order.orderStatus === 'PAID'"
+        @click="openShipPopup"
+      >去发货</button>
+    </view>
+
+    <uni-popup ref="shipPopup" type="center">
+      <view class="ship-dialog">
+        <view class="ship-title">发货信息</view>
+      <view class="ship-item">
+        <text class="ship-label">物流公司</text>
+        <uni-easyinput
+          class="ship-input"
+          type="text"
+          v-model="shipForm.shippingCompany"
+          placeholder="请输入物流公司"
+        />
+      </view>
+      <view class="ship-item">
+        <text class="ship-label">物流单号</text>
+        <uni-easyinput
+          class="ship-input"
+          type="text"
+          v-model="shipForm.trackingNumber"
+          placeholder="请输入物流单号"
+        />
+      </view>
+        <view class="ship-actions">
+          <button class="ship-btn ghost" @click="closeShipPopup">取消</button>
+          <button class="ship-btn primary" :disabled="saving" @click="submitShip">
+            {{ saving ? '提交中...' : '确认发货' }}
+          </button>
+        </view>
+      </view>
+    </uni-popup>
   </view>
 </template>
 
 <script>
+const ORDER_EVENT = 'productOrderUpdated'
 import * as orderApi from '@/api/product-order.js'
 
 export default {
@@ -76,19 +148,42 @@ export default {
   data() {
     return {
       orderId: null,
+      pageType: 'user',
       order: {
         orderItems: []
       },
-      loading: false
+      loading: false,
+      saving: false,
+      shipForm: {
+        shippingCompany: '',
+        trackingNumber: ''
+      }
     }
   },
   onLoad(query) {
     if (query && (query.id || query.orderId)) {
-      // 兼容 id 和 orderId 两种参数名
       this.orderId = Number(query.id || query.orderId)
+      if (query.type) {
+        this.pageType = query.type
+      }
       this.loadDetail()
+      uni.$on(ORDER_EVENT, this.handleOrderEvent)
     } else {
       uni.showToast({ title: '订单ID缺失', icon: 'none' })
+    }
+  },
+  onUnload() {
+    uni.$off(ORDER_EVENT, this.handleOrderEvent)
+  },
+  computed: {
+    showLogisticsSection() {
+      if (!this.order) return false
+      return Boolean(
+        this.order.shippingCompany ||
+        this.order.trackingNumber ||
+        this.order.shippedTime ||
+        this.order.deliveredTime
+      )
     }
   },
   methods: {
@@ -96,21 +191,118 @@ export default {
       if (!this.orderId) return
       this.loading = true
       try {
-        const res = await orderApi.getShopOrderDetail(this.orderId)
+        const fetcher =
+          this.pageType === 'shop' ? orderApi.getShopOrderDetail : orderApi.getOrderDetail
+        const res = await fetcher(this.orderId)
         if (res && res.code === 200 && res.data) {
           this.order = res.data
-          if (!this.order.orderItems) {
+          if (!Array.isArray(this.order.orderItems)) {
             this.order.orderItems = []
           }
         } else {
           uni.showToast({ title: res?.msg || '加载详情失败', icon: 'none' })
         }
       } catch (error) {
-        console.error('加载商家订单详情失败:', error)
+        console.error('加载订单详情失败:', error)
         uni.showToast({ title: error.message || '加载详情失败', icon: 'none' })
       } finally {
         this.loading = false
       }
+    },
+    handleOrderEvent() {
+      this.loadDetail()
+    },
+    notifyOrderChange() {
+      uni.$emit(ORDER_EVENT)
+    },
+    openShipPopup() {
+      this.shipForm.shippingCompany = this.order.shippingCompany || ''
+      this.shipForm.trackingNumber = this.order.trackingNumber || ''
+      this.$refs.shipPopup && this.$refs.shipPopup.open()
+    },
+    closeShipPopup() {
+      this.$refs.shipPopup && this.$refs.shipPopup.close()
+      this.shipForm.shippingCompany = ''
+      this.shipForm.trackingNumber = ''
+    },
+    async submitShip() {
+      if (!this.orderId) return
+      if (!this.shipForm.shippingCompany && !this.shipForm.trackingNumber) {
+        uni.showToast({ title: '请至少填写一项物流信息', icon: 'none' })
+        return
+      }
+      this.saving = true
+      uni.showLoading({ title: '提交中...' })
+      try {
+        const res = await orderApi.shipOrder(
+          this.orderId,
+          this.shipForm.shippingCompany,
+          this.shipForm.trackingNumber
+        )
+        if (res && res.code === 200) {
+          uni.showToast({ title: '发货成功', icon: 'success' })
+          this.closeShipPopup()
+          this.notifyOrderChange()
+        } else {
+          uni.showToast({ title: res?.msg || '发货失败', icon: 'none' })
+        }
+      } catch (error) {
+        console.error('发货失败:', error)
+        uni.showToast({ title: error.message || '发货失败', icon: 'none' })
+      } finally {
+        this.saving = false
+        uni.hideLoading()
+      }
+    },
+    handleConfirmReceipt() {
+      if (!this.orderId || this.pageType !== 'user') return
+      uni.showModal({
+        title: '确认收货',
+        content: '确认已收到货物吗？',
+        success: async res => {
+          if (!res.confirm) return
+          try {
+            uni.showLoading({ title: '提交中...' })
+            const result = await orderApi.confirmReceipt(this.orderId)
+            if (result && result.code === 200) {
+              uni.showToast({ title: '已确认收货', icon: 'success' })
+              this.notifyOrderChange()
+            } else {
+              uni.showToast({ title: result?.msg || '操作失败', icon: 'none' })
+            }
+          } catch (error) {
+            console.error('确认收货失败:', error)
+            uni.showToast({ title: error.message || '操作失败', icon: 'none' })
+          } finally {
+            uni.hideLoading()
+          }
+        }
+      })
+    },
+    handlePayOrder() {
+      if (!this.orderId || this.pageType !== 'user') return
+      uni.showModal({
+        title: '确认付款',
+        content: '确定要支付该订单吗？',
+        success: async res => {
+          if (!res.confirm) return
+          try {
+            uni.showLoading({ title: '付款中...' })
+            const result = await orderApi.payOrder(this.orderId)
+            if (result && result.code === 200) {
+              uni.showToast({ title: '付款成功', icon: 'success' })
+              this.notifyOrderChange()
+            } else {
+              uni.showToast({ title: result?.msg || '付款失败', icon: 'none' })
+            }
+          } catch (error) {
+            console.error('付款失败:', error)
+            uni.showToast({ title: error.message || '付款失败', icon: 'none' })
+          } finally {
+            uni.hideLoading()
+          }
+        }
+      })
     },
     getStatusText(status) {
       const map = {
@@ -267,6 +459,86 @@ export default {
 .item-qty {
   font-size: 24rpx;
   color: #909399;
+}
+
+.action-bar {
+  margin-top: 20rpx;
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+}
+
+.action-btn {
+  padding: 16rpx 36rpx;
+  border-radius: 999rpx;
+  border: none;
+  font-size: 26rpx;
+  background-color: #f4f4f5;
+  color: #606266;
+}
+
+.action-btn.primary {
+  background-color: #409eff;
+  color: #fff;
+}
+
+.ship-dialog {
+  width: 540rpx;
+  background-color: #fff;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  box-sizing: border-box;
+}
+
+.ship-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  margin-bottom: 20rpx;
+  color: #303133;
+}
+
+.ship-item {
+  margin-bottom: 20rpx;
+}
+
+.ship-label {
+  font-size: 24rpx;
+  color: #606266;
+  margin-bottom: 8rpx;
+  display: block;
+}
+
+.ship-input {
+  width: 100%;
+  border: 1rpx solid #e4e7ed;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+
+.ship-actions {
+  margin-top: 10rpx;
+  display: flex;
+  justify-content: flex-end;
+  gap: 20rpx;
+}
+
+.ship-btn {
+  padding: 16rpx 30rpx;
+  border-radius: 999rpx;
+  border: none;
+  font-size: 26rpx;
+}
+
+.ship-btn.ghost {
+  background-color: #f4f4f5;
+  color: #606266;
+}
+
+.ship-btn.primary {
+  background-color: #409eff;
+  color: #fff;
 }
 </style>
 

@@ -18,7 +18,7 @@ export function getDesignerDetail(userId) {
 }
 
 /**
- * 获取设计师基本信息
+ * 获取用户基本信息
  * @param {number} userId - 用户ID
  * @returns {Promise} 设计师基本信息
  */

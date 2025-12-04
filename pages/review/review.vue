@@ -10,6 +10,23 @@
 			<view class="header-placeholder"></view>
 		</view>
 
+		<!-- 订单信息区域 -->
+		<view class="order-info-card" v-if="orderInfo.contractorInfo && orderInfo.contractorInfo.name">
+			<view class="card-title">设计师信息</view>
+			<view class="designer-info">
+				<view class="designer-avatar">
+					<image 
+						:src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" 
+						mode="aspectFill" 
+					/>
+				</view>
+				<view class="designer-details">
+					<text class="designer-name">{{ orderInfo.contractorInfo.name }}</text>
+					<text class="designer-role">{{ orderInfo.contractorInfo.role || '设计师' }}</text>
+				</view>
+			</view>
+		</view>
+
 		<!-- 评价内容区域 -->
 		<scroll-view class="review-content" scroll-y="true">
 			<!-- 评分区域 -->
@@ -62,7 +79,7 @@
 
 <script>
 import { orderService } from '@/api/order.js'
-import { getUserProfile } from '@/api/users.js'
+import { getUserProfile, getUserById } from '@/api/users.js'
 import { orderReviewApi } from '@/api/orderReview.js'
 
 export default {
@@ -109,51 +126,77 @@ export default {
       return
     }
     
-    // 如果userId为空，尝试从缓存获取
-    if (!this.userId) {
-      const userInfo = uni.getStorageSync('userInfo')
-      if (userInfo && userInfo.id) {
-        this.userId = userInfo.id
-        console.log('从缓存获取userId:', this.userId)
-      }
+    // 加载当前用户信息
+    this.loadCurrentUser()
+  },
+  
+  onShow() {
+    // 页面显示时加载订单信息
+    if (this.orderId) {
+      this.loadOrderInfo()
     }
-    
-    // 不再加载订单信息
-    // this.loadOrderInfo()
   },
   
   methods: {
-    async loadOrderInfo() {
-      // 此方法保留，但不再在onLoad中调用
+    // 加载当前用户信息
+    async loadCurrentUser() {
       try {
-        uni.showLoading({ title: '加载中...' })
+        console.log('👤 开始获取当前用户信息')
         
-        console.log('📋 加载订单信息，订单ID:', this.orderId, '用户ID:', this.userId)
+        // 使用 getUserProfile() 获取当前用户信息
+        const result = await getUserProfile()
         
-        const queryParams = {
-          pageNum: 1,
-          pageSize: 100,
-          orderId: this.orderId
+        if (result && result.code === 200) {
+          const userData = result.data
+          
+          // 如果传入的userId为空，使用当前用户的ID
+          if (!this.userId) {
+            this.userId = userData.userId || userData.id
+            console.log('✅ 使用当前用户ID:', this.userId)
+          }
+          
+          // 存储当前用户信息到缓存
+          uni.setStorageSync('userInfo', userData)
+          
+          console.log('👤 当前用户信息:', {
+            userId: this.userId,
+            userName: userData.userName || userData.name,
+            phone: userData.phone
+          })
+        } else {
+          console.warn('⚠️ 获取当前用户信息失败，使用参数中的userId:', this.userId)
         }
-        
-        console.log('🔍 查询参数:', queryParams)
-        
-        let result
-        try {
-          result = await orderService.getOrderList(queryParams)
-          console.log('✅ 订单列表查询响应:', result)
-        } catch (error) {
-          console.log('⚠️ 方式1失败，尝试方式2...')
-          if (this.userId) {
-            result = await orderService.getOrderListByUserId(this.userId, {
-              pageNum: 1,
-              pageSize: 100
-            })
-            console.log('✅ 用户订单列表响应:', result)
-          } else {
-            throw new Error('无法查询订单信息')
+      } catch (error) {
+        console.error('❌ 获取当前用户信息失败:', error)
+        // 使用参数中的userId或从缓存中获取
+        if (!this.userId) {
+          const cachedUser = uni.getStorageSync('userInfo')
+          if (cachedUser && cachedUser.userId) {
+            this.userId = cachedUser.userId
+            console.log('🔄 从缓存获取用户ID:', this.userId)
           }
         }
+      }
+    },
+    
+    async loadOrderInfo() {
+      try {
+        uni.showLoading({ title: '加载订单信息...' })
+        
+        console.log('📋 加载订单信息，订单ID:', this.orderId)
+        
+        // 先获取当前用户的订单列表
+        if (!this.userId) {
+          throw new Error('用户ID为空，无法查询订单')
+        }
+        
+        // 获取当前用户的订单列表
+        const result = await orderService.getOrderListByUserId(this.userId, {
+          pageNum: 1,
+          pageSize: 100
+        })
+        
+        console.log('✅ 用户订单列表响应:', result)
         
         let orderList = []
         if (Array.isArray(result)) {
@@ -168,6 +211,7 @@ export default {
         
         console.log('📋 解析后的订单列表:', orderList)
         
+        // 查找当前订单
         const currentOrder = orderList.find(order => order.orderId == this.orderId)
         
         if (currentOrder) {
@@ -177,18 +221,20 @@ export default {
             orderId: currentOrder.orderId,
             createTime: currentOrder.createTime,
             totalAmount: currentOrder.totalAmount || 0,
-            contractorInfo: currentOrder.contractorInfo || {},
             contractorId: currentOrder.contractorId
           }
           
-          console.log('📝 解析后的订单信息:', this.orderInfo)
+          console.log('📝 订单基本信息:', this.orderInfo)
           
-          if (currentOrder.contractorId && (!currentOrder.contractorInfo || !currentOrder.contractorInfo.name)) {
-            console.log('👨‍🎨 获取详细设计师信息，ID:', currentOrder.contractorId)
+          // 获取设计师信息（contractorId）
+          if (currentOrder.contractorId) {
+            console.log('👨‍🎨 加载设计师信息，ID:', currentOrder.contractorId)
             await this.loadDesignerInfo(currentOrder.contractorId)
+          } else {
+            console.log('⚠️ 订单没有contractorId')
           }
           
-          console.log('✅ 订单信息加载完成:', this.orderInfo)
+          console.log('✅ 订单信息加载完成')
         } else {
           throw new Error('未找到订单信息')
         }
@@ -199,31 +245,46 @@ export default {
         uni.hideLoading()
         console.error('❌ 加载订单信息失败:', error)
         this.handleApiError(error, '加载订单信息失败')
-        setTimeout(() => {
-          uni.navigateBack()
-        }, 2000)
       }
     },
     
     async loadDesignerInfo(designerId) {
       try {
         console.log('👨‍🎨 加载设计师信息，ID:', designerId)
-        const designerInfo = await getUserProfile(designerId)
         
-        if (designerInfo && designerInfo.code === 200) {
-          this.orderInfo.contractorInfo = {
-            name: designerInfo.data.name || designerInfo.data.nickname || '设计师',
-            avatar: designerInfo.data.avatar || '/static/images/default-avatar.png',
-            role: '设计师'
+        // 只能使用 getUserById 方法获取其他用户信息
+        const result = await getUserById(designerId)
+        console.log('✅ getUserById 原始结果:', result)
+        
+        if (result && result.code === 200) {
+          const userData = result.data
+          
+          // 根据示例数据结构解析字段
+          const designerInfo = {
+            name: userData.nickName || userData.name || userData.userName || '',
+            avatar: userData.avatar || '/static/images/default-avatar.png',
+            phone: userData.phone || userData.userName || '',
+            role: '设计师',
+            userId: userData.userId
           }
+          
+          console.log('✅ 解析后的设计师信息:', designerInfo)
+          
+          // 只有当有姓名时才显示，避免显示"未知用户"
+          if (designerInfo.name) {
+            this.orderInfo.contractorInfo = designerInfo
+          } else {
+            console.log('⚠️ 设计师信息不完整，不显示')
+            this.orderInfo.contractorInfo = {}
+          }
+        } else {
+          console.warn('⚠️ 获取设计师信息失败，返回结果:', result)
+          this.orderInfo.contractorInfo = {}
         }
       } catch (error) {
         console.error('❌ 加载设计师信息失败:', error)
-        this.orderInfo.contractorInfo = {
-          name: '设计师',
-          avatar: '/static/images/default-avatar.png',
-          role: '设计师'
-        }
+        // 不设置默认值，避免显示"未知用户"
+        this.orderInfo.contractorInfo = {}
       }
     },
     
@@ -243,6 +304,15 @@ export default {
       
       try {
         this.submitting = true
+        
+        // 检查必要的参数
+        if (!this.userId) {
+          throw new Error('用户ID不能为空')
+        }
+        
+        if (!this.orderId) {
+          throw new Error('订单ID不能为空')
+        }
         
         // 只传递后端需要的字段
         const reviewData = {
@@ -273,7 +343,7 @@ export default {
             })
           }, 1500)
         } else {
-          throw new Error(result?.msg || '评价提交失败')
+          throw new Error(result?.msg || result?.message || '评价提交失败')
         }
         
       } catch (error) {
@@ -374,10 +444,58 @@ export default {
 		width: 120rpx;
 	}
 	
+	/* 订单信息卡片 */
+	.order-info-card {
+		background: white;
+		border-radius: 16rpx;
+		padding: 30rpx;
+		margin: 30rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+	}
+	
+	.designer-info {
+		display: flex;
+		align-items: center;
+	}
+	
+	.designer-avatar {
+		width: 100rpx;
+		height: 100rpx;
+		border-radius: 50%;
+		overflow: hidden;
+		margin-right: 20rpx;
+		border: 3rpx solid #f0f0f0;
+	}
+	
+	.designer-avatar image {
+		width: 100%;
+		height: 100%;
+	}
+	
+	.designer-details {
+		flex: 1;
+	}
+	
+	.designer-name {
+		display: block;
+		font-size: 32rpx;
+		font-weight: bold;
+		color: #333;
+		margin-bottom: 8rpx;
+	}
+	
+	.designer-role {
+		font-size: 26rpx;
+		color: #666;
+		background: #f0f0f0;
+		padding: 4rpx 16rpx;
+		border-radius: 12rpx;
+	}
+	
 	/* 内容区域 */
 	.review-content {
-		height: calc(100vh - 120rpx);
-		padding: 30rpx;
+		height: calc(100vh - 300rpx);
+		padding: 0 30rpx 30rpx 30rpx;
 	}
 	
 	/* 卡片样式 */
