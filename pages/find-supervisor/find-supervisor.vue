@@ -328,6 +328,7 @@ export default {
             return {
               userId: supervisor.userId,
               id: supervisor.userId,
+			  avatar:supervisor.avatar,
               name: supervisor.name || result.nickName || '匿名监工',
               rating: result.rating || 5.0,
               ratingCount: result.ratingCount || 0,
