@@ -2,7 +2,6 @@
   <view class="container">
     <!-- 顶部导航 -->
     <view class="header">
-      <view class="back-btn" @click="goBack">←</view>
       <view class="header-title">监理详情</view>
       <view class="header-placeholder"></view>
     </view>
@@ -116,6 +115,7 @@
         </view>
       </view>
       
+      <!-- 只保留资质证书部分，移除身份认证和手持身份证部分 -->
       <view class="detail-section" v-if="supervisorInfo.qualificationCertificate">
         <view class="section-title">资质证书</view>
         <view class="section-desc">查看该监工的专业资质证书</view>
@@ -128,40 +128,9 @@
           />
         </view>
       </view>
-      
-      <view class="detail-section" v-if="supervisorInfo.idCardFrontPhoto || supervisorInfo.idCardBackPhoto">
-        <view class="section-title">身份认证</view>
-        <view class="section-desc">已进行身份实名认证</view>
-        <view class="id-card-images">
-          <image 
-            v-if="supervisorInfo.idCardFrontPhoto"
-            :src="getImageUrl(supervisorInfo.idCardFrontPhoto)" 
-            class="id-card-image"
-            mode="aspectFit"
-            @click="previewImage(supervisorInfo.idCardFrontPhoto)"
-          />
-          <image 
-            v-if="supervisorInfo.idCardBackPhoto"
-            :src="getImageUrl(supervisorInfo.idCardBackPhoto)" 
-            class="id-card-image"
-            mode="aspectFit"
-            @click="previewImage(supervisorInfo.idCardBackPhoto)"
-          />
-        </view>
-      </view>
 
-      <view class="detail-section" v-if="supervisorInfo.handheldIdPhoto">
-        <view class="section-title">手持身份证</view>
-        <view class="section-desc">确保认证信息真实有效</view>
-        <view class="certificate-images">
-          <image 
-            :src="getImageUrl(supervisorInfo.handheldIdPhoto)" 
-            class="certificate-image"
-            mode="aspectFit"
-            @click="previewImage(supervisorInfo.handheldIdPhoto)"
-          />
-        </view>
-      </view>
+      <!-- 移除的身份认证部分 -->
+      <!-- 移除的手持身份证部分 -->
 
       <view class="detail-section" v-if="supervisorInfo.rejectionReason">
         <view class="section-title">审核信息</view>
@@ -791,7 +760,7 @@ export default {
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center; /* 改为居中 */
   padding: 30rpx;
   background: white;
   border-bottom: 1px solid #f0f0f0;
@@ -800,10 +769,9 @@ export default {
   z-index: 100;
 }
 
+/* 移除.back-btn样式 */
 .back-btn {
-  font-size: 36rpx;
-  color: #333;
-  padding: 10rpx;
+  display: none;
 }
 
 .header-title {
@@ -1106,13 +1074,13 @@ export default {
   color: #721c24;
 }
 
-.certificate-images, .id-card-images {
+.certificate-images {
   display: flex;
   gap: 20rpx;
   flex-wrap: wrap;
 }
 
-.certificate-image, .id-card-image {
+.certificate-image {
   width: 300rpx;
   height: 200rpx;
   border-radius: 12rpx;
@@ -1120,11 +1088,7 @@ export default {
   background: #f8f8f8;
 }
 
-.id-card-image {
-  width: calc(50% - 10rpx);
-  height: 150rpx;
-}
-
+/* 移除.id-card-images相关样式 */
 .case-list {
   display: flex;
   flex-direction: column;
