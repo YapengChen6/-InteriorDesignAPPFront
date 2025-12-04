@@ -1,13 +1,5 @@
 <template>
   <view class="container">
-    <view class="nav-bar">
-      <view class="nav-back" @tap="goBack">
-        <text class="iconfont icon-arrow-left">←</text>
-      </view>
-      <text class="nav-title">我的关注</text>
-      <view class="nav-right"></view>
-    </view>
-
     <view class="content-area">
       <scroll-view class="follow-list" scroll-y="true" @scrolltolower="loadMore">
         <view
@@ -82,10 +74,6 @@ export default {
   },
 
   methods: {
-    goBack() {
-      uni.navigateBack()
-    },
-
     async resetAndLoad() {
       this.pageParams.pageNum = 1
       this.followUsers = []
@@ -249,40 +237,6 @@ export default {
 .container {
   min-height: 100vh;
   background-color: #f8f9fa;
-}
-
-.nav-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 30rpx;
-  background-color: #fff;
-  border-bottom: 1px solid #f0f0f0;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.nav-back {
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36rpx;
-  color: #333;
-}
-
-.nav-title {
-  flex: 1;
-  text-align: center;
-  font-size: 36rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.nav-right {
-  width: 60rpx;
 }
 
 .content-area {

@@ -243,6 +243,16 @@
       "navigationBarTitleText": "普通用户订单详情页面"
     }
   }, {
+    "path": "pages/shop/after-sale",
+    "style": {
+      "navigationBarTitleText": "申请售后"
+    }
+  }, {
+    "path": "pages/shop/after-sale-list",
+    "style": {
+      "navigationBarTitleText": "售后记录"
+    }
+  }, {
     "path": "pages/order/detail",
     "style": {
       "navigationBarTitleText": "商家订单详情页面"
@@ -340,7 +350,7 @@
   }, {
     "path": "pages/work/material_supplier-order",
     "style": {
-      "navigationBarTitleText": "商家订单页面"
+      "navigationBarTitleText": "我的订单"
     }
   }, {
     "path": "pages/work/user-order",

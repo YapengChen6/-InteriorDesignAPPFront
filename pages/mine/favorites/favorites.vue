@@ -1,14 +1,5 @@
 <template>
   <view class="container">
-    <!-- 顶部导航栏 -->
-    <view class="nav-bar">
-      <view class="nav-back" @tap="goBack">
-        <text class="iconfont icon-arrow-left">←</text>
-      </view>
-      <text class="nav-title">我的收藏</text>
-      <view class="nav-right"></view>
-    </view>
-    
     <!-- 内容区域 -->
     <view class="content-area">
       <scroll-view class="post-list" scroll-y="true" @scrolltolower="loadMore">
@@ -144,11 +135,6 @@ export default {
   },
   
   methods: {
-    // 返回上一页
-    goBack() {
-      uni.navigateBack()
-    },
-    
     // 加载收藏列表
     async loadFavorites() {
       if (this.loading) return
@@ -342,40 +328,6 @@ export default {
 .container {
   min-height: 100vh;
   background-color: #f8f9fa;
-}
-
-.nav-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 30rpx;
-  background-color: #fff;
-  border-bottom: 1px solid #f0f0f0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.nav-back {
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36rpx;
-  color: #333;
-}
-
-.nav-title {
-  flex: 1;
-  text-align: center;
-  font-size: 36rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.nav-right {
-  width: 60rpx;
 }
 
 .content-area {
