@@ -57,6 +57,7 @@
 					placeholder="请写下您对这次服务的评价，您的评价对其他用户很有帮助..."
 					maxlength="500"
 					:show-confirm-bar="false"
+					@input="onContentInput"
 				></textarea>
 				<view class="word-count">{{ reviewContent.length }}/500</view>
 			</view>
@@ -65,8 +66,8 @@
 			<view class="submit-section">
 				<button 
 					class="submit-btn" 
-					:class="{ 'btn-disabled': !canSubmit }"
-					:disabled="!canSubmit"
+					:class="[!canSubmit ? 'btn-disabled' : '']"
+					:disabled="!canSubmit || submitting"
 					@click="submitReview"
 					:loading="submitting"
 				>
@@ -95,7 +96,8 @@ export default {
       },
       rating: 0,
       reviewContent: '',
-      submitting: false
+      submitting: false,
+      hasSubmitted: false // 防止重复提交
     }
   },
   
@@ -106,7 +108,7 @@ export default {
     },
     
     canSubmit() {
-      return this.rating > 0 && this.reviewContent.trim().length >= 5
+      return this.rating > 0 && this.reviewContent.trim().length >= 5 && !this.submitting
     }
   },
   
@@ -293,17 +295,45 @@ export default {
       console.log('⭐ 设置评分:', score)
     },
     
-    async submitReview() {
-      if (!this.canSubmit) {
+    onContentInput(e) {
+      // 内容输入时实时验证
+      const value = e.detail.value || ''
+      if (value.length >= 500) {
         uni.showToast({
-          title: '请完成评分并填写至少5个字的评价',
-          icon: 'none'
+          title: '已达到最大字数限制',
+          icon: 'none',
+          duration: 1500
         })
+      }
+    },
+    
+    async submitReview() {
+      // 防止重复提交
+      if (this.hasSubmitted || this.submitting) {
+        return
+      }
+      
+      // 添加更严格的验证
+      if (!this.canSubmit) {
+        if (this.rating === 0) {
+          uni.showToast({
+            title: '请先选择评分',
+            icon: 'none',
+            duration: 2000
+          })
+        } else if (this.reviewContent.trim().length < 5) {
+          uni.showToast({
+            title: '评价内容至少5个字',
+            icon: 'none',
+            duration: 2000
+          })
+        }
         return
       }
       
       try {
         this.submitting = true
+        this.hasSubmitted = true
         
         // 检查必要的参数
         if (!this.userId) {
@@ -313,6 +343,12 @@ export default {
         if (!this.orderId) {
           throw new Error('订单ID不能为空')
         }
+        
+        // 显示加载动画
+        uni.showLoading({
+          title: '提交中...',
+          mask: true
+        })
         
         // 只传递后端需要的字段
         const reviewData = {
@@ -328,6 +364,8 @@ export default {
         
         console.log('✅ 评价提交响应:', result)
         
+        uni.hideLoading()
+        
         if (result && result.code === 200) {
           uni.showToast({
             title: '评价成功',
@@ -339,7 +377,17 @@ export default {
             // 发送全局事件通知评价完成
             uni.$emit('orderReviewSubmitted', this.orderId)
             uni.navigateBack({
-              delta: 1
+              delta: 1,
+              success: () => {
+                // 通知上一个页面刷新
+                const pages = getCurrentPages()
+                if (pages.length > 1) {
+                  const prevPage = pages[pages.length - 2]
+                  if (prevPage.$vm && prevPage.$vm.onReviewSubmitted) {
+                    prevPage.$vm.onReviewSubmitted(this.orderId)
+                  }
+                }
+              }
             })
           }, 1500)
         } else {
@@ -347,8 +395,11 @@ export default {
         }
         
       } catch (error) {
+        uni.hideLoading()
         console.error('❌ 提交评价失败:', error)
         this.handleApiError(error, '提交评价失败')
+        // 提交失败后重置提交状态
+        this.hasSubmitted = false
       } finally {
         this.submitting = false
       }
@@ -397,7 +448,19 @@ export default {
     },
     
     goBack() {
-      uni.navigateBack()
+      if (this.submitting) {
+        uni.showModal({
+          title: '提示',
+          content: '评价正在提交中，确定要离开吗？',
+          success: (res) => {
+            if (res.confirm) {
+              uni.navigateBack()
+            }
+          }
+        })
+      } else {
+        uni.navigateBack()
+      }
     }
   }
 }
@@ -536,10 +599,15 @@ export default {
 	.star-active {
 		color: #f39c12;
 		transform: scale(1.1);
+		animation: starBounce 0.3s ease;
 	}
 	
 	.star-inactive {
 		color: #ddd;
+	}
+	
+	.star:active {
+		transform: scale(0.95);
 	}
 	
 	.rating-text {
@@ -557,6 +625,12 @@ export default {
 		font-size: 28rpx;
 		line-height: 1.5;
 		background: #fafafa;
+		transition: border-color 0.3s;
+	}
+	
+	.review-textarea:focus {
+		border-color: #3498db;
+		background: white;
 	}
 	
 	.word-count {
@@ -580,14 +654,32 @@ export default {
 		border-radius: 44rpx;
 		font-size: 32rpx;
 		font-weight: bold;
+		transition: all 0.3s;
+	}
+	
+	.submit-btn::after {
+		border: none;
 	}
 	
 	.btn-disabled {
-		background: #ccc !important;
-		color: #999 !important;
+		background: #cccccc !important;
+		color: #999999 !important;
+		opacity: 0.7;
+	}
+	
+	.btn-disabled:active {
+		transform: none !important;
 	}
 	
 	.submit-btn:not(.btn-disabled):active {
 		transform: scale(0.98);
+		opacity: 0.9;
+	}
+	
+	/* 动画效果 */
+	@keyframes starBounce {
+		0% { transform: scale(1); }
+		50% { transform: scale(1.2); }
+		100% { transform: scale(1.1); }
 	}
 </style>
