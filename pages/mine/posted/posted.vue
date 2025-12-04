@@ -87,7 +87,7 @@
           
           <!-- 空状态 -->
           <view v-if="!orderLoading && orderList.length === 0" class="empty-state">
-            <view class="empty-icon">📦</view>
+          <view class="empty-icon">📦</view>
             <text class="empty-title">暂无订单</text>
             <text class="empty-desc">您还没有发布任何订单</text>
           </view>
