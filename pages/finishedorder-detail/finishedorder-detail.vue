@@ -73,7 +73,7 @@
 			</view>
 
 			<!-- 设计师/监理信息 -->
-			<view class="info-card" v-if="orderInfo.contractorInfo">
+			<view class="info-card" v-if="orderInfo.contractorInfo && orderInfo.contractorInfo.name">
 				<view class="card-title">
 					{{ isSupervisionOrder ? '监理信息' : '设计师信息' }}
 				</view>
@@ -82,9 +82,9 @@
 						<image :src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" mode="aspectFill" class="avatar-img" />
 					</view>
 					<view class="designer-info">
-						<text class="designer-name">{{ orderInfo.contractorInfo.name || (isSupervisionOrder ? '监理' : '设计师') }}</text>
+						<text class="designer-name">{{ orderInfo.contractorInfo.name }}</text>
 						<text class="designer-role">{{ orderInfo.contractorInfo.role || (isSupervisionOrder ? '监理' : '设计师') }}</text>
-						<text class="designer-phone">电话: {{ orderInfo.contractorInfo.phone || '暂无联系方式' }}</text>
+						<text class="designer-phone" v-if="orderInfo.contractorInfo.phone">电话: {{ orderInfo.contractorInfo.phone }}</text>
 					</view>
 				</view>
 			</view>
@@ -193,6 +193,551 @@
 </template>
 
 <script>
+import { orderService, OrderStatus, OrderType } from '@/api/order.js'
+import { getDesignSchemeList } from '@/api/designScheme.js'
+import { getCurrentRole, getUserProfile, getUserById } from '@/api/users.js'  // 导入所有方法
+import { orderReviewApi } from '@/api/orderReview.js'
+
+export default {
+	data() {
+		return {
+			// 页面参数
+			orderId: null,
+			
+			// 当前用户信息
+			currentUserInfo: {
+				userId: null,
+				name: '',
+				avatar: '',
+				role: 'user'
+			},
+			
+			// 加载状态
+			loading: false,
+			refreshing: false,
+			
+			// 订单信息
+			orderInfo: {
+				orderId: null,
+				projectId: null,
+				userId: null,
+				contractorId: null,
+				type: OrderType.DESIGN,
+				status: OrderStatus.COMPLETED,
+				totalAmount: 0,
+				createTime: null,
+				updateTime: null,
+				contractUrl: null,
+				remark: '',
+				expectedEndTime: null,
+				actualEndTime: null,
+				contractStatus: null,
+				projectInfo: {},
+				contractorInfo: {}
+			},
+			
+			// 设计方案列表
+			designSchemes: [],
+			
+			// 评价状态
+			hasReviewed: false,
+			orderReview: null
+		}
+	},
+	
+	computed: {
+		// 效果图方案
+		effectSchemes() {
+			return this.designSchemes.filter(scheme => {
+				const type = scheme.schemeType || scheme.type;
+				return String(type) === "1";
+			});
+		},
+		
+		// 施工设计图方案
+		constructionSchemes() {
+			return this.designSchemes.filter(scheme => {
+				const type = scheme.schemeType || scheme.type;
+				return String(type) === "2";
+			});
+		},
+		
+		// 是否为监理订单
+		isSupervisionOrder() {
+			return this.orderInfo.type === OrderType.SUPERVISION;
+		},
+		
+		// 是否显示评价按钮（只有用户身份且未评价时才显示）
+		showReviewButton() {
+			return !this.hasReviewed && this.currentUserInfo.role === 'user';
+		}
+	},
+	
+	async onLoad(options) {
+		console.log('📋 订单详情页面参数:', options);
+		this.orderId = options.orderId;
+		
+		if (!this.orderId) {
+			uni.showToast({
+				title: '订单ID不能为空',
+				icon: 'none'
+			});
+			setTimeout(() => {
+				this.goBack();
+			}, 1500);
+			return;
+		}
+		
+		// 先加载当前用户信息，然后加载订单详情
+		await this.loadCurrentUserInfo();
+		this.loadOrderDetail();
+	},
+	
+	methods: {
+		// 加载当前用户信息 - 使用 getUserProfile 方法
+		async loadCurrentUserInfo() {
+			try {
+				console.log('👤 开始获取当前用户信息...');
+				
+				// 获取当前用户基本信息
+				const userRes = await getUserProfile();
+				console.log('✅ 当前用户信息响应:', userRes);
+				
+				if (userRes.code === 200 && userRes.data) {
+					const userData = userRes.data;
+					this.currentUserInfo.userId = userData.userId || userData.id || '';
+					this.currentUserInfo.name = userData.name || userData.nickName || userData.userName || '';
+					this.currentUserInfo.avatar = userData.avatar || '/static/images/default-avatar.png';
+					
+					console.log('✅ 当前用户基本信息加载完成:', {
+						userId: this.currentUserInfo.userId,
+						name: this.currentUserInfo.name
+					});
+				} else {
+					console.warn('⚠️ 获取当前用户基本信息失败:', userRes.msg);
+				}
+				
+				// 获取用户角色
+				const roleRes = await getCurrentRole();
+				console.log('👤 用户角色响应:', roleRes);
+				
+				if (roleRes.code === 200 && roleRes.data) {
+					this.currentUserInfo.role = roleRes.data.roleType || roleRes.data.role || 'user';
+					console.log('✅ 用户角色获取完成:', this.currentUserInfo.role);
+				} else {
+					console.warn('⚠️ 获取用户角色失败，使用默认值');
+					this.currentUserInfo.role = 'user';
+				}
+				
+				console.log('👤 当前用户信息加载完成:', this.currentUserInfo);
+				
+			} catch (error) {
+				console.error('❌ 加载当前用户信息失败:', error);
+				// 使用默认值继续执行
+				this.currentUserInfo.role = 'user';
+			}
+		},
+		
+		// 加载订单详情
+		async loadOrderDetail() {
+			try {
+				this.loading = true;
+				
+				console.log('📋 开始加载订单详情，订单ID:', this.orderId, '当前用户角色:', this.currentUserInfo.role);
+				
+				// 1. 加载订单基本信息
+				await this.loadOrderInfo();
+				
+				// 2. 加载设计方案（仅设计订单需要）
+				if (!this.isSupervisionOrder) {
+					await this.loadDesignSchemes();
+				}
+				
+				// 3. 检查评价状态
+				await this.checkReviewStatus();
+				
+				console.log('✅ 订单详情加载完成:', this.orderInfo);
+				
+			} catch (error) {
+				console.error('❌ 加载订单详情失败:', error);
+				this.handleApiError(error, '加载订单详情失败');
+			} finally {
+				this.loading = false;
+				this.refreshing = false;
+			}
+		},
+		
+		// 加载订单基本信息
+		async loadOrderInfo() {
+			try {
+				console.log('📋 通过列表接口获取订单信息，订单ID:', this.orderId);
+				
+				// 使用订单列表接口，通过订单ID筛选
+				const queryParams = {
+					pageNum: 1,
+					pageSize: 100,
+					orderId: this.orderId
+				};
+				
+				const result = await orderService.getOrderList(queryParams);
+				console.log('✅ 订单列表查询响应:', result);
+				
+				let orderList = [];
+				if (Array.isArray(result)) {
+					orderList = result;
+				} else if (result && result.records) {
+					orderList = result.records;
+				} else if (result && result.list) {
+					orderList = result.list;
+				} else if (result && result.data) {
+					orderList = result.data.records || result.data.list || [];
+				}
+				
+				// 查找当前订单
+				const currentOrder = orderList.find(order => order.orderId == this.orderId);
+				
+				if (currentOrder) {
+					this.orderInfo = {
+						...this.orderInfo,
+						...currentOrder
+					};
+					
+					// 加载设计师/监理信息
+					if (currentOrder.contractorId) {
+						await this.loadContractorInfo(currentOrder.contractorId);
+					}
+					
+					console.log('✅ 订单信息加载成功:', this.orderInfo);
+				} else {
+					throw new Error('未找到订单信息');
+				}
+				
+			} catch (error) {
+				console.error('❌ 加载订单基本信息失败:', error);
+				throw error;
+			}
+		},
+		
+		// 加载设计师/监理信息 - 使用 getUserById 方法
+		async loadContractorInfo(contractorId) {
+			try {
+				console.log('👨‍🎨 加载设计师/监理信息，ID:', contractorId);
+				
+				if (!contractorId) {
+					console.warn('❌ 承接方ID为空，无法加载信息');
+					this.orderInfo.contractorInfo = null;
+					return;
+				}
+				
+				// 使用 getUserById 方法获取其他用户信息
+				const userResponse = await getUserById(contractorId);
+				console.log('👤 getUserById 响应:', userResponse);
+				
+				if (userResponse && userResponse.code === 200 && userResponse.data) {
+					const userData = userResponse.data;
+					
+					// 根据示例数据格式解析
+					this.orderInfo.contractorInfo = {
+						// 使用示例数据中的字段
+						name: userData.nickName || userData.userName || userData.name || '',
+						avatar: userData.avatar || '/static/images/default-avatar.png',
+						phone: userData.phone || userData.userName || '',
+						role: this.isSupervisionOrder ? '监理' : '设计师',
+						userId: userData.userId || ''
+					};
+					
+					console.log('✅ 加载设计师/监理信息成功:', this.orderInfo.contractorInfo);
+				} else {
+					// 如果获取失败，使用空对象，不在页面上显示
+					this.orderInfo.contractorInfo = null;
+					console.warn('⚠️ 未获取到用户信息，不显示设计师/监理信息');
+				}
+			} catch (error) {
+				console.error('❌ 加载设计师/监理信息失败:', error);
+				// 出错时不显示该区域
+				this.orderInfo.contractorInfo = null;
+			}
+		},
+		
+		// 加载设计方案（仅设计订单调用）
+		async loadDesignSchemes() {
+			try {
+				console.log('🎨 加载设计方案，订单ID:', this.orderId);
+				
+				const queryParams = {
+					pageNum: 1,
+					pageSize: 100,
+					orderId: this.orderId
+				};
+				
+				const result = await getDesignSchemeList(queryParams);
+				console.log('✅ 设计方案响应:', result);
+				
+				let list = [];
+				if (result && result.code === 200) {
+					if (result.data) {
+						if (Array.isArray(result.data)) {
+							list = result.data;
+						} 
+						else if (result.data.records) {
+							list = result.data.records;
+						}
+						else if (result.data.list) {
+							list = result.data.list;
+						}
+						else if (Array.isArray(result.data.data)) {
+							list = result.data.data;
+						}
+					}
+				} else if (Array.isArray(result)) {
+					list = result;
+				}
+				
+				this.designSchemes = list.map(scheme => ({
+					designSchemeId: scheme.designSchemeId,
+					schemeName: scheme.schemeName,
+					schemeType: scheme.schemeType || scheme.type,
+					status: scheme.status,
+					createTime: scheme.createTime,
+					description: scheme.description,
+					imageList: scheme.imageList || [],
+					fileUrl: scheme.fileUrl || scheme.coverImage
+				}));
+				
+				console.log('✅ 解析后的设计方案:', this.designSchemes);
+				
+			} catch (error) {
+				console.error('❌ 加载设计方案失败:', error);
+				this.designSchemes = [];
+			}
+		},
+		
+		// 检查评价状态
+		async checkReviewStatus() {
+			try {
+				console.log('🔍 检查订单评价状态，订单ID:', this.orderId);
+				
+				const result = await orderReviewApi.getList({ 
+					orderId: this.orderId 
+				});
+				
+				console.log('📋 评价查询结果:', result);
+				
+				if (result && result.code === 200) {
+					let reviewList = [];
+					
+					// 根据API响应结构解析数据
+					if (Array.isArray(result.data)) {
+						reviewList = result.data;
+					} else if (result.data && Array.isArray(result.data.records)) {
+						reviewList = result.data.records;
+					} else if (result.data && Array.isArray(result.data.list)) {
+						reviewList = result.data.list;
+					} else if (Array.isArray(result.data.data)) {
+						reviewList = result.data.data;
+					} else if (Array.isArray(result.records)) {
+						reviewList = result.records;
+					} else if (Array.isArray(result.list)) {
+						reviewList = result.list;
+					}
+					
+					console.log('📝 订单评价列表:', reviewList);
+					
+					if (reviewList && reviewList.length > 0) {
+						// 获取第一个评价
+						const review = reviewList[0];
+						
+						this.orderReview = {
+							orderReviewId: review.orderReviewId,
+							orderId: review.orderId,
+							reviewerId: review.reviewerId,
+							rating: review.rating,
+							content: review.content,
+							createTime: review.createTime,
+							updateTime: review.updateTime,
+							replyContent: review.replyContent,
+							replyTime: review.replyTime,
+							remark: review.remark
+						};
+						
+						this.hasReviewed = true;
+						console.log('✅ 订单已评价:', this.orderReview);
+					} else {
+						this.hasReviewed = false;
+						this.orderReview = null;
+						console.log('📝 订单未评价');
+					}
+				} else {
+					this.hasReviewed = false;
+					this.orderReview = null;
+					console.log('📝 评价查询失败或未评价');
+				}
+			} catch (error) {
+				console.error('❌ 检查评价状态失败:', error);
+				this.hasReviewed = false;
+				this.orderReview = null;
+			}
+		},
+		
+		// 预览文件
+		previewFile(fileUrl, fileName) {
+			if (!fileUrl) {
+				uni.showToast({
+					title: '文件不存在',
+					icon: 'none'
+				});
+				return;
+			}
+			
+			console.log('📄 预览文件:', fileUrl, fileName);
+			
+			// 如果是图片文件
+			if (fileUrl.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+				uni.previewImage({
+					urls: [fileUrl],
+					current: fileUrl,
+					success: () => {
+						console.log('✅ 图片预览成功');
+					},
+					fail: (error) => {
+						console.error('❌ 图片预览失败:', error);
+						this.handleApiError(error, '预览失败');
+					}
+				});
+			} else {
+				// 其他文件类型，尝试在浏览器中打开
+				uni.showToast({
+					title: '暂不支持预览此文件类型',
+					icon: 'none'
+				});
+			}
+		},
+		
+		// 预览设计方案
+		previewDesignScheme(scheme) {
+			console.log('🎨 预览设计方案:', scheme);
+			
+			if (scheme.imageList && scheme.imageList.length > 0) {
+				// 如果有图片列表，预览图片
+				const imageUrls = scheme.imageList.map(img => img.url || img);
+				uni.previewImage({
+					urls: imageUrls,
+					current: imageUrls[0],
+					success: () => {
+						console.log('✅ 设计方案预览成功');
+					},
+					fail: (error) => {
+						console.error('❌ 设计方案预览失败:', error);
+						this.handleApiError(error, '预览失败');
+					}
+				});
+			} else if (scheme.fileUrl) {
+				// 如果有文件URL，预览文件
+				this.previewFile(scheme.fileUrl, scheme.schemeName);
+			} else {
+				uni.showToast({
+					title: '暂无设计方案文件',
+					icon: 'none'
+				});
+			}
+		},
+		
+		// 去评价（只有用户身份可以调用）
+		goToReview() {
+			if (this.currentUserInfo.role !== 'user') {
+				uni.showToast({
+					title: '只有用户才能评价订单',
+					icon: 'none'
+				});
+				return;
+			}
+			
+			console.log('📝 去评价，订单ID:', this.orderId);
+			uni.navigateTo({
+				url: `/pages/review/review?orderId=${this.orderId}`
+			});
+		},
+		
+		// 下拉刷新
+		onRefresh() {
+			if (this.refreshing) return;
+			this.refreshing = true;
+			this.loadOrderDetail();
+		},
+		
+		// 返回上一页
+		goBack() {
+			uni.navigateBack();
+		},
+		
+		// 获取方案状态文本
+		getSchemeStatusText(status) {
+			const statusMap = {
+				'0': '待确认',
+				'1': '待确认',
+				'2': '已确认'
+			};
+			return statusMap[status] || '未知状态';
+		},
+		
+		// 获取订单状态文本
+		getStatusText(status) {
+			return orderService.getOrderStatusText(status);
+		},
+		
+		// 获取订单类型文本
+		getOrderTypeText(type) {
+			return orderService.getOrderTypeText(type);
+		},
+		
+		// 格式化时间
+		formatTime(timeStr) {
+			if (!timeStr) return '--';
+			if (typeof timeStr === 'number') {
+				const date = new Date(timeStr);
+				return date.toLocaleDateString();
+			}
+			return timeStr.split(' ')[0];
+		},
+		
+		// 格式化日期
+		formatDate(dateStr) {
+			if (!dateStr) return '--';
+			if (dateStr.includes('T')) {
+				return dateStr.split('T')[0];
+			}
+			return dateStr.split(' ')[0];
+		},
+		
+		// 统一的错误处理
+		handleApiError(error, defaultMessage = '操作失败') {
+			console.error('API Error:', error);
+			
+			let message = defaultMessage;
+			if (error && error.errMsg) {
+				message = error.errMsg;
+			} else if (error && error.message) {
+				message = error.message;
+			} else if (typeof error === 'string') {
+				message = error;
+			}
+			
+			uni.showToast({
+				title: message,
+				icon: 'none',
+				duration: 3000
+			});
+			
+			return message;
+		}
+	},
+	
+	onPullDownRefresh() {
+		this.onRefresh();
+		uni.stopPullDownRefresh();
+	}
+}
+</script>
 import { orderService, OrderStatus, OrderType } from '@/api/order.js'
 import { getDesignSchemeList } from '@/api/designScheme.js'
 import { getCurrentRole, getUserById } from '@/api/users.js'  // 修改这里：使用统一的 getUserById
