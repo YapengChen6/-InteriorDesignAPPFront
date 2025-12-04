@@ -264,6 +264,7 @@ import { processAvatarUrl } from '@/utils/avatarUtils.js'
 import { formatTime, getValidTimestamp } from '@/utils/timeUtils.js'
 import * as messageApi from '@/api/message_new.js'
 import { uploadFile } from '@/services/fileUploadService.js'
+import { getUserOnlineStatus } from '@/api/onlineStatus.js'
 
 export default {
   name: 'ChatDetail',
@@ -1330,18 +1331,31 @@ export default {
       if (!this.otherUserId) return
       
       try {
-        const res = await messageApi.getUserOnlineStatus(this.otherUserId)
+        console.log('🔍 检查用户在线状态:', this.otherUserId)
+        const res = await getUserOnlineStatus(this.otherUserId)
         if (res.code === 200 && res.data) {
           const wasOnline = this.chatUser.online
-          this.chatUser.online = res.data.online
+          this.chatUser.online = res.data.isOnline || false
           
           // 如果状态发生变化，记录日志
           if (wasOnline !== this.chatUser.online) {
             console.log(`👤 用户 ${this.otherUserId} 在线状态变更: ${wasOnline} -> ${this.chatUser.online}`)
           }
+          
+          console.log('✅ 在线状态检查完成:', {
+            userId: this.otherUserId,
+            isOnline: this.chatUser.online,
+            lastActiveTime: res.data.lastActiveTime
+          })
+        } else {
+          console.warn('⚠️ 在线状态API返回异常:', res)
+          // 如果API返回异常，默认设置为离线
+          this.chatUser.online = false
         }
       } catch (error) {
         console.error('❌ 检查用户在线状态失败:', error)
+        // 如果检查失败，默认设置为离线
+        this.chatUser.online = false
       }
     },
     

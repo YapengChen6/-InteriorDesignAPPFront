@@ -153,10 +153,7 @@
 			<text class="empty-desc" v-else>还没有可接单的项目</text>
 		</view>
 
-		<!-- 加载更多 -->
-		<view class="load-more" v-if="hasMore && !loading && filteredProjectList.length > 0">
-			<text class="load-more-text" @click="loadMore">加载更多</text>
-		</view>
+		<!-- 移除了加载更多部分 -->
 	</view>
 </template>
 
@@ -190,13 +187,7 @@ export default {
       // 选择器显示状态
       showBudgetPicker: false,
       
-      // 分页参数
-      queryParams: {
-        pageNum: 1,
-        pageSize: 10
-      },
-      total: 0,
-      hasMore: false,
+      // 移除了分页参数
       loading: false,
       
       // 项目列表
@@ -256,17 +247,12 @@ export default {
     this.loadProjectList()
   },
   onPullDownRefresh() {
-    this.queryParams.pageNum = 1
     this.userInfoCache.clear()
     this.loadProjectList().finally(() => {
       uni.stopPullDownRefresh()
     })
   },
-  onReachBottom() {
-    if (this.hasMore && !this.loading) {
-      this.loadMore()
-    }
-  },
+  // 移除了 onReachBottom 方法
   watch: {
     showBudgetPicker(val) {
       if (val) {
@@ -438,15 +424,12 @@ export default {
       this.selectedDate = e.detail.value;
     },
     
-    // 加载项目列表
+    // 加载项目列表（移除了分页逻辑）
     async loadProjectList() {
       this.loading = true
       try {
-        // 构建查询参数
-        const params = {
-          pageNum: this.queryParams.pageNum,
-          pageSize: this.queryParams.pageSize
-        }
+        // 构建查询参数 - 移除了分页参数
+        const params = {}
         
         // 添加筛选条件
         if (this.selectedLocation && this.selectedLocation.trim()) {
@@ -479,17 +462,10 @@ export default {
         console.log('✅ 过滤后的项目列表:', dataList)
         
         // 更新项目列表
-        if (this.queryParams.pageNum === 1) {
-          this.projectList = dataList
-        } else {
-          this.projectList = [...this.projectList, ...dataList]
-        }
+        this.projectList = dataList
         
         // 为每个项目加载用户信息
         await this.loadUserInfoForProjects(dataList)
-        
-        // 分页处理
-        this.hasMore = dataList.length >= this.queryParams.pageSize
         
       } catch (error) {
         console.error('❌ 加载项目列表失败:', error)
@@ -617,13 +593,7 @@ export default {
       }
     },
     
-    // 加载更多
-    loadMore() {
-      if (this.hasMore && !this.loading) {
-        this.queryParams.pageNum++
-        this.loadProjectList()
-      }
-    },
+    // 移除了 loadMore 方法
     
     // 选择预算
     selectBudget(budget) {
@@ -636,7 +606,6 @@ export default {
     // 搜索项目
     searchOrders() {
       if (!this.validateFilters()) return
-      this.queryParams.pageNum = 1
       this.userInfoCache.clear()
       this.loadProjectList()
     },
@@ -668,7 +637,6 @@ export default {
       this.selectedBudget = '';
       this.budgetMin = '';
       this.budgetMax = '';
-      this.queryParams.pageNum = 1
       this.userInfoCache.clear()
       this.loadProjectList();
     },
@@ -1197,22 +1165,6 @@ export default {
 	.empty-desc {
 		font-size: 14px;
 		color: #999;
-	}
-	
-	/* 加载更多 */
-	.load-more {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		padding: 20px;
-	}
-	
-	.load-more-text {
-		font-size: 14px;
-		color: #ff6b00;
-		padding: 8px 16px;
-		border: 1px solid #ff6b00;
-		border-radius: 16px;
 	}
 	
 	/* 响应式调整 */

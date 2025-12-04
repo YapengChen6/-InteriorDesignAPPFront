@@ -27,6 +27,27 @@
         class="supervisor-card"
         @click="goToSupervisorDetail(supervisor)"
       >
+        <!-- 头像区域 -->
+        <view class="avatar-wrapper">
+          <image
+            :src="supervisor.avatar || defaultAvatar"
+            mode="aspectFill"
+            class="avatar"
+            @error="onAvatarError"
+          ></image>
+          <!-- 在线状态指示器 -->
+          <OnlineStatusIndicator 
+            :isOnline="supervisor.isOnline || false"
+            :showText="false"
+            size="small"
+            class="online-status-overlay"
+          />
+          <!-- 评分徽章 -->
+          <view v-if="supervisor.ratingLevel && supervisor.rating > 4" class="rating-badge">
+            {{ supervisor.ratingLevel }}
+          </view>
+        </view>
+        
         <view class="supervisor-info">
           <view class="supervisor-name">{{ supervisor.name || '匿名监工' }}</view>
           <view class="supervisor-rating">
@@ -95,9 +116,13 @@ import { getSupervisorList, contactSupervisor } from '@/api/supervisorpublic'
 import { getUserProfile } from "@/api/users.js"
 import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
 import { getUserRatingDetail } from '@/api/rating' // 修改导入
+import { batchGetUserOnlineStatus } from "@/api/onlineStatus.js"
 
 export default {
   name: 'SupervisorList',
+  components: {
+    OnlineStatusIndicator: () => import('@/components/OnlineStatusIndicator.vue')
+  },
   data() {
     return {
       searchKeyword: '',
@@ -107,7 +132,10 @@ export default {
       defaultAvatar: '/static/default-avatar.png',
       currentUserInfo: null,
       isLoadingUser: false,
-      isFetchingRatings: false // 新增：防止重复请求评分
+      isFetchingRatings: false, // 新增：防止重复请求评分
+      onlineStatusCache: {}, // 在线状态缓存
+      onlineStatusCacheTime: null, // 缓存时间
+      CACHE_DURATION: 30000 // 缓存持续时间30秒
     }
   },
   
@@ -121,6 +149,17 @@ export default {
     // 先获取用户信息，再加载监理列表
     await this.getCurrentUserInfo();
     this.loadSupervisors();
+  },
+  
+  onShow() {
+    if (this.supervisors.length === 0) {
+      this.loadSupervisors();
+    } else {
+      // 如果缓存过期，刷新在线状态
+      if (!this.isOnlineStatusCacheValid()) {
+        this.loadSupervisorOnlineStatus();
+      }
+    }
   },
   
   methods: {
@@ -202,6 +241,9 @@ export default {
           
           // 批量获取监工评分
           await this.loadSupervisorRatings(supervisors)
+          
+          // 批量获取在线状态
+          await this.loadSupervisorOnlineStatus()
         } else {
           console.error('获取监工列表失败:', response.msg)
           this.supervisors = []
@@ -485,6 +527,146 @@ export default {
       // 5星制，计算百分比
       const percentage = (ratingValue / 5) * 100
       return `${percentage}%`
+    },
+    
+    // 加载监理在线状态
+    async loadSupervisorOnlineStatus() {
+      try {
+        // 检查缓存是否有效
+        if (this.isOnlineStatusCacheValid()) {
+          console.log('🔄 使用缓存的在线状态数据');
+          this.applyOnlineStatusFromCache();
+          return;
+        }
+        
+        // 提取监理ID
+        const supervisorIds = this.supervisors
+          .filter(supervisor => supervisor.userId)
+          .map(supervisor => supervisor.userId);
+        
+        console.log('🌐 需要获取在线状态的监理ID:', supervisorIds);
+        
+        if (supervisorIds.length === 0) {
+          console.warn('⚠️ 没有找到有效的监理ID');
+          return;
+        }
+        
+        // 批量获取在线状态
+        const onlineStatusResponse = await batchGetUserOnlineStatus(supervisorIds);
+        console.log('🌐 在线状态API响应:', onlineStatusResponse);
+        
+        if (onlineStatusResponse.code === 200) {
+          const onlineStatusMap = onlineStatusResponse.data || {};
+          console.log('📊 在线状态数据映射:', onlineStatusMap);
+          
+          // 更新缓存
+          this.onlineStatusCache = onlineStatusMap;
+          this.onlineStatusCacheTime = Date.now();
+          
+          // 将在线状态数据合并到监理数据中
+          this.supervisors = this.supervisors.map(supervisor => {
+            const userId = supervisor.userId;
+            const onlineInfo = onlineStatusMap[userId] || {};
+            
+            return {
+              ...supervisor,
+              isOnline: onlineInfo.isOnline || false,
+              lastActiveTime: onlineInfo.lastActiveTime || null
+            };
+          });
+          
+          console.log('✅ 在线状态数据已合并到监理列表');
+          
+        } else {
+          console.warn('⚠️ 获取在线状态失败，使用默认离线状态');
+          this.setAllSupervisorsOffline();
+        }
+        
+      } catch (error) {
+        console.error('❌ 获取在线状态数据错误:', error);
+        this.setAllSupervisorsOffline();
+      }
+    },
+    
+    // 检查在线状态缓存是否有效
+    isOnlineStatusCacheValid() {
+      if (!this.onlineStatusCacheTime || Object.keys(this.onlineStatusCache).length === 0) {
+        return false;
+      }
+      
+      const now = Date.now();
+      const cacheAge = now - this.onlineStatusCacheTime;
+      return cacheAge < this.CACHE_DURATION;
+    },
+    
+    // 从缓存应用在线状态
+    applyOnlineStatusFromCache() {
+      this.supervisors = this.supervisors.map(supervisor => {
+        const userId = supervisor.userId;
+        const onlineInfo = this.onlineStatusCache[userId] || {};
+        
+        return {
+          ...supervisor,
+          isOnline: onlineInfo.isOnline || false,
+          lastActiveTime: onlineInfo.lastActiveTime || null
+        };
+      });
+    },
+    
+    // 设置所有监理为离线状态
+    setAllSupervisorsOffline() {
+      this.supervisors = this.supervisors.map(supervisor => ({
+        ...supervisor,
+        isOnline: false,
+        lastActiveTime: null
+      }));
+    },
+    
+    // 刷新在线状态
+    async refreshOnlineStatus() {
+      console.log('🔄 刷新在线状态');
+      // 清除缓存，强制重新获取
+      this.onlineStatusCache = {};
+      this.onlineStatusCacheTime = null;
+      
+      await this.loadSupervisorOnlineStatus();
+      
+      uni.showToast({
+        title: '状态已更新',
+        icon: 'success',
+        duration: 1500
+      });
+    },
+    
+    // 头像加载失败
+    onAvatarError(e) {
+      console.error('头像加载失败:', e);
+      const img = e.target;
+      if (img) {
+        img.src = this.defaultAvatar;
+      }
+    },
+    
+    // 下拉刷新
+    onPullDownRefresh() {
+      console.log('🔄 下拉刷新');
+      // 清除在线状态缓存，确保获取最新状态
+      this.onlineStatusCache = {};
+      this.onlineStatusCacheTime = null;
+      
+      this.loadSupervisors().then(() => {
+        uni.stopPullDownRefresh();
+        uni.showToast({
+          title: '刷新成功',
+          icon: 'success'
+        });
+      });
+    },
+    
+    // 上拉加载更多
+    onReachBottom() {
+      console.log('⬇️ 上拉加载更多');
+      // 可以在这里实现分页加载逻辑
     }
   }
 }
@@ -562,7 +744,7 @@ export default {
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   cursor: pointer;
   transition: all 0.3s ease;
 }
@@ -572,8 +754,46 @@ export default {
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
 }
 
+/* 头像区域 */
+.avatar-wrapper {
+  position: relative;
+  margin-right: 25rpx;
+  flex-shrink: 0;
+}
+
+.avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  border: 4rpx solid #f0f0f0;
+  background: linear-gradient(135deg, #f5f7fa, #e4e7eb);
+}
+
+.online-status-overlay {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  z-index: 2;
+}
+
+.rating-badge {
+  position: absolute;
+  bottom: -8rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ffd700, #ffa500);
+  color: white;
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 2rpx 8rpx rgba(255, 165, 0, 0.3);
+}
+
 .supervisor-info {
   flex: 1;
+  min-width: 0;
 }
 
 .supervisor-name {
@@ -741,6 +961,16 @@ export default {
     flex-direction: column;
     align-items: flex-start;
     gap: 24rpx;
+  }
+  
+  .avatar-wrapper {
+    margin-right: 0;
+    margin-bottom: 20rpx;
+  }
+  
+  .avatar {
+    width: 100rpx;
+    height: 100rpx;
   }
   
   .supervisor-rating {
