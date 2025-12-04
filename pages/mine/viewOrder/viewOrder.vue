@@ -82,9 +82,9 @@
           <view class="order-info">
             <text class="order-no">订单号：{{ order.orderNo }}</text>
             <text class="order-time">{{ formatTime(order.createTime) }}</text>
-            <!-- 售后状态标签 -->
-            <view class="after-sale-tag" v-if="order.afterSaleStatus">
-              <text class="after-sale-text">{{ getAfterSaleStatusText(order.afterSaleStatus) }}</text>
+            <!-- 售后标签：如果有售后记录则显示 -->
+            <view class="after-sale-tag" v-if="order.hasAfterSale">
+              <text class="after-sale-text">有售后</text>
             </view>
           </view>
           <view :class="['status-pill', getStatusClass(order.orderStatus)]">
@@ -197,34 +197,20 @@ import * as afterSaleApi from '@/api/after-sale.js'
       }
     },
     async loadAfterSaleStatus() {
-      // 为每个订单加载售后状态
+      // 为每个订单检查是否有售后记录
       for (let order of this.orderList) {
         try {
           const afterSaleRes = await afterSaleApi.getAfterSaleList(order.orderId)
           if (afterSaleRes && afterSaleRes.code === 200 && afterSaleRes.data && afterSaleRes.data.length > 0) {
-            // 获取最新的售后申请状态
-            const latestAfterSale = afterSaleRes.data[0]
-            order.afterSaleStatus = latestAfterSale.status
-            order.afterSaleType = latestAfterSale.type
+            order.hasAfterSale = true
           } else {
-            order.afterSaleStatus = null
+            order.hasAfterSale = false
           }
         } catch (error) {
-          console.error(`加载订单 ${order.orderId} 售后状态失败:`, error)
-          order.afterSaleStatus = null
+          console.error(`加载订单 ${order.orderId} 售后记录失败:`, error)
+          order.hasAfterSale = false
         }
       }
-    },
-    getAfterSaleStatusText(status) {
-      const statusMap = {
-        PENDING: '售后处理中',
-        APPROVED: '售后已同意',
-        REJECTED: '售后已拒绝',
-        PROCESSING: '售后处理中',
-        COMPLETED: '售后已完成',
-        CANCELLED: '售后已取消'
-      }
-      return statusMap[status] || '售后中'
     },
     viewAfterSale(orderId) {
       uni.navigateTo({
