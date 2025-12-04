@@ -232,6 +232,13 @@ const SCHEME_TYPE = {
 	CONSTRUCTION_DRAWING: "2"
 }
 
+// 方案状态常量
+const SCHEME_STATUS = {
+	PENDING: "1",    // 待确认
+	CONFIRMED: "2",  // 已确认
+	COMPLETED: "3"   // 已完成
+}
+
 export default {
 	data() {
 		return {
@@ -349,12 +356,20 @@ export default {
 				return;
 			}
 			
-			console.log('📋 查看订单详情，订单ID:', orderId, '订单状态:', order.status);
+			console.log('📋 查看订单详情，订单ID:', orderId, '订单状态:', order.status, '订单类型:', order.type);
 			
-			// 设计师查看订单详情
-			uni.navigateTo({
-				url: `/pages/order-hall/order-detail?id=${orderId}`
-			});
+			// 已完成订单（status=2）跳转到已完成订单详情页
+			if (order.status === 2) {
+				console.log('✅ 跳转到已完成订单详情页面');
+				uni.navigateTo({
+					url: `/pages/finishedorder-detail/finishedorder-detail?orderId=${orderId}&userId=${order.userId}&orderType=${order.type}`
+				});
+			} else {
+				// 其他状态订单保持原跳转逻辑
+				uni.navigateTo({
+					url: `/pages/order-hall/order-detail?id=${orderId}`
+				});
+			}
 		},
 
 		// 统一的错误处理方法

@@ -239,12 +239,6 @@
     }
   },
   {
-    "path": "pages/shop/cart",
-    "style": {
-      "navigationBarTitleText": "购物车"
-    }
-  },
-  {
     "path": "pages/shop/checkout",
     "style": {
       "navigationBarTitleText": "结算页面"
@@ -272,12 +266,7 @@
     "style": {
       "navigationBarTitleText": "商家详情"
     }
-  }, {
-    "path": "pages/shop/manage",
-    "style": {
-      "navigationBarTitleText": "店铺管理"
-    }
-  },
+  }, 
   {
     "path": "pages/post/order",
     "style": {
@@ -446,6 +435,13 @@
   	"style" : 
   	{
   		"navigationBarTitleText" : "关注页面"
+  	}
+  },
+  {
+  	"path" : "pages/order-hall/orderstage-detail",
+  	"style" : 
+  	{
+  		"navigationBarTitleText" : "监理订单阶段日志上传页面"
   	}
   }
   ],
