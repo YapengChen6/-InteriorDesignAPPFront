@@ -45,23 +45,24 @@
                   <view class="stage-number">{{ stage.sequence }}</view>
                   <view class="stage-info">
                     <text class="stage-name">{{ stage.name }}</text>
-                    <!-- 修改：使用计算属性 -->
+                    <!-- 修改：使用数据中的预计算属性 -->
                     <view class="stage-status" :class="stage.statusClass">
-                      {{ getStatusText(stage.status) }}
+                      {{ stage.statusText }}
                     </view>
                   </view>
                 </view>
                 
-                <!-- 操作按钮区域 - 只保留待验收阶段的确认按钮 -->
+                <!-- 操作按钮区域 - 所有阶段都显示验收按钮 -->
                 <view class="stage-actions-right">
-                  <!-- 待验收阶段的确认按钮 -->
+                  <!-- 所有可验收的阶段（状态0-3）都显示验收按钮 -->
                   <button 
-                    v-if="stage.status === 3" 
+                    v-if="stage.status >= 0 && stage.status <= 3" 
                     class="btn-inspect"
+                    :class="stage.inspectBtnClass"
                     @tap.stop="completeStage(stage)"
                   >
-                    <text class="iconfont icon-check">✓</text>
-                    <text class="btn-text">确认验收</text>
+                    <text class="iconfont" :class="stage.inspectIconClass">{{ stage.inspectIconText }}</text>
+                    <text class="btn-text">{{ stage.inspectBtnText }}</text>
                   </button>
                   
                   <!-- 已完成的阶段 -->
@@ -70,8 +71,11 @@
                     <text class="badge-text">已验收</text>
                   </view>
                   
-                  <!-- 其他状态占位 -->
-                  <view v-else class="status-placeholder"></view>
+                  <!-- 已取消的阶段 -->
+                  <view v-else-if="stage.status === 5" class="cancelled-badge">
+                    <text class="iconfont icon-cancelled">✗</text>
+                    <text class="badge-text">已取消</text>
+                  </view>
                 </view>
               </view>
 
@@ -246,12 +250,7 @@ export default {
 
   computed: {
     sortedStages() {
-      return [...this.stages].sort((a, b) => a.sequence - b.sequence).map(stage => {
-        return {
-          ...stage,
-          statusClass: this.getStatusClass(stage.status)
-        }
-      })
+      return [...this.stages].sort((a, b) => a.sequence - b.sequence)
     },
     currentStageName() {
       return this.currentStage ? this.currentStage.name : ''
@@ -287,15 +286,23 @@ export default {
         
         this.stages = await Promise.all(
           rawData.map(async (item) => {
+            const status = Number(item.status) || 0
+            
             const stageData = {
               ...item,
               sequence: Number(item.sequence) || 0,
-              status: Number(item.status) || 0,
+              status: status,
               name: item.name || '',
               description: item.description || '',
               expanded: false,
               recentLogs: [],
-              statusClass: this.getStatusClass(Number(item.status) || 0),
+              // 预计算所有显示相关的属性
+              statusClass: this.getStatusClass(status),
+              statusText: this.getStatusText(status),
+              inspectBtnClass: this.getInspectBtnClass(status),
+              inspectBtnText: this.getInspectBtnText(status),
+              inspectIconClass: this.getInspectIcon(status),
+              inspectIconText: this.getInspectIconText(status),
               creatorInfo: creatorMap[item.createBy] || null
             }
 
@@ -395,9 +402,27 @@ export default {
     },
 
     async completeStage(stage) {
+      let confirmTitle = '确认验收'
+      let confirmContent = `确定要完成"${stage.name}"阶段的验收吗？`
+      
+      // 根据阶段状态显示不同的提示信息
+      if (stage.status === 0) {
+        confirmTitle = '确认验收'
+        confirmContent = `"${stage.name}"阶段尚未确认，确定要直接验收吗？`
+      } else if (stage.status === 1) {
+        confirmTitle = '确认验收'
+        confirmContent = `"${stage.name}"阶段尚未开始施工，确定要直接验收吗？`
+      } else if (stage.status === 2) {
+        confirmTitle = '提前验收'
+        confirmContent = `"${stage.name}"阶段仍在进行中，确定要提前验收吗？`
+      } else if (stage.status === 3) {
+        confirmTitle = '确认验收'
+        confirmContent = `确定要完成"${stage.name}"阶段的验收吗？`
+      }
+      
       uni.showModal({
-        title: '确认验收',
-        content: `确定要完成"${stage.name}"阶段的验收吗？`,
+        title: confirmTitle,
+        content: confirmContent,
         success: async (res) => {
           if (res.confirm) {
             this.loading = true
@@ -500,6 +525,50 @@ export default {
       return classMap[status] || 'status-unknown'
     },
 
+    // 获取验收按钮文本
+    getInspectBtnText(status) {
+      const textMap = {
+        0: '直接验收',
+        1: '开始并验收',
+        2: '提前验收',
+        3: '确认验收'
+      }
+      return textMap[status] || '验收'
+    },
+    
+    // 获取验收按钮样式类
+    getInspectBtnClass(status) {
+      const classMap = {
+        0: 'btn-inspect-pending',
+        1: 'btn-inspect-confirmed',
+        2: 'btn-inspect-progress',
+        3: 'btn-inspect-waiting'
+      }
+      return classMap[status] || 'btn-inspect-default'
+    },
+    
+    // 获取验收按钮图标
+    getInspectIcon(status) {
+      const iconMap = {
+        0: 'icon-fast-check',
+        1: 'icon-play-check',
+        2: 'icon-early-check',
+        3: 'icon-check'
+      }
+      return iconMap[status] || 'icon-check'
+    },
+    
+    // 获取验收按钮图标文本
+    getInspectIconText(status) {
+      const iconTextMap = {
+        0: '⚡',
+        1: '▶',
+        2: '⏱️',
+        3: '✓'
+      }
+      return iconTextMap[status] || '✓'
+    },
+
     formatDate(dateString) {
       if (!dateString) return ''
       try {
@@ -516,6 +585,7 @@ export default {
   }
 }
 </script>
+
 <style lang="scss" scoped>
 /* 注意：小程序中不使用 :deep() 选择器，如需覆盖子组件样式，请使用其他方法 */
 
@@ -642,8 +712,8 @@ export default {
     align-items: center;
     gap: 10rpx;
     
-    /* 确认验收按钮样式 */
-    .btn-inspect {
+    /* 验收按钮基础样式 */
+    button {
       min-width: 160rpx;
       height: 60rpx;
       border: none;
@@ -655,14 +725,44 @@ export default {
       font-size: 26rpx;
       font-weight: 600;
       padding: 0 24rpx;
-      background: linear-gradient(135deg, #ff9800, #f57c00);
       color: white;
       
       .iconfont {
         font-size: 24rpx;
       }
+      
+      &:active {
+        opacity: 0.8;
+        transform: scale(0.98);
+      }
     }
     
+    /* 待确认阶段的验收按钮 */
+    .btn-inspect-pending {
+      background: linear-gradient(135deg, #9e9e9e, #757575);
+    }
+    
+    /* 已确认阶段的验收按钮 */
+    .btn-inspect-confirmed {
+      background: linear-gradient(135deg, #4caf50, #2e7d32);
+    }
+    
+    /* 进行中阶段的验收按钮 */
+    .btn-inspect-progress {
+      background: linear-gradient(135deg, #2196f3, #0d47a1);
+    }
+    
+    /* 待验收阶段的验收按钮 */
+    .btn-inspect-waiting {
+      background: linear-gradient(135deg, #ff9800, #f57c00);
+    }
+    
+    /* 默认验收按钮样式 */
+    .btn-inspect-default {
+      background: linear-gradient(135deg, #2c6aa0, #1a4a7a);
+    }
+    
+    /* 已完成的阶段 */
     .completed-badge {
       min-width: 120rpx;
       height: 60rpx;
@@ -686,9 +786,28 @@ export default {
       }
     }
     
-    .status-placeholder {
-      width: 120rpx;
+    /* 已取消的阶段 */
+    .cancelled-badge {
+      min-width: 120rpx;
       height: 60rpx;
+      border-radius: 30rpx;
+      background: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8rpx;
+      padding: 0 20rpx;
+      
+      .iconfont {
+        color: #9e9e9e;
+        font-size: 24rpx;
+      }
+      
+      .badge-text {
+        color: #9e9e9e;
+        font-size: 24rpx;
+        font-weight: 500;
+      }
     }
   }
 }
