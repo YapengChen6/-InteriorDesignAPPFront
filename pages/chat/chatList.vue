@@ -99,8 +99,10 @@
             <view class="name-row">
               <text class="chat-name">{{ chat.name }}</text>
               <!-- 角色标签: 根据 userRole 显示不同颜色 -->
-              <view v-if="chat.userRole === 2" class="role-tag designer">设计师</view>
-              <view v-if="chat.userRole === 3" class="role-tag supervisor">监理</view>
+              <view v-if="chat.userRole === 2" class="role-tag designer">{{ chat.userRoleText || '设计师' }}</view>
+              <view v-if="chat.userRole === 3" class="role-tag supervisor">{{ chat.userRoleText || '监理' }}</view>
+              <view v-if="chat.userRole === 4" class="role-tag material-supplier">{{ chat.userRoleText || '材料商' }}</view>
+              <view v-if="chat.userRole === 5" class="role-tag admin">{{ chat.userRoleText || '管理员' }}</view>
             </view>
             <text class="chat-time">{{ formatTime(chat.lastMessageTime) }}</text>
           </view>
@@ -149,9 +151,8 @@ import { processAvatarUrl } from '@/utils/avatarUtils.js'
 import { formatTime } from '@/utils/timeUtils.js'
 import { updateCategoryCount, filterChatsByCategory } from '@/utils/chatDataUtils.js'
 import { searchUsers, getRoleSwitchInfo } from '@/api/users.js'
-import { getConversationList, createOrGetConversation } from '@/api/conversation.js'
-import { getUnreadCount } from '@/api/message_new.js'
-import { batchGetUserOnlineStatus } from '@/api/onlineStatus.js'
+import { getConversationList, createOrGetConversation, getUserInfo } from '@/api/conversation.js'
+import { getUnreadCount, getUserOnlineStatus } from '@/api/message_new.js'
 import OnlineStatusIndicator from '@/components/OnlineStatusIndicator.vue'
 
 export default {
@@ -390,7 +391,7 @@ export default {
       }
     },
     
-    // --- 核心：处理单条会话 (直接使用后端返回的对方用户信息) ---
+    // --- 核心：处理单条会话 (获取最新的用户信息和角色) ---
     async processConversation(conv) {
       try {
         
@@ -414,11 +415,62 @@ export default {
           return null
         }
         
-        const otherUserName = conv.otherUserName || conv.name || `用户${otherUserId}`
-        const otherUserAvatar = conv.otherUserAvatar ? 
+        // 获取对方用户的最新信息（包括角色）
+        let otherUserName = conv.otherUserName || conv.name || `用户${otherUserId}`
+        let otherUserAvatar = conv.otherUserAvatar ? 
           processAvatarUrl(conv.otherUserAvatar, '/static/images/default-avatar.png') : 
           '/static/images/default-avatar.png'
-        const otherUserRole = conv.otherUserRole || 1
+        let otherUserRole = '用户'
+        let otherUserRoleKey = 'user'
+        
+        try {
+          // 调用getUserInfo API获取最新的用户信息和角色
+          const userInfoRes = await getUserInfo(otherUserId)
+          
+          if (userInfoRes.code === 200 && userInfoRes.data) {
+            const userInfo = userInfoRes.data
+            
+            // 更新用户基本信息
+            otherUserName = userInfo.nickName || userInfo.name || userInfo.userName || otherUserName
+            if (userInfo.avatar) {
+              otherUserAvatar = processAvatarUrl(userInfo.avatar, '/static/images/default-avatar.png')
+            }
+            
+            // 更新用户角色信息（使用与chatDetail相同的映射逻辑）
+            if (userInfo.primaryRole) {
+              const roleKeyMapping = {
+                'user': '用户',
+                'designer': '设计师',
+                'supervisor': '监理', 
+                'material_supplier': '材料商',
+                'admin': '管理员'
+              }
+              
+              const roleMapping = {
+                '用户': '用户',
+                '设计师': '设计师', 
+                '监理': '监理',
+                '材料商': '材料商',
+                '管理员': '管理员'
+              }
+              
+              otherUserRole = roleKeyMapping[userInfo.primaryRoleKey] || 
+                             roleMapping[userInfo.primaryRole] || 
+                             userInfo.primaryRole || '用户'
+              otherUserRoleKey = userInfo.primaryRoleKey || 'user'
+              
+              console.log('👤 获取到用户角色信息:', {
+                userId: otherUserId,
+                originalRole: userInfo.primaryRole,
+                originalRoleKey: userInfo.primaryRoleKey,
+                mappedRole: otherUserRole,
+                roleKey: otherUserRoleKey
+              })
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ 获取用户详细信息失败，使用默认信息:', error)
+        }
         
         const processedConv = {
           id: conv.conversationId,
@@ -428,19 +480,31 @@ export default {
           lastMessage: conv.lastMessage || '暂无消息',
           lastMessageTime: conv.lastMessageTime || conv.createTime,
           unreadCount: conv.unreadCount ? parseInt(conv.unreadCount) : 0, 
-          userRole: otherUserRole,
+          userRole: this.mapRoleToNumber(otherUserRoleKey), // 转换为数字用于UI显示
+          userRoleText: otherUserRole, // 保存文本角色
+          userRoleKey: otherUserRoleKey, // 保存角色Key
           userId1: conv.userId1,
           userId2: conv.userId2,
           otherUserId: otherUserId,
         }
-        
-
         
         return processedConv
       } catch (error) {
         console.error('❌ 处理单条会话出错:', error, conv)
         return null
       }
+    },
+    
+    // 将角色Key映射为数字（用于UI显示逻辑）
+    mapRoleToNumber(roleKey) {
+      const roleMap = {
+        'user': 1,
+        'designer': 2,
+        'supervisor': 3,
+        'material_supplier': 4,
+        'admin': 5
+      }
+      return roleMap[roleKey] || 1
     },
     
     // --- 交互逻辑 ---
@@ -466,8 +530,26 @@ export default {
     },
     
     openChat(chat) {
+      console.log('🔗 点击聊天项，准备跳转:', {
+        chat: chat,
+        conversationId: chat.conversationId,
+        otherUserId: chat.otherUserId,
+        name: chat.name,
+        avatar: chat.avatar
+      })
+      
       const url = `/pages/chat/chatDetail?conversationId=${chat.conversationId}&otherUserId=${chat.otherUserId}&name=${encodeURIComponent(chat.name)}&avatar=${encodeURIComponent(chat.avatar)}`
-      uni.navigateTo({ url })
+      console.log('🔗 跳转URL:', url)
+      
+      uni.navigateTo({ 
+        url,
+        success: () => {
+          console.log('✅ 页面跳转成功')
+        },
+        fail: (error) => {
+          console.error('❌ 页面跳转失败:', error)
+        }
+      })
     },
     
     formatTime(time) {
@@ -504,16 +586,42 @@ export default {
         
         console.log('📊 批量查询在线状态，用户数量:', otherUserIds.length)
         
-        // 批量查询在线状态
-        const response = await batchGetUserOnlineStatus(otherUserIds)
+        // 使用与chatDetail相同的在线状态API
         
-        if (response.code === 200 && response.data) {
-          // 更新在线状态映射
-          this.onlineStatusMap = { ...this.onlineStatusMap, ...response.data }
-          console.log('✅ 在线状态加载完成')
-        } else {
-          console.warn('⚠️ 在线状态查询返回异常:', response)
-        }
+        // 并行查询所有用户的在线状态
+        const statusPromises = otherUserIds.map(async (userId) => {
+          try {
+            const res = await getUserOnlineStatus(userId)
+            if (res.code === 200 && res.data) {
+              return {
+                userId: userId,
+                isOnline: res.data.isOnline || res.data.online || false,
+                lastActiveTime: res.data.lastActiveTime
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ 查询用户在线状态失败:', userId, error)
+          }
+          return {
+            userId: userId,
+            isOnline: false
+          }
+        })
+        
+        const statusResults = await Promise.all(statusPromises)
+        
+        // 更新在线状态映射
+        const newStatusMap = {}
+        statusResults.forEach(result => {
+          newStatusMap[result.userId] = {
+            isOnline: result.isOnline,
+            lastActiveTime: result.lastActiveTime
+          }
+        })
+        
+        this.onlineStatusMap = { ...this.onlineStatusMap, ...newStatusMap }
+        console.log('✅ 在线状态加载完成:', this.onlineStatusMap)
+        
       } catch (error) {
         console.error('❌ 加载在线状态失败:', error)
         // 失败时不影响聊天列表的正常显示
@@ -619,15 +727,16 @@ page {
   background-color: #fff;
   z-index: 100;
   box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.02);
+  padding-top: 88rpx; /* 状态栏高度 + 额外间距 */
 }
 
 /* 占位符，高度根据 fixed-header 的实际内容调整 */
 .header-placeholder {
-  height: 290rpx; 
+  height: 380rpx; 
 }
 
 .header {
-  padding: 0 32rpx;
+  padding: 20rpx 32rpx;
   height: 88rpx;
   display: flex;
   align-items: center;
@@ -874,6 +983,16 @@ page {
 .role-tag.supervisor {
   background-color: rgba(255, 149, 0, 0.1);
   color: #FF9500;
+}
+
+.role-tag.material-supplier {
+  background-color: rgba(52, 199, 89, 0.1);
+  color: #34C759;
+}
+
+.role-tag.admin {
+  background-color: rgba(255, 59, 48, 0.1);
+  color: #FF3B30;
 }
 
 .chat-time {

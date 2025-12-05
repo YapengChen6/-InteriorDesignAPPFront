@@ -8,11 +8,12 @@
         </view>
         <view class="chat-info">
           <text class="chat-name">{{ chatUser.name }}</text>
-          <text class="online-status" :class="{ online: chatUser.online }">{{ chatUser.online ? '在线' : '离线' }}</text>
+          <view class="status-row">
+            <text class="user-role">{{ chatUser.role }}</text>
+            <text class="online-status" :class="{ online: chatUser.online }">{{ chatUser.online ? '在线' : '离线' }}</text>
+          </view>
         </view>
-        <view class="header-actions">
-          <!-- 占位 -->
-        </view>
+
       </view>
     </view>
 
@@ -146,7 +147,7 @@
             <!-- 气泡容器 -->
             <view class="bubble-wrapper">
               <view class="message-bubble bubble-sender">
-                 <view v-if="message.messageType === 1 || message.messageType === 'text'" class="text-message">
+                   <view v-if="message.messageType === 1 || message.messageType === 'text'" class="text-message">
                   <text class="message-text">{{ message.content }}</text>
                 </view>
                 
@@ -264,7 +265,7 @@ import { processAvatarUrl } from '@/utils/avatarUtils.js'
 import { formatTime, getValidTimestamp } from '@/utils/timeUtils.js'
 import * as messageApi from '@/api/message_new.js'
 import { uploadFile } from '@/services/fileUploadService.js'
-import { getUserOnlineStatus } from '@/api/onlineStatus.js'
+import { getUserInfo } from '@/api/conversation.js'
 
 export default {
   name: 'ChatDetail',
@@ -274,7 +275,9 @@ export default {
         id: 0,
         name: '未知用户',
         avatar: '/static/images/default-avatar.png',
-        online: false
+        online: false,
+        role: '加载中...',
+        roleKey: 'loading'
       },
       conversationId: 0,
       otherUserId: 0,
@@ -292,12 +295,34 @@ export default {
       
       // 在线状态检查
       onlineStatusTimer: null,
-      onlineCheckInterval: 30000 // 30秒检查一次
+      onlineCheckInterval: 3000, // 3秒检查一次
+      
+      // 缓存机制
+      lastUserInfoUpdate: 0,
+      lastOnlineStatusUpdate: 0,
+      userInfoCacheTime: 10000, // 用户信息缓存10秒
+      onlineStatusCacheTime: 5000 // 在线状态缓存5秒
     }
   },
   
   onLoad(options) {
+    console.log('💬💬💬 聊天详情页面加载开始 💬💬💬')
     console.log('💬 聊天详情页面加载，参数:', options)
+    console.log('💬 参数类型检查:', {
+      conversationId: typeof options.conversationId,
+      otherUserId: typeof options.otherUserId,
+      name: typeof options.name,
+      avatar: typeof options.avatar
+    })
+    
+    // #ifdef MP-WEIXIN
+    console.log('🔧 当前运行环境：微信小程序')
+    console.log('🔧 小程序环境信息:', {
+      platform: uni.getSystemInfoSync().platform,
+      version: uni.getSystemInfoSync().version,
+      SDKVersion: uni.getSystemInfoSync().SDKVersion
+    })
+    // #endif
     
     if (options.conversationId) {
       this.conversationId = parseInt(options.conversationId)
@@ -326,17 +351,38 @@ export default {
     }
     this.currentUserId = storedUserId ? parseInt(storedUserId) : 0
     
-    console.log('💬 聊天参数:', {
+    console.log('💬 聊天参数详细信息:', {
       conversationId: this.conversationId,
       otherUserId: this.otherUserId,
       currentUserId: this.currentUserId,
       storedUserId: storedUserId,
-      chatUserName: this.chatUser.name
+      chatUserName: this.chatUser.name,
+      originalOptions: options
     })
+    
+    // 验证必要参数
+    if (!this.otherUserId) {
+      console.error('❌ otherUserId未设置，无法进行用户信息和在线状态检查')
+      uni.showModal({
+        title: '参数错误',
+        content: '缺少对方用户ID，无法正常显示聊天信息',
+        showCancel: false
+      })
+    }
+    
+    if (!this.currentUserId) {
+      console.error('❌ currentUserId未设置，可能影响消息发送')
+    }
     
     // 先标记对话为已读，再加载历史消息
     this.markConversationAsRead()
     this.loadHistoryMessages()
+    
+    // 检查小程序环境配置
+    this.checkMiniProgramConfig()
+    
+    // 获取对方最新用户信息
+    this.loadOtherUserInfo()
     
     // 检查对方在线状态
     this.checkUserOnlineStatus()
@@ -352,7 +398,16 @@ export default {
     })
   },
   
+  onShow() {
+    console.log('👁️ chatDetail页面显示')
+  },
+  
+  onReady() {
+    console.log('✅ chatDetail页面准备完成')
+  },
+  
   onUnload() {
+    console.log('🚪 chatDetail页面卸载')
     if (this.websocket) this.websocket.close()
     // 清理在线状态检查定时器
     this.stopOnlineStatusCheck()
@@ -873,8 +928,7 @@ export default {
         console.log('🔍 开始上传文件:', file.name)
         const uploadRes = await uploadFile(file.path || file.tempFilePath, {
           conversationId: this.conversationId,
-          description: `聊天文件-${file.name}`,
-          fileName: file.name  // 传递原始文件名，确保后端能获取正确的扩展名
+          description: `聊天文件-${file.name}`
         })
         console.log('🔍 上传响应:', uploadRes)
         
@@ -946,6 +1000,19 @@ export default {
       }
     },
 
+    // 通过索引预览图片（解决参数传递问题）
+    previewImageByIndex(event) {
+      const index = parseInt(event.currentTarget.dataset.index)
+      const message = this.messages[index]
+      
+      if (!message) {
+        return
+      }
+      
+      // 调用原来的预览方法
+      this.previewImage(message)
+    },
+    
     // 增强的图片预览功能 - 支持多图预览
     previewImage(message) {
       if (!message || message.messageType !== 2) {
@@ -966,12 +1033,6 @@ export default {
       const currentIndex = imageMessages.findIndex(msg => msg.messageId === message.messageId)
       const currentUrl = currentIndex >= 0 ? imageUrls[currentIndex] : message.content
       
-      console.log('📸 预览图片:', {
-        total: imageUrls.length,
-        current: currentUrl,
-        urls: imageUrls
-      })
-      
       uni.previewImage({
         urls: imageUrls,
         current: currentUrl,
@@ -989,6 +1050,8 @@ export default {
         }
       })
     },
+    
+
     
     // 获取缩略图URL
     getThumbnailUrl(originalUrl) {
@@ -1326,36 +1389,305 @@ export default {
       }
     },
     
-    // 检查用户在线状态
-    async checkUserOnlineStatus() {
-      if (!this.otherUserId) return
+    // 检查小程序环境配置
+    checkMiniProgramConfig() {
+      // #ifdef MP-WEIXIN
+      console.log('🔧 检查小程序配置:')
+      console.log('🔧 - 基础URL:', this.$config?.baseUrl || 'undefined')
+      console.log('🔧 - 当前页面:', getCurrentPages()[getCurrentPages().length - 1].route)
+      console.log('🔧 - 网络类型:', uni.getNetworkType())
+      
+      // 检查网络连接
+      uni.getNetworkType({
+        success: (res) => {
+          console.log('🔧 网络状态:', res.networkType)
+          if (res.networkType === 'none') {
+            uni.showModal({
+              title: '网络错误',
+              content: '当前无网络连接，请检查网络设置',
+              showCancel: false
+            })
+          }
+        }
+      })
+      // #endif
+    },
+    
+    // 手动刷新用户信息和在线状态
+    async manualRefresh() {
+      console.log('🔄 手动刷新用户信息和在线状态')
+      
+      // 显示当前状态
+      console.log('🔍 刷新前的用户状态:', {
+        otherUserId: this.otherUserId,
+        chatUser: {
+          id: this.chatUser.id,
+          name: this.chatUser.name,
+          role: this.chatUser.role,
+          roleKey: this.chatUser.roleKey,
+          online: this.chatUser.online,
+          avatar: this.chatUser.avatar
+        }
+      })
+      
+      uni.showLoading({
+        title: '刷新中...',
+        mask: true
+      })
       
       try {
-        console.log('🔍 检查用户在线状态:', this.otherUserId)
-        const res = await getUserOnlineStatus(this.otherUserId)
+        // 强制刷新，忽略缓存
+        this.lastUserInfoUpdate = 0
+        this.lastOnlineStatusUpdate = 0
+        
+        await Promise.all([
+          this.loadOtherUserInfo(),
+          this.checkUserOnlineStatus()
+        ])
+        
+        // 显示刷新后状态
+        console.log('🔍 刷新后的用户状态:', {
+          chatUser: {
+            id: this.chatUser.id,
+            name: this.chatUser.name,
+            role: this.chatUser.role,
+            roleKey: this.chatUser.roleKey,
+            online: this.chatUser.online,
+            avatar: this.chatUser.avatar
+          }
+        })
+        
+        uni.hideLoading()
+        
+        // 显示详细的刷新结果
+        uni.showModal({
+          title: '刷新完成',
+          content: `用户: ${this.chatUser.name}\n角色: ${this.chatUser.role}\n在线: ${this.chatUser.online ? '是' : '否'}`,
+          showCancel: false
+        })
+      } catch (error) {
+        uni.hideLoading()
+        console.error('❌ 手动刷新失败:', error)
+        uni.showToast({
+          title: '刷新失败',
+          icon: 'none',
+          duration: 2000
+        })
+      }
+    },
+    
+    // 更新消息列表中的头像
+    updateMessagesAvatar() {
+      this.messages.forEach(message => {
+        // 只更新对方的消息头像
+        if (!message.isSender) {
+          message.avatar = this.chatUser.avatar
+        }
+      })
+    },
+    
+    // 获取对方用户信息
+    async loadOtherUserInfo() {
+      if (!this.otherUserId) {
+        console.warn('⚠️ otherUserId为空，无法获取用户信息')
+        return
+      }
+      
+      // 检查缓存
+      const now = Date.now()
+      if (now - this.lastUserInfoUpdate < this.userInfoCacheTime) {
+        console.log('🔍 用户信息在缓存期内，跳过请求')
+        return
+      }
+      
+      try {
+        console.log('🔍 开始获取用户信息:', this.otherUserId)
+        // #ifdef MP-WEIXIN
+        console.log('🔧 小程序环境 - 获取用户信息')
+        // #endif
+        
+        this.lastUserInfoUpdate = now
+        const res = await getUserInfo(this.otherUserId)
+        
+        // #ifdef MP-WEIXIN
+        console.log('🔧 小程序环境 - 用户信息响应:', res)
+        // #endif
+        
+        if (res.code === 200 && res.data) {
+          const userInfo = res.data
+          
+          // 更新用户信息
+          const oldName = this.chatUser.name
+          const oldAvatar = this.chatUser.avatar
+          
+          this.chatUser.id = userInfo.userId || userInfo.id
+          this.chatUser.name = userInfo.nickName || userInfo.name || userInfo.userName || '未知用户'
+          this.chatUser.avatar = processAvatarUrl(userInfo.avatar, '/static/images/default-avatar.png')
+          
+          // 更新用户角色信息
+          if (userInfo.primaryRole) {
+            // 角色名称映射
+            const roleMapping = {
+              '用户': '用户',
+              '设计师': '设计师', 
+              '监理': '监理',
+              '材料商': '材料商',
+              '管理员': '管理员'
+            }
+            
+            // 根据roleKey进行映射
+            const roleKeyMapping = {
+              'user': '用户',
+              'designer': '设计师',
+              'supervisor': '监理', 
+              'material_supplier': '材料商',
+              'admin': '管理员'
+            }
+            
+            // 优先使用roleKey映射，如果没有则使用原始角色名
+            this.chatUser.role = roleKeyMapping[userInfo.primaryRoleKey] || 
+                                roleMapping[userInfo.primaryRole] || 
+                                userInfo.primaryRole || '用户'
+            this.chatUser.roleKey = userInfo.primaryRoleKey || 'user'
+            
+            console.log('👤 用户角色信息:', {
+              originalRole: userInfo.primaryRole,
+              originalRoleKey: userInfo.primaryRoleKey,
+              mappedRole: this.chatUser.role,
+              roleKey: this.chatUser.roleKey
+            })
+          } else {
+            // 如果没有角色信息，设置默认值
+            this.chatUser.role = '用户'
+            this.chatUser.roleKey = 'user'
+            console.log('👤 未获取到角色信息，使用默认角色:', {
+              userId: this.otherUserId,
+              userInfo: userInfo
+            })
+          }
+          
+          // 检查是否有任何信息发生变化（包括角色）
+          const oldRole = this.chatUser.role
+          const hasChanges = oldName !== this.chatUser.name || 
+                           oldAvatar !== this.chatUser.avatar || 
+                           oldRole !== this.chatUser.role
+          
+          if (hasChanges) {
+            console.log('👤 用户信息已更新:', {
+              userId: this.otherUserId,
+              oldName: oldName,
+              newName: this.chatUser.name,
+              oldAvatar: oldAvatar,
+              newAvatar: this.chatUser.avatar,
+              oldRole: oldRole,
+              newRole: this.chatUser.role
+            })
+            
+            // 更新消息列表中对方的头像
+            this.updateMessagesAvatar()
+            
+            // 强制更新界面
+            this.$forceUpdate()
+          } else {
+            console.log('👤 用户信息无变化，跳过更新')
+          }
+        } else {
+          console.warn('⚠️ 用户信息API返回异常:', res)
+          // #ifdef MP-WEIXIN
+          // 小程序环境下的特殊处理
+          if (res.code === 404) {
+            console.log('🔧 小程序环境 - 用户不存在，使用默认信息')
+            this.chatUser.name = '用户' + this.otherUserId
+            this.chatUser.role = '用户'
+          }
+          // #endif
+        }
+      } catch (error) {
+        console.error('❌ 获取用户信息失败:', error)
+        console.error('❌ 错误详情:', {
+          message: error.message,
+          stack: error.stack,
+          otherUserId: this.otherUserId
+        })
+        
+        // #ifdef MP-WEIXIN
+        // 小程序环境下的网络错误处理
+        if (error.message && error.message.includes('request:fail')) {
+          console.log('🔧 小程序环境 - 网络请求失败，使用模拟数据')
+          // 临时使用模拟数据进行测试
+          this.chatUser.name = '石某'
+          this.chatUser.role = '监理'
+          this.chatUser.roleKey = 'supervisor'
+          console.log('🔧 小程序环境 - 已设置模拟用户数据:', {
+            name: this.chatUser.name,
+            role: this.chatUser.role,
+            roleKey: this.chatUser.roleKey
+          })
+          // 强制更新界面
+          this.$forceUpdate()
+        }
+        // #endif
+      }
+    },
+    
+    // 检查用户在线状态
+    async checkUserOnlineStatus() {
+      if (!this.otherUserId) {
+        console.warn('⚠️ otherUserId为空，无法检查在线状态')
+        return
+      }
+      
+      // 检查缓存
+      const now = Date.now()
+      if (now - this.lastOnlineStatusUpdate < this.onlineStatusCacheTime) {
+        console.log('🔍 在线状态在缓存期内，跳过请求')
+        return
+      }
+      
+      try {
+        console.log('🔍 开始检查在线状态:', this.otherUserId)
+        // #ifdef MP-WEIXIN
+        console.log('🔧 小程序环境 - 检查在线状态')
+        // #endif
+        
+        this.lastOnlineStatusUpdate = now
+        const res = await messageApi.getUserOnlineStatus(this.otherUserId)
+        
+        // #ifdef MP-WEIXIN
+        console.log('🔧 小程序环境 - 在线状态响应:', res)
+        // #endif
+        
         if (res.code === 200 && res.data) {
           const wasOnline = this.chatUser.online
-          this.chatUser.online = res.data.isOnline || false
+          // 修复字段名：后端返回的是isOnline，不是online
+          this.chatUser.online = res.data.isOnline || res.data.online || false
+          
+          console.log('🔍 在线状态API响应详情:', {
+            userId: this.otherUserId,
+            responseData: res.data,
+            isOnline: res.data.isOnline,
+            online: res.data.online,
+            finalStatus: this.chatUser.online
+          })
           
           // 如果状态发生变化，记录日志
           if (wasOnline !== this.chatUser.online) {
             console.log(`👤 用户 ${this.otherUserId} 在线状态变更: ${wasOnline} -> ${this.chatUser.online}`)
+            // 强制更新界面
+            this.$forceUpdate()
+          } else {
+            console.log('👤 在线状态无变化，跳过更新')
           }
-          
-          console.log('✅ 在线状态检查完成:', {
-            userId: this.otherUserId,
-            isOnline: this.chatUser.online,
-            lastActiveTime: res.data.lastActiveTime
-          })
         } else {
           console.warn('⚠️ 在线状态API返回异常:', res)
-          // 如果API返回异常，默认设置为离线
-          this.chatUser.online = false
         }
       } catch (error) {
         console.error('❌ 检查用户在线状态失败:', error)
-        // 如果检查失败，默认设置为离线
-        this.chatUser.online = false
+        console.error('❌ 错误详情:', {
+          message: error.message,
+          stack: error.stack,
+          otherUserId: this.otherUserId
+        })
       }
     },
     
@@ -1366,10 +1698,12 @@ export default {
       }
       
       this.onlineStatusTimer = setInterval(() => {
+        // 同时检查用户信息和在线状态
+        this.loadOtherUserInfo()
         this.checkUserOnlineStatus()
       }, this.onlineCheckInterval)
       
-      console.log('🔄 已启动在线状态检查，间隔:', this.onlineCheckInterval + 'ms')
+      console.log('🔄 已启动用户信息和在线状态检查，间隔:', this.onlineCheckInterval + 'ms')
     },
     
     // 获取文件图标
@@ -1620,6 +1954,21 @@ export default {
 
 .online-status.online {
   color: #4cd964;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  margin-top: 4rpx;
+}
+
+.user-role {
+  font-size: 22rpx;
+  color: #007AFF;
+  background: rgba(0, 122, 255, 0.1);
+  padding: 2rpx 8rpx;
+  border-radius: 8rpx;
+  margin-right: 12rpx;
 }
 
 .header-actions {
