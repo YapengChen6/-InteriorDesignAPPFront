@@ -215,7 +215,8 @@ export default {
     canPurchase() {
       const status = this.productStatus
       const onShelf = status === '0'
-      return onShelf && (this.maxPurchasable > 0 || this.product.specType === '2')
+      // 数据库中使用2表示多规格，0表示单规格
+      return onShelf && (this.maxPurchasable > 0 || this.product.specType === '2' || this.product.specType === 2)
     },
     numberBoxMax() {
       return this.maxPurchasable > 0 ? this.maxPurchasable : 999
@@ -240,22 +241,47 @@ export default {
       this.spuId = id
       this.loading = true
       try {
+        console.log('📦 从数据库加载商品详情，spuId:', id);
+        
+        // 并行加载商品详情、图片和SKU列表（从数据库获取最新数据）
         const [detailRes, imagesRes, skuRes] = await Promise.all([
           productApi.getProductSpuDetail(id),
           mediaApi.getProductSpuImages(id).catch(() => ({})),
           productApi.getProductSkusBySpuId(id).catch(() => ({}))
         ])
 
+        // 处理商品详情（使用数据库返回的最新数据，包括库存、销售量、点击量等）
         if (detailRes && detailRes.code === 200) {
           this.product = detailRes.data || {}
+          console.log('✅ 商品详情已从数据库加载:', {
+            productName: this.product.productName,
+            stock: this.product.stock,
+            salesVolume: this.product.salesVolume,
+            clickCount: this.product.clickCount,
+            productStatus: this.product.productStatus,
+            specType: this.product.specType
+          });
+        } else {
+          console.warn('⚠️ 商品详情获取失败:', detailRes);
         }
 
+        // 处理图片列表
         this.imageList = this.normalizeImages(imagesRes)
-        this.skuList = Array.isArray(skuRes?.data) ? skuRes.data : []
+        
+        // 处理SKU列表（从数据库获取最新库存）
+        if (skuRes && skuRes.code === 200) {
+          this.skuList = Array.isArray(skuRes.data) ? skuRes.data : []
+          console.log('✅ SKU列表已从数据库加载，数量:', this.skuList.length);
+        } else {
+          this.skuList = []
+          console.warn('⚠️ SKU列表获取失败或为空');
+        }
+        
+        // 计算总库存（基于数据库返回的最新SKU数据）
         this.totalStock = this.calculateStock()
         this.initSkuSelection()
       } catch (error) {
-        console.error('加载商品详情失败:', error)
+        console.error('❌ 加载商品详情失败:', error)
         uni.showToast({
           title: '加载失败',
           icon: 'none'
@@ -299,8 +325,7 @@ export default {
     getSpecTypeText(specType) {
       const map = {
         '0': '单规格',
-        '1': '多规格',
-        '2': '无规格'
+        '2': '多规格'
       }
       return map[String(specType)] || '未知'
     },

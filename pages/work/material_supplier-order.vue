@@ -83,14 +83,20 @@
                 class="goods-image" 
                 :src="getProductImage(item)" 
                 mode="aspectFill"
+                @error="onImageError"
+                :lazy-load="true"
               ></image>
               <view class="goods-info">
-                <text class="goods-name">{{ item.productName }}</text>
-                <text class="goods-spec" v-if="item.skuDetail">{{ formatSkuDetail(item.skuDetail) }}</text>
-                <view class="goods-price-row">
-                  <text class="goods-price">￥{{ formatPrice(item.unitPrice) }}</text>
-                  <text class="goods-quantity">x{{ item.quantity }}</text>
+                <!-- 商品名称、价格和数量在同一行 -->
+                <view class="goods-main-row">
+                  <text class="goods-name">{{ item.productName }}</text>
+                  <view class="goods-price-quantity">
+                    <text class="goods-price">￥{{ formatPrice(item.unitPrice) }}</text>
+                    <text class="goods-quantity">x{{ item.quantity }}</text>
+                  </view>
                 </view>
+                <!-- SKU规格单独一行（如果有） -->
+                <text class="goods-spec" v-if="item.skuDetail">{{ formatSkuDetail(item.skuDetail) }}</text>
               </view>
             </view>
           </view>
@@ -181,6 +187,7 @@
 const ORDER_EVENT = 'productOrderUpdated'
 
 import * as orderApi from '@/api/product-order.js'
+import * as mediaApi from '@/api/media.js'
 
 export default {
   data() {
@@ -193,7 +200,8 @@ export default {
       shipForm: {
         shippingCompany: '',
         trackingNumber: ''
-      }
+      },
+      productImageMap: new Map() // 缓存商品图片，key: spuId, value: imageUrl
     }
   },
   
@@ -223,6 +231,8 @@ export default {
         if (res && res.code === 200) {
           this.orderList = res.data || []
           console.log('订单列表加载成功:', this.orderList)
+          // 异步加载商品图片
+          this.loadProductImages()
         } else {
           uni.showToast({
             title: res?.msg || '加载订单失败',
@@ -239,6 +249,65 @@ export default {
         this.loading = false
         this.refreshing = false
       }
+    },
+    
+    // 异步加载商品图片
+    async loadProductImages() {
+      // 收集所有需要加载图片的SPU ID
+      const spuIds = new Set()
+      this.orderList.forEach(order => {
+        if (order.orderItems && Array.isArray(order.orderItems)) {
+          order.orderItems.forEach(item => {
+            const spuId = item.spuId || item.productSpuId || (item.productSpu && (item.productSpu.productSpuId || item.productSpu.spuId))
+            if (spuId && !this.productImageMap.has(spuId)) {
+              // 如果订单项中没有图片，且缓存中也没有，则添加到加载列表
+              if (!item.productImage && !item.imageUrl && !item.coverImage && 
+                  (!item.productSpu || (!item.productSpu.imageUrl && !item.productSpu.coverImage))) {
+                spuIds.add(spuId)
+              }
+            }
+          })
+        }
+      })
+      
+      // 批量加载商品图片
+      if (spuIds.size > 0) {
+        const loadPromises = Array.from(spuIds).map(async (spuId) => {
+          try {
+            const imageRes = await mediaApi.getProductSpuImages(spuId).catch(() => ({}))
+            if (imageRes && imageRes.code === 200) {
+              const images = this.normalizeImages(imageRes)
+              if (images && images.length > 0) {
+                const firstImage = images[0]
+                const imageUrl = firstImage.fileUrl || firstImage.url || firstImage
+                this.productImageMap.set(spuId, imageUrl)
+                // 触发视图更新
+                this.$forceUpdate()
+              }
+            }
+          } catch (error) {
+            console.warn(`加载商品 ${spuId} 的图片失败:`, error)
+          }
+        })
+        
+        // 不等待所有图片加载完成，让它们异步加载
+        Promise.allSettled(loadPromises)
+      }
+    },
+    
+    // 规范化图片数据
+    normalizeImages(imageRes) {
+      if (!imageRes) return []
+      if (Array.isArray(imageRes.data)) {
+        return imageRes.data
+      }
+      if (imageRes.data?.images && Array.isArray(imageRes.data.images)) {
+        return imageRes.data.images
+      }
+      if (imageRes.data?.data && Array.isArray(imageRes.data.data)) {
+        return imageRes.data.data
+      }
+      return []
     },
     
     // 切换订单状态
@@ -389,8 +458,56 @@ export default {
     
     // 获取商品图片
     getProductImage(item) {
-      // TODO: 从商品信息中获取图片
-      return '/static/images/default-product.jpg'
+      if (!item) {
+        return this.getDefaultProductImage()
+      }
+      
+      // 1. 优先从订单项直接获取图片
+      if (item.productImage) {
+        return item.productImage
+      }
+      if (item.imageUrl) {
+        return item.imageUrl
+      }
+      if (item.coverImage) {
+        return item.coverImage
+      }
+      
+      // 2. 从商品SPU对象中获取图片
+      if (item.productSpu) {
+        const spu = item.productSpu
+        if (spu.imageUrl) return spu.imageUrl
+        if (spu.coverImage) return spu.coverImage
+        if (spu.productImage) return spu.productImage
+        if (spu.imageList && Array.isArray(spu.imageList) && spu.imageList.length > 0) {
+          const firstImage = spu.imageList[0]
+          return firstImage.fileUrl || firstImage.url || firstImage
+        }
+      }
+      
+      // 3. 从缓存中获取（异步加载的图片）
+      const spuId = item.spuId || item.productSpuId || (item.productSpu && (item.productSpu.productSpuId || item.productSpu.spuId))
+      if (spuId && this.productImageMap.has(spuId)) {
+        return this.productImageMap.get(spuId)
+      }
+      
+      // 4. 返回默认图片
+      return this.getDefaultProductImage()
+    },
+    
+    // 获取默认商品图片
+    getDefaultProductImage() {
+      // 使用base64编码的透明占位图，避免加载失败
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Yqg6L29PC90ZXh0Pjwvc3ZnPg=='
+    },
+    
+    // 图片加载失败处理
+    onImageError(e) {
+      console.warn('商品图片加载失败:', e)
+      // 设置默认图片
+      if (e.target) {
+        e.target.src = this.getDefaultProductImage()
+      }
     }
   }
 }
@@ -555,6 +672,11 @@ export default {
   border-radius: 10rpx;
   margin-right: 20rpx;
   flex-shrink: 0;
+  background-color: #f5f5f5;
+  background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTYwIiBoZWlnaHQ9IjE2MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Yqg6L29PC90ZXh0Pjwvc3ZnPg==');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .goods-info {
@@ -564,32 +686,33 @@ export default {
   justify-content: space-between;
 }
 
+.goods-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+
 .goods-name {
+  flex: 1;
   font-size: 28rpx;
   color: #333;
   font-weight: 500;
-  margin-bottom: 10rpx;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+  margin-right: 20rpx;
 }
 
-.goods-spec {
-  font-size: 24rpx;
-  color: #999;
-  margin-bottom: 10rpx;
-}
-
-.goods-price-row {
+.goods-price-quantity {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
 }
 
 .goods-price {
-  font-size: 32rpx;
+  font-size: 28rpx;
   color: #ff2d55;
   font-weight: bold;
 }
@@ -597,6 +720,12 @@ export default {
 .goods-quantity {
   font-size: 26rpx;
   color: #666;
+}
+
+.goods-spec {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 10rpx;
 }
 
 .shipping-info {

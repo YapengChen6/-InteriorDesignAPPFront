@@ -3,21 +3,35 @@
     <scroll-view class="detail-scroll" scroll-y>
       <!-- 图片轮播 -->
       <view class="media-section" v-if="imageList.length">
-        <swiper
-          class="media-swiper"
-          :indicator-dots="true"
-          :autoplay="false"
-          circular
-        >
-          <swiper-item v-for="(img, index) in imageList" :key="index">
-            <image
-              :src="img.fileUrl || img.url || img"
-              class="swiper-image"
-              mode="aspectFill"
-              @click="previewImage(index)"
-            ></image>
-          </swiper-item>
-        </swiper>
+        <view class="swiper-container">
+          <swiper
+            ref="swiper"
+            class="media-swiper"
+            :indicator-dots="true"
+            :autoplay="true"
+            :interval="3000"
+            :duration="500"
+            circular
+            :current="currentSwiperIndex"
+            @change="onSwiperChange"
+          >
+            <swiper-item v-for="(img, index) in imageList" :key="index">
+              <image
+                :src="img.fileUrl || img.url || img"
+                class="swiper-image"
+                mode="aspectFill"
+                @click="previewImage(index)"
+              ></image>
+            </swiper-item>
+          </swiper>
+          <!-- 左右切换按钮 -->
+          <view class="swiper-nav-btn swiper-nav-prev" v-if="imageList.length > 1" @click.stop="prevImage">
+            <text class="nav-icon">‹</text>
+          </view>
+          <view class="swiper-nav-btn swiper-nav-next" v-if="imageList.length > 1" @click.stop="nextImage">
+            <text class="nav-icon">›</text>
+          </view>
+        </view>
       </view>
       <view class="media-section" v-else>
         <image
@@ -152,7 +166,8 @@ export default {
       totalStock: 0,
       selectedSkuId: null,
       purchaseQuantity: 1,
-      actionLoading: false
+      actionLoading: false,
+      currentSwiperIndex: 0 // 当前轮播图索引
     }
   },
   computed: {
@@ -186,7 +201,8 @@ export default {
     canPurchase() {
       const status = this.productStatus
       const onShelf = status === '0'
-      return onShelf && (this.maxPurchasable > 0 || this.product.specType === '2')
+      // 数据库中使用2表示多规格，0表示单规格
+      return onShelf && (this.maxPurchasable > 0 || this.product.specType === '2' || this.product.specType === 2)
     },
     numberBoxMax() {
       return this.maxPurchasable > 0 ? this.maxPurchasable : 999
@@ -270,8 +286,7 @@ export default {
     getSpecTypeText(specType) {
       const map = {
         '0': '单规格',
-        '1': '多规格',
-        '2': '无规格'
+        '2': '多规格'
       }
       return map[String(specType)] || '未知'
     },
@@ -296,6 +311,39 @@ export default {
       uni.previewImage({
         urls,
         current: urls[index] || urls[0]
+      })
+    },
+    
+    // 轮播图切换事件
+    onSwiperChange(e) {
+      this.currentSwiperIndex = e.detail.current
+    },
+    
+    // 上一张图片
+    prevImage() {
+      if (this.imageList.length <= 1) return
+      // 由于使用了 circular，直接计算索引即可
+      const prevIndex = this.currentSwiperIndex - 1
+      this.currentSwiperIndex = prevIndex < 0 ? this.imageList.length - 1 : prevIndex
+      // 通过修改 current 属性触发 swiper 切换
+      this.$nextTick(() => {
+        if (this.$refs.swiper) {
+          // uni-app 的 swiper 组件会自动响应 current 的变化
+        }
+      })
+    },
+    
+    // 下一张图片
+    nextImage() {
+      if (this.imageList.length <= 1) return
+      // 由于使用了 circular，直接计算索引即可
+      const nextIndex = this.currentSwiperIndex + 1
+      this.currentSwiperIndex = nextIndex >= this.imageList.length ? 0 : nextIndex
+      // 通过修改 current 属性触发 swiper 切换
+      this.$nextTick(() => {
+        if (this.$refs.swiper) {
+          // uni-app 的 swiper 组件会自动响应 current 的变化
+        }
       })
     },
     
@@ -446,6 +494,12 @@ export default {
 
 .media-section {
   background-color: #fff;
+  position: relative;
+}
+
+.swiper-container {
+  position: relative;
+  width: 100%;
 }
 
 .media-swiper {
@@ -456,6 +510,43 @@ export default {
   width: 100%;
   height: 460rpx;
   object-fit: cover;
+}
+
+.swiper-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60rpx;
+  height: 60rpx;
+  background-color: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.swiper-nav-btn:active {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.swiper-nav-prev {
+  left: 20rpx;
+}
+
+.swiper-nav-next {
+  right: 20rpx;
+}
+
+.nav-icon {
+  font-size: 40rpx;
+  color: #fff;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .price-panel {

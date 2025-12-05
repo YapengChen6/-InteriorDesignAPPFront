@@ -392,7 +392,14 @@
     "style": {
       "navigationBarTitleText": "收藏页面"
     }
-  }, {
+  }, 
+  {
+    "path": "pages/order-hall/orderstage-detail",
+    "style": {
+      "navigationBarTitleText": "监理每个阶段上传页面"
+    }
+  },
+  {
     "path": "pages/mine/follows/follows",
     "style": {
       "navigationBarTitleText": "关注页面"

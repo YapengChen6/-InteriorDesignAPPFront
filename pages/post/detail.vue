@@ -24,9 +24,10 @@
 					<!-- 作者信息 -->
 					<view class="author-info">
 						<image 
-							:src="post.authorAvatar || '/static/images/default-avatar.png'" 
+							:src="post.authorAvatar || getDefaultAvatar()" 
 							class="author-avatar"
 							mode="aspectFill"
+							@error="handleAvatarError"
 						></image>
 						<view class="author-details">
 							<text class="author-name">{{ post.author || '匿名用户' }}</text>
@@ -53,7 +54,7 @@
 							:src="getImageList()[0]" 
 							mode="widthFix"
 							class="post-image"
-							@click="previewImage(0)"
+							@tap="previewImage(0)"
 							@error="handleImageError"
 							@load="handleImageLoad"
 							lazy-load
@@ -76,17 +77,19 @@
 							:current="currentImageIndex"
 							@change="onSwiperChange"
 							@animationfinish="onSwiperAnimationFinish"
+							@tap="handleSwiperTap"
 						>
 							<swiper-item 
 								v-for="(image, index) in getImageList()" 
 								:key="index"
 								class="swiper-item"
+								@tap="previewImage(index)"
 							>
 								<image 
 									:src="image" 
 									mode="aspectFit"
 									class="swiper-image"
-									@click="previewImage(index)"
+									@tap.stop="previewImage(index)"
 									@error="handleImageError"
 									@load="handleImageLoad"
 									lazy-load
@@ -234,30 +237,167 @@
 		</view>
 
 		<!-- 评论弹窗 -->
-		<view v-if="showCommentModal" class="comment-modal">
-			<view class="modal-mask" @click="closeCommentModal"></view>
-			<view class="modal-content">
+		<view v-if="showCommentModal" class="comment-modal" @touchmove.stop.prevent>
+			<view class="modal-mask" @click="closeCommentModal" @touchmove.stop.prevent></view>
+			<view class="modal-content" @touchmove.stop.prevent>
 				<view class="modal-header">
 					<text class="modal-title">评论</text>
 					<text class="modal-close" @click="closeCommentModal">×</text>
 				</view>
-				<view class="comment-list">
+				<scroll-view class="comment-list" scroll-y="true" @scrolltolower="loadMoreComments">
 					<!-- 评论列表内容 -->
-					<view class="no-comments" v-if="comments.length === 0">
+					<view class="no-comments" v-if="!commentLoading && comments.length === 0">
 						<text>暂无评论，快来抢沙发吧~</text>
 					</view>
+					
+					<!-- 评论项 -->
+					<view 
+						v-for="comment in comments" 
+						:key="comment.id" 
+						class="comment-item"
+					>
+						<!-- 评论者头像 -->
+						<image 
+							:src="comment.userAvatar || getDefaultAvatar()" 
+							class="comment-avatar"
+							mode="aspectFill"
+							@error="handleAvatarError"
+						></image>
+						
+						<!-- 评论内容区域 -->
+						<view class="comment-content">
+							<!-- 评论者信息 -->
+							<view class="comment-header">
+								<text class="comment-author">{{ comment.userName || comment.author || '匿名用户' }}</text>
+								<text class="comment-time">{{ formatDate(comment.createTime) }}</text>
 				</view>
+							
+							<!-- 评论内容 -->
+							<text class="comment-text">{{ comment.content }}</text>
+							
+							<!-- 评论操作 -->
+							<view class="comment-actions">
+								<view 
+									class="comment-action-btn"
+									:class="{ liked: likedComments.has(comment.id) }"
+									@click="handleLikeComment(comment)"
+								>
+									<text class="action-icon">{{ likedComments.has(comment.id) ? '❤️' : '🤍' }}</text>
+									<text class="action-count">{{ comment.likeCount || 0 }}</text>
+								</view>
+								<view 
+									class="comment-action-btn"
+									@click="startReply(comment)"
+								>
+									<text class="action-icon">💬</text>
+									<text class="action-text">回复</text>
+								</view>
+								<!-- 删除按钮（仅作者可见） -->
+								<view 
+									v-if="comment.canDelete"
+									class="comment-action-btn delete-btn"
+									@click="handleDeleteComment(comment)"
+								>
+									<text class="action-text">删除</text>
+								</view>
+							</view>
+							
+							<!-- 回复列表 -->
+							<view v-if="comment.replies && comment.replies.length > 0" class="replies-container">
+								<view 
+									v-for="reply in comment.replies" 
+									:key="reply.id"
+									class="reply-item"
+								>
+									<image 
+										:src="reply.userAvatar || getDefaultAvatar()" 
+										class="reply-avatar"
+										mode="aspectFill"
+										@error="handleAvatarError"
+									></image>
+									<view class="reply-content">
+										<view class="reply-header">
+											<text class="reply-author">{{ reply.userName || reply.author || '匿名用户' }}</text>
+											<text v-if="reply.replyToUserName" class="reply-to">
+												回复 @{{ reply.replyToUserName }}
+											</text>
+											<text class="reply-time">{{ formatDate(reply.createTime) }}</text>
+										</view>
+										<text class="reply-text">{{ reply.content }}</text>
+										<view class="reply-actions">
+											<view 
+												class="reply-action-btn"
+												:class="{ liked: likedComments.has(reply.id) }"
+												@click="handleLikeComment(reply)"
+											>
+												<text class="action-icon">{{ likedComments.has(reply.id) ? '❤️' : '🤍' }}</text>
+												<text class="action-count">{{ reply.likeCount || 0 }}</text>
+											</view>
+											<view 
+												class="reply-action-btn"
+												@click="startReply(comment, reply)"
+											>
+												<text class="action-text">回复</text>
+											</view>
+											<view 
+												v-if="reply.canDelete"
+												class="reply-action-btn delete-btn"
+												@click="handleDeleteComment(reply, comment)"
+											>
+												<text class="action-text">删除</text>
+											</view>
+										</view>
+									</view>
+								</view>
+								
+								<!-- 查看更多回复 -->
+								<view 
+									v-if="comment.replyCount > comment.replies.length"
+									class="load-more-replies"
+									@click="loadMoreReplies(comment)"
+								>
+									<text>查看更多回复 ({{ comment.replyCount - comment.replies.length }})</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					
+					<!-- 加载更多 -->
+					<view v-if="commentLoading" class="comment-loading">
+						<text>加载中...</text>
+					</view>
+					<view v-if="!hasMoreComments && comments.length > 0" class="no-more-comments">
+						<text>没有更多评论了</text>
+					</view>
+				</scroll-view>
 				<view class="comment-input-area">
+					<!-- 回复提示 -->
+					<view v-if="replyingTo" class="reply-hint">
+						<text>回复 @{{ replyingTo.userName || replyingTo.author }}：</text>
+						<text class="cancel-reply" @click="cancelReply">取消</text>
+					</view>
 					<textarea 
-						v-model="commentText" 
+						:value="replyingTo ? replyText : commentText"
 						class="comment-textarea" 
-						placeholder="写下你的评论..."
+						:placeholder="replyingTo ? `回复 @${replyingTo.userName || replyingTo.author}...` : '写下你的评论...'"
 						maxlength="500"
+						:adjust-position="true"
+						:show-confirm-bar="false"
+						:auto-height="true"
+						:hold-keyboard="true"
+						:fixed="false"
+						:cursor-spacing="20"
+						@focus="onTextareaFocus"
+						@blur="onTextareaBlur"
+						@input="onTextareaInput"
+						@confirm="replyingTo ? submitReply() : submitComment()"
 					></textarea>
 					<button 
 						class="submit-comment-btn"
-						@click="submitComment"
-						:disabled="!commentText.trim() || commentLoading"
+						@tap="replyingTo ? submitReply() : submitComment()"
+						:disabled="(!replyingTo && !commentText.trim()) || (replyingTo && !replyText.trim()) || commentLoading"
+						:loading="commentLoading"
+						hover-class="button-hover"
 					>
 						{{ commentLoading ? '发送中...' : '发送' }}
 					</button>
@@ -278,7 +418,17 @@
 </template>
 
 <script>
-import { getPostDetail, getPostList, likePost, unlikePost } from '@/api/community.js'
+import { 
+	getPostDetail, 
+	getPostList, 
+	likePost, 
+	unlikePost,
+	getPostComments,
+	submitComment,
+	deleteComment,
+	likeComment,
+	unlikeComment
+} from '@/api/community.js'
 import { addFavorite, removeFavorite, getFavorites, followUser, unfollowUser, checkFollow } from '@/api/social.js'
 
 export default {
@@ -307,6 +457,14 @@ export default {
 			// 评论相关
 			commentText: '',
 			comments: [],
+			commentPageNum: 1,
+			commentPageSize: 20,
+			hasMoreComments: true,
+			commentLoading: false,
+			replyingTo: null, // 正在回复的评论ID
+			replyText: '', // 回复内容
+			likedComments: new Set(), // 已点赞的评论ID集合
+			textareaFocused: false, // textarea 是否聚焦
 			
 			// 相关推荐
 			relatedPosts: [],
@@ -383,6 +541,9 @@ export default {
 					
 					// 加载用户交互状态（点赞、收藏、关注）
 					this.loadUserInteractionStatus()
+					
+					// 加载评论列表
+					this.loadComments()
 					
 				} else {
 					throw new Error(response ? response.message : '获取帖子详情失败')
@@ -764,31 +925,228 @@ export default {
 			}
 		},
 		
-		// 提交评论
-		async submitComment() {
-			if (!this.commentText.trim() || this.commentLoading) return
+		// 加载评论列表
+		async loadComments() {
+			if (!this.postId || this.commentLoading) return
 			
 			try {
 				this.commentLoading = true
 				
-				// 调用评论接口
-				// await submitComment(this.postId, this.commentText.trim())
+				const response = await getPostComments(this.postId, {
+					pageNum: this.commentPageNum,
+					pageSize: this.commentPageSize
+				})
 				
+				if (response && response.code === 200) {
+					let commentList = []
+					
+					// 处理响应数据
+					if (response.data) {
+						if (response.data.rows) {
+							commentList = response.data.rows
+						} else if (response.data.list) {
+							commentList = response.data.list
+						} else if (Array.isArray(response.data)) {
+							commentList = response.data
+						}
+					}
+					
+					// 处理评论数据
+					const processedComments = this.processComments(commentList)
+					
+					if (this.commentPageNum === 1) {
+						this.comments = processedComments
+					} else {
+						this.comments = [...this.comments, ...processedComments]
+					}
+					
+					// 更新分页信息
+					this.hasMoreComments = commentList.length === this.commentPageSize
+					
+					console.log('✅ 评论加载完成，当前评论数:', this.comments.length)
+				}
+				
+			} catch (error) {
+				console.error('加载评论失败:', error)
+				// 失败时不影响主流程
+			} finally {
+				this.commentLoading = false
+			}
+		},
+		
+		// 获取默认头像
+		getDefaultAvatar() {
+			// 使用 base64 编码的占位符头像（1x1 透明像素，避免加载错误）
+			// 或者使用现有的图片
+			return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiNGNUY1RjUiLz4KPHBhdGggZD0iTTIwIDEyQzIyLjIwOTEgMTIgMjQgMTAuMjA5MSAyNCA4QzI0IDUuNzkwODYgMjIuMjA5MSA0IDIwIDRDMcuNzkwODYgNCAxNiA1Ljc5MDg2IDE2IDhDMTYgMTAuMjA5MSAxNy43OTA5IDEyIDIwIDEyWiIgZmlsbD0iIzk5OTk5OSIvPgo8cGF0aCBkPSJNMTAgMjhDMTAgMjMuNTgxNyAxNC4wMzQ2IDIwIDIwIDIwQzI1Ljk2NTQgMjAgMzAgMjMuNTgxNyAzMCAyOFYzMEgxMFYyOFoiIGZpbGw9IiM5OTk5OTkiLz4KPC9zdmc+'
+		},
+		
+		// 处理头像加载错误
+		handleAvatarError(e) {
+			// 如果头像加载失败，使用默认头像
+			if (e && e.target) {
+				e.target.src = this.getDefaultAvatar()
+			}
+		},
+		
+		// 处理评论数据
+		processComments(comments) {
+			if (!Array.isArray(comments)) return []
+			
+			return comments.map(comment => {
+				// 处理回复数据
+				let replies = []
+				if (comment.replies && Array.isArray(comment.replies)) {
+					replies = comment.replies.map(reply => ({
+						id: reply.id || reply.comment_id,
+						content: reply.content,
+						userName: reply.userName || reply.user_name || reply.author,
+						userAvatar: reply.userAvatar || reply.user_avatar || reply.avatar,
+						replyToUserId: reply.replyToUserId || reply.reply_to_user_id,
+						replyToUserName: reply.replyToUserName || reply.reply_to_user_name,
+						likeCount: reply.likeCount || reply.like_count || 0,
+						createTime: reply.createTime || reply.create_time,
+						canDelete: reply.canDelete !== undefined ? reply.canDelete : false
+					}))
+				}
+				
+				return {
+					id: comment.id || comment.comment_id,
+					content: comment.content,
+					userName: comment.userName || comment.user_name || comment.author,
+					userAvatar: comment.userAvatar || comment.user_avatar || comment.avatar,
+					likeCount: comment.likeCount || comment.like_count || 0,
+					replyCount: comment.replyCount || comment.reply_count || replies.length,
+					createTime: comment.createTime || comment.create_time,
+					replies: replies,
+					canDelete: comment.canDelete !== undefined ? comment.canDelete : false
+				}
+			})
+		},
+		
+		// 加载更多评论
+		async loadMoreComments() {
+			if (!this.hasMoreComments || this.commentLoading) return
+			
+			this.commentPageNum++
+			await this.loadComments()
+		},
+		
+		// 加载更多回复
+		async loadMoreReplies(comment) {
+			// TODO: 如果有单独的加载回复接口，可以在这里实现
+			console.log('加载更多回复:', comment.id)
+		},
+		
+		// 提交评论
+		async submitComment() {
+			if (!this.commentText.trim() || this.commentLoading || !this.postId) return
+			
+			try {
+				this.commentLoading = true
+				
+				const response = await submitComment(this.postId, {
+					content: this.commentText.trim()
+				})
+				
+				if (response && response.code === 200) {
 				// 更新评论数
 				this.post.commentCount = (this.post.commentCount || 0) + 1
 				this.commentText = ''
+					
+					// 重新加载评论列表
+					this.commentPageNum = 1
+					await this.loadComments()
 				
 				uni.showToast({
 					title: '评论成功',
 					icon: 'success'
 				})
-				
-				this.closeCommentModal()
+				} else {
+					throw new Error(response ? response.msg || response.message : '评论失败')
+				}
 				
 			} catch (error) {
 				console.error('评论提交失败:', error)
+				const errorMsg = error.msg || error.message || '评论失败'
 				uni.showToast({
-					title: '评论失败',
+					title: errorMsg,
+					icon: 'none'
+				})
+				
+				// 如果是"请先登录"错误，引导用户登录
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
+			} finally {
+				this.commentLoading = false
+			}
+		},
+		
+		// 开始回复
+		startReply(comment, reply = null) {
+			// 如果回复的是回复，则设置回复目标
+			if (reply) {
+				this.replyingTo = {
+					id: reply.id,
+					userName: reply.userName || reply.author,
+					parentId: comment.id
+				}
+			} else {
+				this.replyingTo = {
+					id: comment.id,
+					userName: comment.userName || comment.author,
+					parentId: null
+				}
+			}
+			this.replyText = ''
+		},
+		
+		// 取消回复
+		cancelReply() {
+			this.replyingTo = null
+			this.replyText = ''
+		},
+		
+		// 提交回复
+		async submitReply() {
+			if (!this.replyText.trim() || this.commentLoading || !this.postId || !this.replyingTo) return
+			
+			try {
+				this.commentLoading = true
+				
+				const response = await submitComment(this.postId, {
+					content: this.replyText.trim(),
+					parentId: this.replyingTo.id
+				})
+				
+				if (response && response.code === 200) {
+					// 更新评论数
+					this.post.commentCount = (this.post.commentCount || 0) + 1
+					this.replyText = ''
+					this.replyingTo = null
+					
+					// 重新加载评论列表
+					this.commentPageNum = 1
+					await this.loadComments()
+					
+					uni.showToast({
+						title: '回复成功',
+						icon: 'success'
+					})
+				} else {
+					throw new Error(response ? response.msg || response.message : '回复失败')
+				}
+				
+			} catch (error) {
+				console.error('回复提交失败:', error)
+				const errorMsg = error.msg || error.message || '回复失败'
+				uni.showToast({
+					title: errorMsg,
 					icon: 'none'
 				})
 			} finally {
@@ -796,18 +1154,156 @@ export default {
 			}
 		},
 		
+		// 点赞评论
+		async handleLikeComment(comment) {
+			if (!this.postId || !comment.id) return
+			
+			try {
+				const isLiked = this.likedComments.has(comment.id)
+				const api = isLiked ? unlikeComment : likeComment
+				
+				const response = await api(this.postId, comment.id)
+				
+				if (response && response.code === 200) {
+					// 更新点赞状态
+					if (isLiked) {
+						this.likedComments.delete(comment.id)
+						comment.likeCount = Math.max(0, (comment.likeCount || 0) - 1)
+					} else {
+						this.likedComments.add(comment.id)
+						comment.likeCount = (comment.likeCount || 0) + 1
+					}
+				} else {
+					throw new Error(response ? response.msg || response.message : '操作失败')
+				}
+				
+			} catch (error) {
+				console.error('点赞评论失败:', error)
+				const errorMsg = error.msg || error.message || '操作失败'
+				uni.showToast({
+					title: errorMsg,
+					icon: 'none'
+				})
+			}
+		},
+		
+		// 删除评论
+		async handleDeleteComment(comment, parentComment = null) {
+			if (!this.postId || !comment.id) return
+			
+			uni.showModal({
+				title: '确认删除',
+				content: '确定要删除这条评论吗？',
+				success: async (res) => {
+					if (res.confirm) {
+						try {
+							const response = await deleteComment(this.postId, comment.id)
+							
+							if (response && response.code === 200) {
+								// 更新评论数
+								this.post.commentCount = Math.max(0, (this.post.commentCount || 0) - 1)
+								
+								// 从列表中移除
+								if (parentComment) {
+									// 删除回复
+									const index = parentComment.replies.findIndex(r => r.id === comment.id)
+									if (index !== -1) {
+										parentComment.replies.splice(index, 1)
+										parentComment.replyCount = Math.max(0, (parentComment.replyCount || 0) - 1)
+									}
+								} else {
+									// 删除主评论
+									const index = this.comments.findIndex(c => c.id === comment.id)
+									if (index !== -1) {
+										this.comments.splice(index, 1)
+									}
+								}
+								
+								uni.showToast({
+									title: '删除成功',
+									icon: 'success'
+								})
+							} else {
+								throw new Error(response ? response.msg || response.message : '删除失败')
+							}
+							
+						} catch (error) {
+							console.error('删除评论失败:', error)
+							uni.showToast({
+								title: error.msg || error.message || '删除失败',
+								icon: 'none'
+							})
+						}
+					}
+				}
+			})
+		},
+		
 		// 图片预览
 		previewImage(index) {
 			const images = this.getImageList()
 			
-			if (images.length > 0) {
+			if (images && images.length > 0) {
+				// 确保 index 在有效范围内
+				const currentIndex = typeof index === 'number' ? index : this.currentImageIndex
+				const validIndex = Math.max(0, Math.min(currentIndex, images.length - 1))
+				
 				uni.previewImage({
 					urls: images,
-					current: images[index] || images[0],
+					current: images[validIndex] || images[0],
 					indicator: 'number',
-					loop: true
+					loop: true,
+					longPressActions: {
+						itemList: ['保存图片'],
+						success: (res) => {
+							if (res.tapIndex === 0) {
+								// 保存图片
+								this.saveImage(images[validIndex])
+							}
+						}
+					}
 				})
 			}
+		},
+		
+		// 处理 swiper 点击事件
+		handleSwiperTap(e) {
+			// 点击 swiper 时预览当前图片
+			this.previewImage(this.currentImageIndex)
+		},
+		
+		// 保存图片到相册
+		saveImage(imageUrl) {
+			uni.downloadFile({
+				url: imageUrl,
+				success: (res) => {
+					if (res.statusCode === 200) {
+						uni.saveImageToPhotosAlbum({
+							filePath: res.tempFilePath,
+							success: () => {
+								uni.showToast({
+									title: '保存成功',
+									icon: 'success'
+								})
+							},
+							fail: (err) => {
+								console.error('保存图片失败:', err)
+								uni.showToast({
+									title: '保存失败',
+									icon: 'none'
+								})
+							}
+						})
+					}
+				},
+				fail: (err) => {
+					console.error('下载图片失败:', err)
+					uni.showToast({
+						title: '下载失败',
+						icon: 'none'
+					})
+				}
+			})
 		},
 		
 		// 获取图片列表（统一处理 mediaUrls 和 coverUrl）
@@ -943,11 +1439,43 @@ export default {
 		// 评论输入框聚焦
 		onCommentFocus() {
 			this.showCommentModal = true
+			// 如果评论列表为空，加载评论
+			if (this.comments.length === 0 && !this.commentLoading) {
+				this.loadComments()
+			}
 		},
 		
 		// 关闭评论弹窗
 		closeCommentModal() {
 			this.showCommentModal = false
+			this.replyingTo = null
+			this.replyText = ''
+			this.textareaFocused = false
+		},
+		
+		// textarea 聚焦事件
+		onTextareaFocus() {
+			this.textareaFocused = true
+			// 在小程序中，聚焦时可能需要延迟一下确保键盘弹起
+			setTimeout(() => {
+				// 可以在这里添加滚动到底部的逻辑
+			}, 300)
+		},
+		
+		// textarea 失焦事件
+		onTextareaBlur() {
+			this.textareaFocused = false
+		},
+		
+		// textarea 输入事件
+		onTextareaInput(e) {
+			// 确保数据同步（小程序中使用 @input 事件）
+			const value = e.detail.value
+			if (this.replyingTo) {
+				this.replyText = value
+			} else {
+				this.commentText = value
+			}
 		},
 		
 		// 显示操作菜单
@@ -1258,6 +1786,16 @@ export default {
 .post-image {
 	width: 100%;
 	display: block;
+	/* 确保可以点击 */
+	cursor: pointer;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	/* 添加点击反馈 */
+	transition: opacity 0.2s;
+}
+
+.post-image:active {
+	opacity: 0.8;
 }
 
 /* 轮播图容器 */
@@ -1281,12 +1819,24 @@ export default {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	/* 确保可以点击 */
+	position: relative;
 }
 
 .swiper-image {
 	width: 100%;
 	height: 100%;
 	object-fit: contain;
+	/* 确保可以点击 */
+	cursor: pointer;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	/* 添加点击反馈 */
+	transition: opacity 0.2s;
+}
+
+.swiper-image:active {
+	opacity: 0.8;
 }
 
 /* 左右箭头 */
@@ -1527,6 +2077,7 @@ export default {
 	right: 0;
 	bottom: 0;
 	z-index: 1000;
+	/* 小程序中确保弹窗在最上层 */
 }
 
 .modal-mask {
@@ -1548,6 +2099,9 @@ export default {
 	max-height: 70vh;
 	display: flex;
 	flex-direction: column;
+	/* 小程序中确保内容可以正常显示 */
+	transform: translateZ(0);
+	-webkit-transform: translateZ(0);
 }
 
 .modal-header {
@@ -1574,6 +2128,9 @@ export default {
 	flex: 1;
 	padding: 16px;
 	overflow-y: auto;
+	max-height: 400px;
+	/* 小程序中确保滚动正常 */
+	-webkit-overflow-scrolling: touch;
 }
 
 .no-comments {
@@ -1582,22 +2139,227 @@ export default {
 	padding: 40px 0;
 }
 
+/* 评论项 */
+.comment-item {
+	display: flex;
+	margin-bottom: 20px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.comment-item:last-child {
+	border-bottom: none;
+}
+
+.comment-avatar {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	margin-right: 12px;
+	flex-shrink: 0;
+}
+
+.comment-content {
+	flex: 1;
+}
+
+.comment-header {
+	display: flex;
+	align-items: center;
+	margin-bottom: 8px;
+	gap: 8px;
+}
+
+.comment-author {
+	font-size: 14px;
+	font-weight: 500;
+	color: #333;
+}
+
+.comment-time {
+	font-size: 12px;
+	color: #999;
+}
+
+.comment-text {
+	font-size: 14px;
+	line-height: 1.6;
+	color: #333;
+	margin-bottom: 8px;
+	word-break: break-word;
+}
+
+.comment-actions {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.comment-action-btn {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+	font-size: 12px;
+	color: #666;
+}
+
+.comment-action-btn.liked {
+	color: #ff2e63;
+}
+
+.action-icon {
+	font-size: 14px;
+}
+
+.action-count {
+	font-size: 12px;
+}
+
+.action-text {
+	font-size: 12px;
+}
+
+.delete-btn {
+	color: #ff4d4f;
+}
+
+/* 回复容器 */
+.replies-container {
+	margin-top: 12px;
+	padding-left: 12px;
+	border-left: 2px solid #f0f0f0;
+}
+
+.reply-item {
+	display: flex;
+	margin-bottom: 12px;
+}
+
+.reply-item:last-child {
+	margin-bottom: 0;
+}
+
+.reply-avatar {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	margin-right: 8px;
+	flex-shrink: 0;
+}
+
+.reply-content {
+	flex: 1;
+}
+
+.reply-header {
+	display: flex;
+	align-items: center;
+	margin-bottom: 4px;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.reply-author {
+	font-size: 13px;
+	font-weight: 500;
+	color: #333;
+}
+
+.reply-to {
+	font-size: 12px;
+	color: #ff2e63;
+}
+
+.reply-time {
+	font-size: 11px;
+	color: #999;
+}
+
+.reply-text {
+	font-size: 13px;
+	line-height: 1.5;
+	color: #666;
+	margin-bottom: 6px;
+	word-break: break-word;
+}
+
+.reply-actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.reply-action-btn {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+	font-size: 11px;
+	color: #666;
+}
+
+.reply-action-btn.liked {
+	color: #ff2e63;
+}
+
+.load-more-replies {
+	margin-top: 8px;
+	padding: 8px;
+	text-align: center;
+	color: #ff2e63;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.comment-loading,
+.no-more-comments {
+	text-align: center;
+	padding: 16px;
+	color: #999;
+	font-size: 12px;
+}
+
 .comment-input-area {
 	display: flex;
-	align-items: flex-end;
+	flex-direction: column;
 	padding: 16px;
 	border-top: 1px solid #f0f0f0;
 	gap: 12px;
+	/* 小程序中确保输入区域固定在底部 */
+	background-color: #fff;
+	position: relative;
+	z-index: 10;
+}
+
+.reply-hint {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	background-color: #f5f5f5;
+	border-radius: 6px;
+	font-size: 12px;
+	color: #666;
+}
+
+.cancel-reply {
+	color: #ff2e63;
+	cursor: pointer;
 }
 
 .comment-textarea {
 	flex: 1;
 	min-height: 80px;
+	max-height: 200px;
 	padding: 12px;
 	border: 1px solid #e0e0e0;
 	border-radius: 8px;
 	font-size: 14px;
 	resize: none;
+	/* 小程序中确保 textarea 可以正常使用 */
+	box-sizing: border-box;
+	line-height: 1.5;
 }
 
 .submit-comment-btn {
@@ -1608,11 +2370,25 @@ export default {
 	border-radius: 6px;
 	font-size: 14px;
 	cursor: pointer;
+	/* 小程序中确保按钮可以正常点击 */
+	line-height: 1.5;
+	white-space: nowrap;
 }
 
 .submit-comment-btn:disabled {
 	background-color: #ccc;
 	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+/* 小程序中 button 组件的样式重置 */
+.submit-comment-btn::after {
+	border: none;
+}
+
+.button-hover {
+	opacity: 0.8;
+	transform: scale(0.98);
 }
 
 /* 操作菜单 */
