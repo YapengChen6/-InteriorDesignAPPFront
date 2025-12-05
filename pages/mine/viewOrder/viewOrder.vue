@@ -108,7 +108,7 @@
           >
             <view class="goods-info">
               <text class="goods-name">{{ item.productName }}</text>
-              <text class="goods-sku" v-if="item.skuDetail">{{ item.skuDetail }}</text>
+              <text class="goods-sku" v-if="item.skuDetail">{{ formatSkuDetail(item.skuDetail) }}</text>
               <view class="goods-price-row">
                 <text class="goods-price">￥{{ formatPrice(item.unitPrice) }}</text>
                 <text class="goods-qty">x{{ item.quantity }}</text>
@@ -259,6 +259,31 @@ import * as afterSaleApi from '@/api/after-sale.js'
       const num = Number(value)
       if (Number.isNaN(num)) return '0.00'
       return num.toFixed(2)
+    },
+    // 规范化展示 SKU 文本，兼容字符串/对象/数组
+    formatSkuDetail(skuDetail) {
+      if (!skuDetail) return ''
+      try {
+        const parsed = typeof skuDetail === 'string' ? JSON.parse(skuDetail) : skuDetail
+        // 新版结构 { type: 'multi', combination: [{name, value}], description, skuName }
+        if (parsed?.combination?.length) {
+          return parsed.combination
+            .map(item => `${item.name || ''}:${item.value || ''}`)
+            .filter(Boolean)
+            .join(' / ')
+        }
+        if (parsed?.skuName) return parsed.skuName
+        if (parsed?.description) return parsed.description
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(item => `${item.name || ''}:${item.value || ''}`)
+            .filter(Boolean)
+            .join(' / ')
+        }
+      } catch (e) {
+        // ignore parse error, fallback to raw
+      }
+      return typeof skuDetail === 'string' ? skuDetail : JSON.stringify(skuDetail)
     },
     getStatusText(status) {
       const map = {

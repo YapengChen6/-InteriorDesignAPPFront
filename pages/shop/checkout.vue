@@ -36,8 +36,10 @@
         >
           <image
             class="item-image"
-            :src="item.imageUrl"
+            :src="getItemImage(item)"
             mode="aspectFill"
+            :lazy-load="true"
+            @error="onImageError"
           />
           <view class="item-info">
             <text class="item-title">{{ (item.productSpu && item.productSpu.productName) || '商品' }}</text>
@@ -175,6 +177,43 @@ export default {
       const num = Number(value)
       if (Number.isNaN(num)) return '0.00'
       return num.toFixed(2)
+    },
+    // 获取商品图片，按优先级回退
+    getItemImage(item) {
+      if (!item) return this.getDefaultProductImage()
+
+      // 1) 购物车项自身的图片字段
+      if (item.imageUrl) return item.imageUrl
+      if (item.productImage) return item.productImage
+      if (item.coverImage) return item.coverImage
+
+      // 2) SKU 图片
+      const sku = item.productSku || {}
+      if (sku.imageUrl) return sku.imageUrl
+      if (sku.coverImage) return sku.coverImage
+
+      // 3) SPU 图片
+      const spu = item.productSpu || {}
+      if (spu.imageUrl) return spu.imageUrl
+      if (spu.coverImage) return spu.coverImage
+      if (spu.productImage) return spu.productImage
+      if (spu.imageList && Array.isArray(spu.imageList) && spu.imageList.length) {
+        const first = spu.imageList[0]
+        return first.fileUrl || first.url || first
+      }
+
+      // 4) 默认占位
+      return this.getDefaultProductImage()
+    },
+    // 默认商品占位图（SVG Base64）
+    getDefaultProductImage() {
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2YyZjNmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Yqg6L29PC90ZXh0Pjwvc3ZnPg=='
+    },
+    // 图片加载失败兜底
+    onImageError(e) {
+      if (e?.target) {
+        e.target.src = this.getDefaultProductImage()
+      }
     },
     goAddressPage() {
       uni.navigateTo({
@@ -369,6 +408,10 @@ export default {
   height: 120rpx;
   border-radius: 12rpx;
   background-color: #f2f3f5;
+  background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2YyZjNmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Yqg6L29PC90ZXh0Pjwvc3ZnPg==');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   margin-right: 16rpx;
 }
 
