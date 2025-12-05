@@ -6,14 +6,17 @@
       <view class="header">
         <view class="header-content">
           <text class="title">消息中心</text>
-          <!-- 中间添加按钮 -->
-          <view class="center-add-btn" hover-class="btn-hover" @click="startNewChat">
-            <text class="plus-icon">+</text>
-          </view>
-          <!-- 右侧刷新按钮 -->
+          
+          <!-- 右侧按钮区域 -->
           <view class="header-actions">
+            <!-- 刷新按钮 -->
             <view class="action-btn refresh" hover-class="btn-hover" @click="refreshChatList">
-              <text class="refresh-icon">🔄</text>
+              <image class="icon-img" src="/static/images/刷新.svg" mode="aspectFit"></image>
+            </view>
+            
+            <!-- 添加按钮 -->
+            <view class="action-btn add" hover-class="btn-hover" @click="startNewChat">
+              <image class="icon-img" src="/static/images/加号.svg" mode="aspectFit"></image>
             </view>
           </view>
         </view>
@@ -759,51 +762,38 @@ page {
   flex: 1;
 }
 
-/* 中间添加按钮 */
-.center-add-btn {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 64rpx;
-  height: 64rpx;
-  background-color: var(--theme-blue);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6rpx 12rpx rgba(25, 102, 255, 0.3);
-  transition: transform 0.2s;
-  z-index: 10;
-}
-
-.center-add-btn .plus-icon {
-  color: #fff;
-  font-size: 40rpx;
-  font-weight: 300;
-  margin-top: -4rpx;
-}
-
 /* 右侧操作按钮容器 */
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 12rpx; /* 按钮之间的间距 */
 }
 
 .action-btn {
   width: 56rpx;
   height: 56rpx;
-  background-color: #28a745;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6rpx 12rpx rgba(40, 167, 69, 0.3);
   transition: transform 0.2s;
+  background-color: #fff; /* 白色背景 */
+  border: 2rpx solid #f0f0f0; /* 浅灰色边框 */
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1); /* 中性阴影 */
 }
 
-.refresh-icon {
-  color: #fff;
-  font-size: 32rpx;
+/* 悬停效果 */
+.action-btn.btn-hover {
+  transform: scale(0.95);
+  opacity: 0.9;
+  background-color: #f8f8f8; /* 悬停时稍微变深 */
+}
+
+/* 图标样式 */
+.icon-img {
+  width: 32rpx;
+  height: 32rpx;
+  /* SVG会保持原有颜色，不需要额外的颜色设置 */
 }
 
 /* 搜索框优化 */
@@ -1133,10 +1123,6 @@ page {
   font-weight: bold;
 }
 
-.btn-hover {
-  transform: scale(0.95);
-  opacity: 0.9;
-}
 .btn-hover-gray {
   background-color: #f9f9f9;
 }
