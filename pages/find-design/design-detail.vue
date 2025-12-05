@@ -293,8 +293,7 @@ import {
   getDesignerDetail,
   getDesignerPortfolios,
   likePortfolio,
-  unlikePortfolio,
-  contactDesigner
+  unlikePortfolio
 } from '@/api/designerdetail.js'
 
 // 导入点赞API
@@ -303,6 +302,13 @@ import {
   checkLikeStatus,
   getUserLikeCount
 } from '@/api/like.js'
+
+// 导入对话辅助工具函数
+import { 
+  createConversationAndNavigate, 
+  isUserLoggedIn, 
+  handleNotLoggedIn 
+} from '@/utils/conversationHelper.js'
 
 const API_BASE_URL = 'http://localhost:8081';
 
@@ -611,38 +617,30 @@ export default {
       }
     },
 
-    // 联系设计师
+    // 联系设计师 - 使用与寻找设计师界面相同的逻辑
     async contactDesigner() {
-      uni.showModal({
-        title: '联系设计师',
-        content: `确定要联系设计师 ${this.designerDetail.userInfo.nickName} 吗？`,
-        success: async (res) => {
-          if (res.confirm) {
-            try {
-              const contactData = {
-                contactType: '咨询',
-                message: '我对您的设计作品很感兴趣，想了解更多信息'
-              };
-              
-              const result = await contactDesigner(this.designerId, contactData);
-              if (result.code === 200) {
-                uni.showToast({
-                  title: '联系请求已发送',
-                  icon: 'success'
-                });
-              } else {
-                throw new Error(result.msg || '联系失败');
-              }
-            } catch (error) {
-              console.error('联系设计师失败:', error);
-              uni.showToast({
-                title: '联系请求发送成功',
-                icon: 'success'
-              });
-            }
-          }
-        }
-      });
+      console.log('💬 开始联系设计师:', this.designerDetail);
+      
+      // 检查登录状态
+      if (!this.isUserLoggedIn()) {
+        this.handleNotLoggedIn();
+        return;
+      }
+      
+      if (!this.designerDetail || !this.designerDetail.userInfo || !this.designerDetail.userInfo.userId) {
+        uni.showToast({
+          title: '设计师信息无效',
+          icon: 'error'
+        });
+        return;
+      }
+      
+      // 使用辅助工具函数创建对话并跳转
+      await this.createConversationAndNavigate(
+        this.designerDetail.userInfo.userId,
+        this.designerDetail.userInfo.nickName || this.designerDetail.userInfo.userName || '设计师',
+        this.designerDetail.userInfo.avatar || ''
+      );
     },
 
     // 获取头像URL
@@ -718,6 +716,21 @@ export default {
         this.checkDesignerLikeStatus();
         this.getDesignerLikeCount();
       }
+    },
+
+    // 辅助方法 - 创建对话并跳转
+    async createConversationAndNavigate(targetUserId, targetUserName, targetUserAvatar) {
+      return await createConversationAndNavigate(targetUserId, targetUserName, targetUserAvatar);
+    },
+
+    // 辅助方法 - 检查用户登录状态
+    isUserLoggedIn() {
+      return isUserLoggedIn();
+    },
+
+    // 辅助方法 - 处理未登录状态
+    handleNotLoggedIn() {
+      return handleNotLoggedIn();
     }
   }
 }

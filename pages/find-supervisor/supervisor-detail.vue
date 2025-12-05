@@ -235,6 +235,12 @@
 import { getSupervisorDetail } from '@/api/supervisor2.js'
 // 导入点赞相关API
 import { toggleUserLike, checkLikeStatus, getUserLikeCount } from '@/api/like.js'
+// 导入对话辅助工具函数
+import { 
+  createConversationAndNavigate, 
+  isUserLoggedIn, 
+  handleNotLoggedIn 
+} from '@/utils/conversationHelper.js'
 
 export default {
   data() {
@@ -720,30 +726,45 @@ export default {
       }
     },
     
-    // 联系监工
-    contactSupervisor() {
-      if (!this.userInfo) return
+    // 联系监工 - 使用与寻找监理界面相同的逻辑
+    async contactSupervisor() {
+      console.log('💬 开始联系监理:', this.supervisorInfo, this.userInfo);
       
-      const phone = this.userInfo.phonenumber
-      if (!phone) {
-        uni.showToast({
-          title: '该监工未提供联系电话',
-          icon: 'none'
-        })
-        return
+      // 检查登录状态
+      if (!this.isUserLoggedIn()) {
+        this.handleNotLoggedIn();
+        return;
       }
       
-      uni.showModal({
-        title: '联系监工',
-        content: `确定要联系 ${this.userInfo.nickName} 吗？\n电话：${phone}`,
-        success: (res) => {
-          if (res.confirm) {
-            uni.makePhoneCall({
-              phoneNumber: phone
-            })
-          }
-        }
-      })
+      if (!this.supervisorInfo || !this.supervisorId) {
+        uni.showToast({
+          title: '监理信息无效',
+          icon: 'error'
+        });
+        return;
+      }
+      
+      // 使用辅助工具函数创建对话并跳转
+      await this.createConversationAndNavigate(
+        this.supervisorId,
+        this.userInfo?.nickName || this.supervisorInfo?.name || '监理',
+        this.userInfo?.avatar || ''
+      );
+    },
+
+    // 辅助方法 - 创建对话并跳转
+    async createConversationAndNavigate(targetUserId, targetUserName, targetUserAvatar) {
+      return await createConversationAndNavigate(targetUserId, targetUserName, targetUserAvatar);
+    },
+
+    // 辅助方法 - 检查用户登录状态
+    isUserLoggedIn() {
+      return isUserLoggedIn();
+    },
+
+    // 辅助方法 - 处理未登录状态
+    handleNotLoggedIn() {
+      return handleNotLoggedIn();
     }
   }
 }
