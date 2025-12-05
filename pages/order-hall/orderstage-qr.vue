@@ -163,7 +163,7 @@
       </view>
     </view>
 
-    <!-- 日志详情模态框 -->
+    <!-- 日志详情模态框 - 修复滚动问题 -->
     <view v-if="showLogModal" class="log-modal" @tap="closeLogModal">
       <view class="modal-content" @tap.stop>
         <view class="modal-header">
@@ -174,7 +174,13 @@
           <text class="iconfont icon-close" @tap="closeLogModal">×</text>
         </view>
         
-        <scroll-view scroll-y class="modal-body">
+        <!-- 修改scroll-view，确保可以滚动 -->
+        <scroll-view 
+          scroll-y 
+          class="modal-body"
+          :style="{ height: modalScrollHeight }"
+          @scroll="onScroll"
+        >
           <view v-if="stageLogs.length > 0" class="logs-list">
             <view v-for="log in stageLogs" :key="log.orderTaskId" class="log-item">
               <view class="log-header">
@@ -244,7 +250,9 @@ export default {
         3: '待验收',
         4: '已完成',
         5: '已取消'
-      }
+      },
+      modalScrollHeight: '400px', // 动态计算滚动区域高度
+      systemInfo: null
     }
   },
 
@@ -265,9 +273,34 @@ export default {
       return
     }
     this.loadStages()
+    
+    // 获取系统信息，用于计算弹窗高度
+    this.getSystemInfo()
   },
 
   methods: {
+    async getSystemInfo() {
+      try {
+        const res = await uni.getSystemInfoSync()
+        this.systemInfo = res
+        // 计算弹窗滚动区域高度（屏幕高度的70% - 头部和底部高度）
+        const windowHeight = res.windowHeight
+        const headerHeight = 100 // 头部大约100px
+        const footerHeight = 80  // 底部大约80px
+        const padding = 60       // 上下padding
+        
+        this.modalScrollHeight = `${windowHeight * 0.7 - headerHeight - footerHeight - padding}px`
+      } catch (error) {
+        console.error('获取系统信息失败:', error)
+        this.modalScrollHeight = '400px' // 默认高度
+      }
+    },
+    
+    onScroll(e) {
+      // 如果需要可以在这里处理滚动事件
+      // console.log('滚动位置:', e.detail.scrollTop)
+    },
+
     async loadStages() {
       this.loading = true
       try {
@@ -587,8 +620,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-/* 注意：小程序中不使用 :deep() 选择器，如需覆盖子组件样式，请使用其他方法 */
-
 .container {
   min-height: 100vh;
   background-color: #f0f2f5;
@@ -992,6 +1023,7 @@ export default {
   }
 }
 
+/* 修复弹窗滚动问题 */
 .log-modal {
   position: fixed;
   top: 0;
@@ -1009,10 +1041,10 @@ export default {
     background: white;
     border-radius: 20rpx;
     width: 100%;
-    max-height: 80vh;
+    max-height: 80vh; /* 限制最大高度为视口的80% */
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    /* 关键：不要设置 overflow: hidden */
   }
   
   .modal-header {
@@ -1022,6 +1054,7 @@ export default {
     padding: 30rpx;
     background: #2c6aa0;
     color: white;
+    flex-shrink: 0; /* 防止头部被压缩 */
     
     .modal-title {
       font-size: 30rpx;
@@ -1047,8 +1080,9 @@ export default {
   }
   
   .modal-body {
-    flex: 1;
-    padding: 30rpx;
+    flex: 1; /* 占据剩余空间 */
+    /* 关键：scroll-view 自己会处理滚动 */
+    /* 不要在这里设置 overflow，让 scroll-view 处理 */
   }
   
   .logs-list {
@@ -1183,6 +1217,7 @@ export default {
     gap: 20rpx;
     padding: 30rpx;
     border-top: 1rpx solid #e1e4e8;
+    flex-shrink: 0; /* 防止底部被压缩 */
     
     button {
       flex: 1;
@@ -1218,6 +1253,22 @@ export default {
   .loading-text {
     color: white;
     font-size: 32rpx;
+  }
+}
+
+/* 确保 scroll-view 正常工作 */
+.scroll-view {
+  box-sizing: border-box;
+}
+
+/* 响应式调整 */
+@media screen and (max-width: 750rpx) {
+  .log-modal {
+    padding: 20rpx;
+    
+    .modal-content {
+      max-height: 85vh;
+    }
   }
 }
 </style>
