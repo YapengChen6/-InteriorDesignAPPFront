@@ -436,6 +436,7 @@ export default {
         
         const queryParams = {
           userId: this.userId, // 根据用户ID查询项目
+          roleType: this.userRole, // 根据当前角色筛选
           pageNum: 1,
           pageSize: 100 // 获取所有项目
         }

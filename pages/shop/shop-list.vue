@@ -115,7 +115,6 @@
               {{ item.productDetail || '暂无描述' }}
             </text>
             <view class="meta-row">
-              <text class="stock">库存 {{ item.stock || 0 }}</text>
               <text class="category">{{ item.categoryPath || '未分类' }}</text>
             </view>
           </view>

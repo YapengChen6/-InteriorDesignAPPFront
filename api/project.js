@@ -123,6 +123,9 @@ export const projectService = {
         status: queryParams.status,
         address: queryParams.address,
         deadline: queryParams.deadline,
+        // 用户过滤
+        userId: queryParams.userId,
+        roleType: queryParams.roleType,
         // 修复预算参数名 - 使用后端需要的参数名
         budgetMin: queryParams.budgetMin,
         budgetMax: queryParams.budgetMax,
