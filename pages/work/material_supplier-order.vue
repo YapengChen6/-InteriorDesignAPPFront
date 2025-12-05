@@ -1,5 +1,13 @@
 <template>
   <view class="container">
+    <!-- 自定义返回栏 -->
+    <view class="custom-nav">
+      <view class="nav-left" @click="goBack">
+        <text class="back-arrow">‹</text>
+        <text class="nav-title">订单管理</text>
+      </view>
+    </view>
+    
     <!-- 订单状态筛选 -->
     <view class="status-filter">
       <scroll-view class="filter-scroll" scroll-x="true">
@@ -215,6 +223,22 @@ export default {
   },
   
   methods: {
+    // 自定义返回
+    goBack() {
+      const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+      if (pages && pages.length > 1) {
+        uni.navigateBack()
+      } else {
+        // 如果没有历史页面，则回到首页
+        uni.switchTab({
+          url: '/pages/index/index',
+          fail: () => {
+            uni.reLaunch({ url: '/pages/index/index' })
+          }
+        })
+      }
+    },
+    
     handleOrderEvent() {
       this.loadOrders()
     },
@@ -517,6 +541,28 @@ export default {
 .container {
   min-height: 100vh;
   background-color: #f5f7fa;
+}
+
+.custom-nav {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 24rpx 8rpx;
+}
+
+.nav-left {
+  display: flex;
+  align-items: center;
+  color: #303133;
+}
+
+.back-arrow {
+  font-size: 40rpx;
+  margin-right: 12rpx;
+}
+
+.nav-title {
+  font-size: 32rpx;
+  font-weight: 600;
 }
 
 .status-filter {

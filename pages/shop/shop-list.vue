@@ -118,22 +118,6 @@
               <text class="stock">库存 {{ item.stock || 0 }}</text>
               <text class="category">{{ item.categoryPath || '未分类' }}</text>
             </view>
-            <view class="card-actions">
-              <button
-                class="action-btn ghost"
-                :disabled="actionLoadingId === item.id"
-                @click.stop="addToCart(item)"
-              >
-                加入购物车
-              </button>
-              <button
-                class="action-btn primary"
-                :disabled="actionLoadingId === item.id"
-                @click.stop="buyNow(item)"
-              >
-                立即购买
-              </button>
-            </view>
           </view>
         </view>
 
@@ -168,7 +152,6 @@
 <script>
 import * as productApi from '@/api/product.js'
 import * as mediaApi from '@/api/media.js'
-import * as cartApi from '@/api/cart.js'
 
 export default {
   name: 'ShopProductList',
@@ -183,8 +166,7 @@ export default {
       statusFilter: 'all', // all | '0' | '2'
       loadMoreStatus: 'more',
       productImagesMap: new Map(),
-      productSkusMap: new Map(), // 存储SPU对应的SKU列表，用于计算总库存
-      actionLoadingId: null
+      productSkusMap: new Map() // 存储SPU对应的SKU列表，用于计算总库存
     }
   },
   computed: {
@@ -479,56 +461,6 @@ export default {
         return String(product.status)
       }
       return '0'
-    },
-    
-    async performAddToCart(product) {
-      if (!product || !product.id) {
-        uni.showToast({ title: '商品信息缺失', icon: 'none' })
-        return false
-      }
-      if (this.getProductStatus(product) !== '0') {
-        uni.showToast({ title: '商品未上架', icon: 'none' })
-        return false
-      }
-      // 数据库中使用2表示多规格
-      if (product.specType === '2' || product.specType === 2) {
-        uni.showToast({ title: '多规格商品请前往详情选择规格', icon: 'none' })
-        return false
-      }
-      const payload = {
-        spuId: product.id,
-        skuId: null,
-        quantity: 1
-      }
-      this.actionLoadingId = product.id
-      try {
-        const res = await cartApi.addCartItem(payload)
-        if (res && (res.code === 200 || res.success)) {
-          uni.showToast({ title: '已加入购物车', icon: 'success' })
-          return true
-        }
-        uni.showToast({ title: res?.msg || '加入购物车失败', icon: 'none' })
-        return false
-      } catch (error) {
-        console.error('加入购物车失败:', error)
-        uni.showToast({ title: error.message || '加入购物车失败', icon: 'none' })
-        return false
-      } finally {
-        this.actionLoadingId = null
-      }
-    },
-
-    async addToCart(product) {
-      await this.performAddToCart(product)
-    },
-
-    async buyNow(product) {
-      const success = await this.performAddToCart(product)
-      if (success) {
-        uni.navigateTo({
-          url: '/pages/shop/cart'
-        })
-      }
     },
     
     // 跳转到商家详情页
