@@ -231,9 +231,9 @@ export default {
       } else {
         // 如果没有历史页面，则回到首页
         uni.switchTab({
-          url: '/pages/index/index',
+          url: '/pages/index',
           fail: () => {
-            uni.reLaunch({ url: '/pages/index/index' })
+            uni.reLaunch({ url: '/pages/index' })
           }
         })
       }
