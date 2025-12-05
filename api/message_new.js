@@ -194,7 +194,7 @@ export function getAllMessageTemplates() {
  */
 export function getUserOnlineStatus(userId) {
   return request({
-    url: `/api/message/user-online-status/${userId}`,
+    url: `/api/user/online-status/${userId}`,
     method: 'get'
   })
 }

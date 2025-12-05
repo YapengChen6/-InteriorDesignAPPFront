@@ -46,14 +46,27 @@ const request = config => {
     const finalUrl = (config.baseUrl || config.baseURL) 
       ? (requestBaseUrl + config.url) 
       : (baseUrl + config.url)
-    uni.request({
+    // 小程序环境特殊处理
+    const requestConfig = {
         method: config.method || 'get',
         timeout: config.timeout ||  timeout,
         url: finalUrl,
         data: config.data,
         header: config.header,
         dataType: 'json'
-      }).then(response => {
+    }
+    
+    // 小程序环境下的调试信息
+    // #ifdef MP-WEIXIN
+    console.log('🔧 小程序环境 - 请求配置:', {
+      url: requestConfig.url,
+      method: requestConfig.method,
+      headers: requestConfig.header,
+      data: requestConfig.data
+    })
+    // #endif
+    
+    uni.request(requestConfig).then(response => {
         let [error, res] = response
         if (error) {
           toast('后端接口连接异常')
