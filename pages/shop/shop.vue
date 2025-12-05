@@ -381,6 +381,23 @@ export default {
   },
   
   methods: {
+    // 处理商品库存更新事件：重新加载商品和库存数据
+    async handleProductStockUpdated(payload) {
+      try {
+        console.log('收到商品库存更新事件:', payload);
+        if (!this.currentShopId) {
+          await this.loadCurrentShop();
+        }
+        if (!this.currentShopId) return;
+        this.pageParams.pageNum = 1;
+        this.productSkusMap.clear();
+        this.productImagesMap.clear();
+        this.productSkuSummary = {};
+        await this.loadProducts();
+      } catch (e) {
+        console.warn('刷新商品库存数据失败:', e);
+      }
+    },
     async loadCurrentShop() {
       if (this.shopLoading) return;
       this.shopLoading = true;
@@ -1103,7 +1120,8 @@ export default {
         return;
       }
       uni.navigateTo({
-        url: `/pages/shop/product-detail?id=${spuId}`
+        // 商家查看商品详情，跳转到商家专用详情页（无购买按钮）
+        url: `/pages/shop/product-detail-merchant?id=${spuId}`
       });
     },
     
@@ -1616,9 +1634,11 @@ export default {
     console.log('商品管理页面加载');
     await this.loadCurrentShop();
     if (this.currentShopId) {
-    this.loadProducts();
-    this.loadCategories();
+      this.loadProducts();
+      this.loadCategories();
     }
+    // 监听下单成功后的库存更新事件
+    uni.$on('productStockUpdated', this.handleProductStockUpdated);
   },
   
   async onShow() {
@@ -1632,6 +1652,10 @@ export default {
     this.productImagesMap.clear();
     this.productSkuSummary = {};
     this.loadProducts();
+  },
+  
+  onUnload() {
+    uni.$off('productStockUpdated', this.handleProductStockUpdated);
   },
   
   onPullDownRefresh() {

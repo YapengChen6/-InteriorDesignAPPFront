@@ -51,10 +51,10 @@
             <view class="order-info">
               <text class="order-title">{{ order.title || '项目' + (order.projectId || order.id) }}</text>
               <view class="order-meta">
-                <text class="order-type" :class="getOrderTypeClass(order.requiredRoles)">
+                <text class="order-type" :class="orderTypeClasses[order.requiredRoles] || ''">
                   {{ getOrderTypeText(order.requiredRoles) }}
                 </text>
-                <text class="order-status" :class="getOrderStatusClass(order.status)">
+                <text class="order-status" :class="orderStatusClasses[order.status] || ''">
                   {{ getOrderStatusText(order.status) }}
                 </text>
               </view>
@@ -364,6 +364,21 @@ export default {
         'image': 'image-tag',
         'video': 'video-tag',
         'other': 'other-tag'
+      },
+      // 订单类型样式映射
+      orderTypeClasses: {
+        1: 'order-type-design',
+        2: 'order-type-supervision',
+        3: 'order-type-both'
+      },
+      // 订单状态样式映射
+      orderStatusClasses: {
+        0: 'status-draft',
+        1: 'status-bidding',
+        2: 'status-processing',
+        3: 'status-processing',
+        4: 'status-completed',
+        5: 'status-cancelled'
       }
     }
   },

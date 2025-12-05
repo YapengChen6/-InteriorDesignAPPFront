@@ -194,8 +194,8 @@ export default {
       // 状态筛选（统一使用 productStatus 或 status）
       if (this.statusFilter !== 'all') {
         list = list.filter(item => {
-          const status = item.productStatus !== undefined 
-            ? String(item.productStatus) 
+          const status = item.productStatus !== undefined
+            ? String(item.productStatus)
             : (item.status !== undefined ? String(item.status) : '0')
           return status === this.statusFilter
         })
@@ -229,10 +229,10 @@ export default {
     // 将原始商品数据包装成前端展示结构（与管理页保持一致字段）
     wrapProduct(product) {
       // 统一使用 productStatus 字段，如果没有则使用 status
-      const productStatus = product.productStatus !== undefined 
-        ? String(product.productStatus) 
+      const productStatus = product.productStatus !== undefined
+        ? String(product.productStatus)
         : (product.status !== undefined ? String(product.status) : '0')
-      
+
       return {
         id: product.productSpuId || product.spuId || product.id,
         productName: product.productName,
@@ -422,7 +422,7 @@ export default {
       }
       return '0'
     },
-    
+
     async performAddToCart(product) {
       if (!product || !product.id) {
         uni.showToast({ title: '商品信息缺失', icon: 'none' })
@@ -471,7 +471,7 @@ export default {
         })
       }
     },
-    
+
     // 跳转到商家详情页
     goToShopDetail(shopId) {
       if (!shopId) {
@@ -481,10 +481,25 @@ export default {
       uni.navigateTo({
         url: `/pages/shop/shop-detail?shopId=${shopId}`
       })
+    },
+
+    // 处理商品库存更新事件：重新加载商品数据
+    async handleProductStockUpdated(payload) {
+      try {
+        console.log('shop-list 收到商品库存更新事件:', payload)
+        await this.loadData()
+      } catch (e) {
+        console.warn('shop-list 刷新商品数据失败:', e)
+      }
     }
   },
   onLoad() {
     this.loadData()
+    // 监听商品库存更新事件，在用户端商品列表中实时刷新库存/状态
+    uni.$on('productStockUpdated', this.handleProductStockUpdated)
+  },
+  onUnload() {
+    uni.$off('productStockUpdated', this.handleProductStockUpdated)
   }
 }
 </script>

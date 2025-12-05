@@ -250,6 +250,25 @@
               />
             </view>
           </view>
+
+          <!-- 商品上下架状态 -->
+          <view class="form-group">
+            <text class="form-label">商品状态</text>
+            <picker
+              :value="productStatusIndex"
+              :range="productStatusOptions"
+              range-key="name"
+              @change="onProductStatusChange"
+              class="picker"
+            >
+              <view class="picker-text">
+                {{ productStatusOptions[productStatusIndex].name }}
+              </view>
+            </picker>
+            <view class="status-tip">
+              <text class="tip-text">选择“下架”时，用户端将暂时无法购买该商品。</text>
+            </view>
+          </view>
           
           <view class="action-buttons">
             <button class="btn btn-secondary" hover-class="none" @tap="goToStep(1)">上一步</button>
@@ -500,6 +519,7 @@ export default {
         productName: '',
         productDetail: '',
         categoryId: null,
+        // 商品上下架状态：'0' 上架，'2' 下架
         productStatus: '0',
         specType: '0',
         marketPrice: 0,
@@ -520,6 +540,12 @@ export default {
       
       // 参考价
       referencePrice: '',
+      // 商品状态选择
+      productStatusOptions: [
+        { id: '0', name: '上架' },
+        { id: '2', name: '下架' }
+      ],
+      productStatusIndex: 0,
       
       // 加载状态
       loading: false,
@@ -579,6 +605,14 @@ export default {
       if (step === 3) {
         this.generatePriceStockTable()
       }
+    },
+    
+    // 商品状态选择
+    onProductStatusChange(e) {
+      const index = parseInt(e.detail.value)
+      this.productStatusIndex = index
+      const option = this.productStatusOptions[index]
+      this.productData.productStatus = option ? option.id : '0'
     },
     
     // 一级分类选择
@@ -1306,7 +1340,7 @@ export default {
         productName: this.productData.productName.trim(),
         productDetail: this.productData.productDetail.trim(),
         categoryId: Number(this.selectedCategory3Id),
-        productStatus: '0',
+        productStatus: this.productData.productStatus || '0',
         specType: this.specifications.length > 0 ? '2' : '0',
         marketPrice: Number(this.referencePrice) || 0,
         costPrice: Number(this.referencePrice) * 0.8 || 0,
@@ -1491,7 +1525,7 @@ export default {
           productName: this.productData.productName.trim(),
           productDetail: this.productData.productDetail.trim(),
           categoryId: Number(this.selectedCategory3Id),
-          productStatus: '0',
+          productStatus: this.productData.productStatus || '0',
           specType: this.specifications.length > 0 ? '2' : '0',
           marketPrice: Number(this.referencePrice) || 0,
           costPrice: Number(this.referencePrice) * 0.8 || 0,

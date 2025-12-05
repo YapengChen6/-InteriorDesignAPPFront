@@ -229,7 +229,28 @@ export default {
         uni.hideLoading()
         uni.showToast({ title: '支付成功（模拟）', icon: 'success' })
 
-        // 3. 跳转到“我的订单”页面查看
+        // 3. 通知商品库存可能已变更，让相关页面刷新商品数据
+        try {
+          const spuIdSet = new Set()
+          this.cartItems.forEach(item => {
+            const spu = item.productSpu || {}
+            const rawId = spu.productSpuId != null
+              ? spu.productSpuId
+              : (spu.spuId != null ? spu.spuId : spu.id)
+            if (rawId != null) {
+              const idNum = Number(rawId)
+              if (!Number.isNaN(idNum)) {
+                spuIdSet.add(idNum)
+              }
+            }
+          })
+          const spuIds = Array.from(spuIdSet)
+          uni.$emit('productStockUpdated', { spuIds })
+        } catch (e) {
+          console.warn('触发库存更新事件失败:', e)
+        }
+
+        // 4. 跳转到“我的订单”页面查看
         setTimeout(() => {
           uni.navigateTo({
             url: '/pages/mine/viewOrder/viewOrder'

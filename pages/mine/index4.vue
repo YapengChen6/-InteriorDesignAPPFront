@@ -33,22 +33,18 @@
 			</view>
 		</view>
 		
-		<!-- 统计信息 -->
+		<!-- 统计信息（仅展示标签，不展示具体数字） -->
 		<view class="stats-container">
 			<view class="stat-card" @tap="handleStatClick('关注')">
-				<text class="stat-number">{{ userStats.follow }}</text>
 				<text class="stat-label">关注</text>
 			</view>
 			<view class="stat-card" @tap="handleStatClick('点赞')">
-				<text class="stat-number">{{ userStats.like }}</text>
 				<text class="stat-label">点赞</text>
 			</view>
 			<view class="stat-card" @tap="handleStatClick('收藏')">
-				<text class="stat-number">{{ userStats.favorite }}</text>
 				<text class="stat-label">收藏</text>
 			</view>
 			<view class="stat-card" @tap="handleStatClick('发布')">
-				<text class="stat-number">{{ userStats.publish }}</text>
 				<text class="stat-label">发布</text>
 			</view>
 		</view>
@@ -62,8 +58,8 @@
 				<template v-if="currentRoleType === 'user'">
 					<view class="menu-item" @tap="handleMenuClick('查看订单')">
 						<view class="menu-item-left">
-							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/查看订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">查看订单</text>
@@ -90,8 +86,8 @@
 				<template v-if="currentRoleType === 'designer'">
 					<view class="menu-item" @tap="handleMenuClick('我的作品')">
 						<view class="menu-item-left">
-							<view class="menu-icon blue">
-								<text class="iconfont icon-palette"></text>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/我的作品.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的作品</text>
@@ -103,8 +99,8 @@
 					
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
-							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -118,8 +114,8 @@
 				<template v-if="currentRoleType === 'material_supplier'">
 					<view class="menu-item" @tap="handleMenuClick('产品管理')">
 						<view class="menu-item-left">
-							<view class="menu-icon blue">
-								<text class="iconfont icon-cube"></text>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/产品管理.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">产品管理</text>
@@ -159,8 +155,8 @@
 				<template v-if="currentRoleType === 'supervisor'">
 					<view class="menu-item" @tap="handleMenuClick('我的订单')">
 						<view class="menu-item-left">
-							<view class="menu-icon orange">
-								<text class="iconfont icon-shopping-cart"></text>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/我的订单.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">我的订单</text>
@@ -172,8 +168,8 @@
 					
 					<view class="menu-item" @tap="handleMenuClick('案例管理')">
 						<view class="menu-item-left">
-							<view class="menu-icon purple">
-								<text class="iconfont icon-folder"></text>
+							<view class="menu-icon image-icon">
+								<image class="menu-icon-img" src="/static/images/案例-2.svg" mode="aspectFit"></image>
 							</view>
 							<view class="menu-text">
 								<text class="menu-name">案例管理</text>
@@ -230,8 +226,8 @@
 				
 				<view class="menu-item" @tap="handleMenuClick('帮助与反馈')">
 					<view class="menu-item-left">
-						<view class="menu-icon yellow">
-							<text class="iconfont icon-question-circle"></text>
+						<view class="menu-icon image-icon">
+							<image class="menu-icon-img" src="/static/images/帮助与反馈.svg" mode="aspectFit"></image>
 						</view>
 						<view class="menu-text">
 							<text class="menu-name">帮助与反馈</text>
@@ -272,10 +268,10 @@
 					// 初始为空，从接口获取
 				},
 				userStats: {
-					follow: 6,
-					like: 13,
+					follow: 0,
+					like: 0,
 					favorite: 0,
-					publish: 2
+					publish: 0
 				},
 				roleMap: {
 					user: {

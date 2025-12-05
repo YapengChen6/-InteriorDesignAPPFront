@@ -16,7 +16,7 @@
         :key="record.afterSaleId || record.id"
       >
         <view class="record-header">
-          <view class="record-type" :class="getTypeClass(record.type)">
+          <view class="record-type" :class="typeClasses[String(record.type)] || ''">
             {{ getTypeText(record.type) }}
           </view>
         </view>
@@ -74,7 +74,16 @@ export default {
       orderId: null,
       order: {},
       afterSaleList: [],
-      loading: false
+      loading: false,
+      // 售后类型样式映射
+      typeClasses: {
+        '1': 'type-refund',
+        '2': 'type-return',
+        '3': 'type-exchange',
+        'refund': 'type-refund',
+        'return': 'type-return',
+        'exchange': 'type-exchange'
+      }
     }
   },
   onLoad(query) {

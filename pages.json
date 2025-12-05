@@ -228,6 +228,11 @@
       "navigationBarTitleText": "商品详情"
     }
   }, {
+    "path": "pages/shop/product-detail-merchant",
+    "style": {
+      "navigationBarTitleText": "商品详情（商家）"
+    }
+  }, {
     "path": "pages/shop/checkout",
     "style": {
       "navigationBarTitleText": "结算页面"

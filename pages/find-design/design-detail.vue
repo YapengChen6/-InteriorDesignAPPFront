@@ -663,7 +663,8 @@ export default {
       console.log('查看作品详情:', threadId);
       
       uni.navigateTo({
-        url: `/pages/designer/portfolio-detail?id=${threadId}`,
+        // 跳转到社区帖子详情页
+        url: `/pages/post/detail?id=${threadId}`,
         fail: () => {
           uni.showModal({
             title: '提示',
