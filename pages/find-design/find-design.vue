@@ -180,7 +180,8 @@
 </template>
 
 <script>
-import { getDesignerList, searchDesigners } from "@/api/designer.js"
+	import { searchDesigners } from "@/api/userOfDesigner.js"
+import { getDesignerList } from "@/api/designer.js"
 import { getUserProfile } from "@/api/users.js"
 import { batchGetUserRatings } from "@/api/rating.js"
 import { batchGetUserOnlineStatus } from "@/api/onlineStatus.js"
@@ -413,12 +414,298 @@ onSearchInput() {
     this.performSearch(); // 调用搜索函数
   }, 500); // 适当增加延迟，减少请求频率
 },
+// 格式化搜索结果
+formatSearchResults(designers) {
+  if (!designers || !Array.isArray(designers)) {
+    console.warn('formatSearchResults: 输入数据无效', designers);
+    return [];
+  }
+  
+  console.log('🔧 格式化搜索结果，数据条数:', designers.length);
+  
+  return designers.map((designer, index) => {
+    // 调试信息
+    if (index === 0) {
+      console.log('📋 第一条搜索结果的原始数据:', designer);
+    }
+    
+    return {
+      userId: designer.userId || designer.id || 0,
+      userName: designer.userName || '',
+      Name: designer.nickName || designer.name || '设计师',
+      avatar: designer.avatar || designer.avatarUrl || this.defaultAvatar,
+      caseCount: designer.caseCount || designer.projectCount || designer.portfolioCount || 0,
+      address: designer.address || designer.city || designer.location || '',
+      city: designer.city || designer.location || '',
+      phone: designer.phone || designer.phonenumber || designer.tel || '',
+      specialty: designer.specialty || designer.style || designer.skills || '',
+      experience: designer.experience || 0,
+      isCertified: designer.isCertified || false,
+      isOnline: designer.isOnline || false,
+      // 评分相关字段（从搜索结果中获取或使用默认值）
+      avgRating: designer.avgRating || 0,
+      ratingLevel: designer.ratingLevel || '暂无评分',
+      totalOrders: designer.totalOrders || 0,
+      completedOrders: designer.completedOrders || 0,
+      totalRatingCount: designer.totalRatingCount || 0
+    };
+  });
+},
+// 加载所有设计师（非搜索状态）
+async loadAllDesigners() {
+  try {
+    this.loading = true;
+    this.error = null;
+    
+    console.log('📋 加载所有设计师列表');
+    
+    const response = await getDesignerList();
+    console.log('👥 获取所有设计师响应:', response);
 
+    if (response.code === 200) {
+      const designers = response.data || [];
+      console.log('📊 原始设计师数据:', designers);
+      
+      this.allDesigners = this.formatDesignerData(designers);
+      this.displayDesigners = [...this.allDesigners]; // 复制数组
+      
+      console.log('✅ 格式化后的设计师数据:', this.displayDesigners);
+      
+      // 获取评分和在线状态
+      await this.loadDesignerRatings(designers);
+      await this.loadDesignerOnlineStatus();
+      
+    } else {
+      throw new Error(response.msg || '获取设计师数据失败');
+    }
+  } catch (error) {
+    console.error('❌ 加载所有设计师错误:', error);
+    this.error = '加载失败: ' + error.message;
+    // 可以在这里添加降级方案
+    this.useMockData();
+  } finally {
+    this.loading = false;
+  }
+},
+// 格式化搜索结果
+formatSearchResults(designers) {
+  if (!designers || !Array.isArray(designers)) {
+    console.warn('formatSearchResults: 输入数据无效', designers);
+    return [];
+  }
+  
+  console.log('🔧 格式化搜索结果，数据条数:', designers.length);
+  
+  return designers.map((designer, index) => {
+    // 调试信息
+    if (index === 0) {
+      console.log('📋 第一条搜索结果的原始数据:', designer);
+    }
+    
+    return {
+      userId: designer.userId || designer.id || 0,
+      userName: designer.userName || '',
+      nickName: designer.nickName || designer.name || '设计师',
+      avatar: designer.avatar || designer.avatarUrl || this.defaultAvatar,
+      caseCount: designer.caseCount || designer.projectCount || designer.portfolioCount || 0,
+      address: designer.address || designer.city || designer.location || '',
+      city: designer.city || designer.location || '',
+      phone: designer.phone || designer.phonenumber || designer.tel || '',
+      specialty: designer.specialty || designer.style || designer.skills || '',
+      experience: designer.experience || 0,
+      isCertified: designer.isCertified || false,
+      isOnline: designer.isOnline || false,
+      avgRating: designer.avgRating || 0,
+      ratingLevel: designer.ratingLevel || '暂无评分',
+      totalOrders: designer.totalOrders || 0,
+      completedOrders: designer.completedOrders || 0,
+      totalRatingCount: designer.totalRatingCount || 0
+    };
+  });
+},
+
+// 加载所有设计师（非搜索状态）
+async loadAllDesigners() {
+  try {
+    this.loading = true;
+    this.error = null;
+    
+    console.log('📋 加载所有设计师列表');
+    
+    const response = await getDesignerList();
+    console.log('👥 获取所有设计师响应:', response);
+
+    if (response.code === 200) {
+      const designers = response.data || [];
+      console.log('📊 原始设计师数据:', designers);
+      
+      this.allDesigners = this.formatDesignerData(designers);
+      this.displayDesigners = [...this.allDesigners]; // 复制数组
+      
+      console.log('✅ 格式化后的设计师数据:', this.displayDesigners);
+      
+      // 获取评分和在线状态
+      await this.loadDesignerRatings(designers);
+      await this.loadDesignerOnlineStatus();
+      
+    } else {
+      throw new Error(response.msg || '获取设计师数据失败');
+    }
+  } catch (error) {
+    console.error('❌ 加载所有设计师错误:', error);
+    this.error = '加载失败: ' + error.message;
+    // 可以在这里添加降级方案
+    this.useMockData();
+  } finally {
+    this.loading = false;
+  }
+},
+
+// 加载额外的设计师信息
+async loadAdditionalDesignerInfo() {
+  if (!this.displayDesigners || this.displayDesigners.length === 0) {
+    return;
+  }
+  
+  try {
+    console.log('📈 加载额外设计师信息');
+    
+    // 提取设计师ID
+    const designerIds = this.displayDesigners
+      .filter(designer => designer.userId)
+      .map(designer => designer.userId);
+    
+    if (designerIds.length === 0) {
+      console.warn('⚠️ 没有有效的设计师ID');
+      return;
+    }
+    
+    console.log('🎯 需要获取信息的设计师ID:', designerIds);
+    
+    // 并行获取评分和在线状态
+    const [ratingResponse, onlineStatusResponse] = await Promise.all([
+      batchGetUserRatings(designerIds),
+      batchGetUserOnlineStatus(designerIds)
+    ]);
+    
+    // 处理评分信息
+    if (ratingResponse.code === 200) {
+      const ratingsMap = ratingResponse.data || {};
+      console.log('⭐ 评分信息:', ratingsMap);
+      
+      this.displayDesigners = this.displayDesigners.map(designer => {
+        const userId = designer.userId;
+        const ratingInfo = ratingsMap[userId] || {};
+        
+        return {
+          ...designer,
+          avgRating: ratingInfo.avgRating || designer.avgRating || 0,
+          ratingLevel: ratingInfo.ratingLevel || designer.ratingLevel || '暂无评分',
+          totalOrders: ratingInfo.totalOrders || designer.totalOrders || 0,
+          completedOrders: ratingInfo.completedOrders || designer.completedOrders || 0,
+          totalRatingCount: ratingInfo.totalRatingCount || designer.totalRatingCount || 0
+        };
+      });
+    }
+    
+    // 处理在线状态
+    if (onlineStatusResponse.code === 200) {
+      const onlineStatusMap = onlineStatusResponse.data || {};
+      console.log('🌐 在线状态信息:', onlineStatusMap);
+      
+      this.displayDesigners = this.displayDesigners.map(designer => ({
+        ...designer,
+        isOnline: onlineStatusMap[designer.userId] || designer.isOnline || false
+      }));
+    }
+    
+  } catch (error) {
+    console.error('❌ 加载额外信息错误:', error);
+    // 错误时不阻断主流程
+  }
+},
     // 清除搜索
     clearSearch() {
       this.searchQuery = '';
+	   this.loadAllDesigners();
     },
+// 执行搜索
+async performSearch() {
+  try {
+    const keyword = this.searchQuery.trim();
     
+    // 如果搜索关键词为空，显示所有设计师
+    if (!keyword) {
+      await this.loadAllDesigners();
+      return;
+    }
+
+    // 关键词长度验证
+    if (keyword.length < 1) {
+      uni.showToast({
+        title: '请输入至少1个字符',
+        icon: 'none'
+      });
+      return;
+    }
+
+    if (keyword.length > 20) {
+      uni.showToast({
+        title: '搜索关键词过长',
+        icon: 'none'
+      });
+      return;
+    }
+
+    this.loading = true;
+    console.log('🔍 开始搜索设计师:', keyword);
+
+    // 调用搜索API
+    const response = await searchDesigners(keyword);
+    console.log('📊 搜索API响应:', response);
+
+    if (response.code === 200) {
+      const searchResults = response.data || [];
+      console.log('✅ 搜索到的设计师:', searchResults);
+      
+      // 使用正确的方法名格式化搜索结果
+      this.displayDesigners = this.formatSearchResults(searchResults);
+      
+      // 获取额外的评分和在线状态信息
+      await this.loadAdditionalDesignerInfo();
+      
+      // 显示搜索结果统计
+      if (searchResults.length > 0) {
+        uni.showToast({
+          title: `找到 ${searchResults.length} 个设计师`,
+          icon: 'success',
+          duration: 1500
+        });
+      } else {
+        uni.showToast({
+          title: '未找到相关设计师',
+          icon: 'none',
+          duration: 2000
+        });
+      }
+      
+    } else {
+      throw new Error(response.msg || '搜索失败');
+    }
+    
+  } catch (error) {
+    console.error('❌ 搜索错误:', error);
+    uni.showToast({
+      title: '搜索失败: ' + error.message,
+      icon: 'error'
+    });
+    
+    // 搜索失败时显示空结果
+    this.displayDesigners = [];
+  } finally {
+    this.loading = false;
+  }
+},
     // 按评分排序
     sortByRating() {
       this.sortBy = 'rating';
