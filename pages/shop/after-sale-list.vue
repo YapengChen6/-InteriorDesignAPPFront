@@ -16,7 +16,12 @@
         :key="record.afterSaleId || record.id"
       >
         <view class="record-header">
-          <view class="record-type" :class="getTypeClass(record.type)">
+          <!-- 修复：使用对象语法代替方法调用 -->
+          <view class="record-type" :class="{
+            'type-refund': record.type == 1 || record.type == 'refund',
+            'type-return': record.type == 2 || record.type == 'return',
+            'type-exchange': record.type == 3 || record.type == 'exchange'
+          }">
             {{ getTypeText(record.type) }}
           </view>
         </view>
@@ -38,14 +43,15 @@
             <text class="record-value">{{ formatTime(record.updateTime) }}</text>
           </view>
         </view>
-        <view class="record-images" v-if="getRecordImages(record).length > 0">
+        <!-- 优化：避免在模板中重复调用方法 -->
+        <view class="record-images" v-if="recordImages(record).length > 0">
           <image
-            v-for="(img, index) in getRecordImages(record)"
+            v-for="(img, index) in recordImages(record)"
             :key="index"
             :src="img"
             mode="aspectFill"
             class="record-image"
-            @click="previewImage(img, getRecordImages(record))"
+            @click="previewImage(img, recordImages(record))"
           ></image>
         </view>
       </view>
@@ -129,6 +135,16 @@ export default {
       }
       return typeMap[typeStr] || '售后'
     },
+    // 新增：返回类名对象的方法
+    typeClassObj(type) {
+      const typeStr = String(type)
+      return {
+        'type-refund': typeStr === '1' || typeStr === 'refund',
+        'type-return': typeStr === '2' || typeStr === 'return',
+        'type-exchange': typeStr === '3' || typeStr === 'exchange'
+      }
+    },
+    // 或者也可以用这种简写方式
     getTypeClass(type) {
       const typeStr = String(type)
       const classMap = {
@@ -167,24 +183,42 @@ export default {
       if (!time) return '-'
       return new Date(time).toLocaleString()
     },
-    getRecordImages(record) {
+    // 修改：简化图片获取逻辑
+    recordImages(record) {
       if (!record.images) return []
       try {
         // 如果是字符串，尝试解析JSON
         if (typeof record.images === 'string') {
-          const parsed = JSON.parse(record.images)
-          return Array.isArray(parsed) ? parsed : []
+          // 先检查是否是有效的JSON字符串
+          if (record.images.startsWith('[') || record.images.startsWith('{')) {
+            const parsed = JSON.parse(record.images)
+            // 如果是数组，直接返回
+            if (Array.isArray(parsed)) {
+              return parsed
+            }
+            // 如果是对象且有图片数组，返回数组
+            if (parsed && Array.isArray(parsed.images)) {
+              return parsed.images
+            }
+          }
+          // 如果不是JSON，可能是一个图片URL字符串
+          return [record.images]
         }
         // 如果已经是数组，直接返回
         if (Array.isArray(record.images)) {
           return record.images
         }
       } catch (e) {
-        console.error('解析图片列表失败:', e)
+        console.warn('解析图片列表失败，使用原始值:', record.images)
+        // 解析失败，返回包含原始值的数组
+        return [record.images]
       }
       return []
     },
     previewImage(current, urls) {
+      if (!urls || !Array.isArray(urls) || urls.length === 0) {
+        urls = [current]
+      }
       uni.previewImage({
         current: current,
         urls: urls
@@ -195,6 +229,7 @@ export default {
 </script>
 
 <style scoped>
+/* 样式保持不变 */
 .page {
   min-height: 100vh;
   padding: 24rpx;

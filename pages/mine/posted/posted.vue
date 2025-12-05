@@ -51,10 +51,22 @@
             <view class="order-info">
               <text class="order-title">{{ order.title || '项目' + (order.projectId || order.id) }}</text>
               <view class="order-meta">
-                <text class="order-type" :class="getOrderTypeClass(order.requiredRoles)">
+                <!-- 修复：使用对象语法替代方法调用 -->
+                <text class="order-type" :class="{
+                  'order-type-design': order.requiredRoles == 1,
+                  'order-type-supervision': order.requiredRoles == 2,
+                  'order-type-both': order.requiredRoles == 3
+                }">
                   {{ getOrderTypeText(order.requiredRoles) }}
                 </text>
-                <text class="order-status" :class="getOrderStatusClass(order.status)">
+                <!-- 修复：使用对象语法替代方法调用 -->
+                <text class="order-status" :class="{
+                  'status-draft': order.status == 0,
+                  'status-bidding': order.status == 1,
+                  'status-processing': order.status == 2 || order.status == 3,
+                  'status-completed': order.status == 4,
+                  'status-cancelled': order.status == 5
+                }">
                   {{ getOrderStatusText(order.status) }}
                 </text>
               </view>
@@ -464,6 +476,7 @@ export default {
       return typeMap[requiredRoles] || '项目'
     },
     
+    // 修复：返回类名字符串（如果还想保留旧方法用于其他地方）
     getOrderTypeClass(requiredRoles) {
       const classMap = {
         1: 'order-type-design',
@@ -471,6 +484,16 @@ export default {
         3: 'order-type-both'
       }
       return classMap[requiredRoles] || ''
+    },
+    
+    // 新增：返回类名对象的方法（用于 :class 绑定）
+    getOrderTypeClassObj(requiredRoles) {
+      const type = parseInt(requiredRoles) || 0
+      return {
+        'order-type-design': type === 1,
+        'order-type-supervision': type === 2,
+        'order-type-both': type === 3
+      }
     },
     
     getOrderStatusText(status) {
@@ -485,6 +508,7 @@ export default {
       return statusMap[status] || '未知状态'
     },
     
+    // 修复：返回类名字符串（如果还想保留旧方法用于其他地方）
     getOrderStatusClass(status) {
       const classMap = {
         0: 'status-draft',
@@ -495,6 +519,18 @@ export default {
         5: 'status-cancelled'
       }
       return classMap[status] || ''
+    },
+    
+    // 新增：返回类名对象的方法（用于 :class 绑定）
+    getOrderStatusClassObj(status) {
+      const stat = parseInt(status) || 0
+      return {
+        'status-draft': stat === 0,
+        'status-bidding': stat === 1,
+        'status-processing': stat === 2 || stat === 3,
+        'status-completed': stat === 4,
+        'status-cancelled': stat === 5
+      }
     },
     
     formatPrice(price) {
