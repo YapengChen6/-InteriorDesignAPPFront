@@ -152,6 +152,75 @@ export function getUserLikedPosts(params) {
   })
 }
 
+/**
+ * 获取帖子评论列表（分页）
+ * @param {number} postId - 帖子ID
+ * @param {Object} params - 查询参数
+ * @param {number} params.pageNum - 页码
+ * @param {number} params.pageSize - 每页大小
+ */
+export function getPostComments(postId, params = {}) {
+  return request({
+    url: `/api/community/posts/${postId}/comments`,
+    method: 'get',
+    params: {
+      pageNum: params.pageNum || 1,
+      pageSize: params.pageSize || 20
+    }
+  })
+}
+
+/**
+ * 提交评论
+ * @param {number} postId - 帖子ID
+ * @param {Object} commentData - 评论数据
+ * @param {string} commentData.content - 评论内容（必填）
+ * @param {number} commentData.parentId - 父评论ID（可选，用于回复）
+ */
+export function submitComment(postId, commentData) {
+  return request({
+    url: `/api/community/posts/${postId}/comments`,
+    method: 'post',
+    data: commentData
+  })
+}
+
+/**
+ * 删除评论
+ * @param {number} postId - 帖子ID
+ * @param {number} commentId - 评论ID
+ */
+export function deleteComment(postId, commentId) {
+  return request({
+    url: `/api/community/posts/${postId}/comments/${commentId}`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 点赞评论
+ * @param {number} postId - 帖子ID
+ * @param {number} commentId - 评论ID
+ */
+export function likeComment(postId, commentId) {
+  return request({
+    url: `/api/community/posts/${postId}/comments/${commentId}/like`,
+    method: 'post'
+  })
+}
+
+/**
+ * 取消点赞评论
+ * @param {number} postId - 帖子ID
+ * @param {number} commentId - 评论ID
+ */
+export function unlikeComment(postId, commentId) {
+  return request({
+    url: `/api/community/posts/${postId}/comments/${commentId}/like`,
+    method: 'delete'
+  })
+}
+
 export default {
   getPostList,
   getPostDetail,
@@ -163,5 +232,10 @@ export default {
   getImagesPreview,
   likePost,
   unlikePost,
-  getUserLikedPosts
+  getUserLikedPosts,
+  getPostComments,
+  submitComment,
+  deleteComment,
+  likeComment,
+  unlikeComment
 }

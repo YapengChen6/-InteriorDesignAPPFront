@@ -1299,6 +1299,21 @@ export default {
 		padding-bottom: 60px;
 	}
 	
+	/* 搜索区域样式 - 添加 sticky 定位 */
+	.search-section {
+		position: sticky;
+		top: 0;
+		z-index: 101;
+		background-color: #fff;
+		padding: 12px 15px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+	}
+	
+	.search-container {
+		display: flex;
+		align-items: center;
+	}
+	
 	/* 搜索框样式 - 已修复 */
 	.search-box {
 	    display: flex;
@@ -1382,6 +1397,10 @@ export default {
 		border-bottom: 1px solid #eee;
 		overflow-x: auto;
 		white-space: nowrap;
+		position: sticky;
+		top: 68px; /* 搜索栏高度（12px padding * 2 + 44px min-height = 68px） */
+		z-index: 100;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 	}
 	
 	.menu-item {
@@ -1844,6 +1863,15 @@ export default {
 	@media (max-width: 480px) {
 		.search-section {
 			padding: 12px;
+			/* 保持 sticky 定位 */
+			position: sticky;
+			top: 0;
+			z-index: 101;
+		}
+		
+		.main-menu {
+			/* 调整 top 值以适配搜索栏高度 */
+			top: 68px; /* 12px padding * 2 + 44px min-height = 68px */
 		}
 		
 		.search-box {
@@ -1913,6 +1941,8 @@ export default {
 		
 		.main-menu {
 			padding: 12px;
+			/* 保持 sticky 定位，top 值根据搜索栏高度调整 */
+			top: 68px; /* 12px padding * 2 + 44px min-height = 68px */
 		}
 		
 		.image-info-toggle {

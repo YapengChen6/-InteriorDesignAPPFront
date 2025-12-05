@@ -183,6 +183,7 @@ export default {
       statusFilter: 'all', // all | '0' | '2'
       loadMoreStatus: 'more',
       productImagesMap: new Map(),
+      productSkusMap: new Map(), // 存储SPU对应的SKU列表，用于计算总库存
       actionLoadingId: null
     }
   },
@@ -194,8 +195,8 @@ export default {
       // 状态筛选（统一使用 productStatus 或 status）
       if (this.statusFilter !== 'all') {
         list = list.filter(item => {
-          const status = item.productStatus !== undefined
-            ? String(item.productStatus)
+          const status = item.productStatus !== undefined 
+            ? String(item.productStatus) 
             : (item.status !== undefined ? String(item.status) : '0')
           return status === this.statusFilter
         })
@@ -229,9 +230,12 @@ export default {
     // 将原始商品数据包装成前端展示结构（与管理页保持一致字段）
     wrapProduct(product) {
       // 统一使用 productStatus 字段，如果没有则使用 status
-      const productStatus = product.productStatus !== undefined
-        ? String(product.productStatus)
+      const productStatus = product.productStatus !== undefined 
+        ? String(product.productStatus) 
         : (product.status !== undefined ? String(product.status) : '0')
+      
+      // 计算总库存（与 product-detail.vue 保持一致）
+      const totalStock = this.calculateStock(product)
 
       return {
         id: product.productSpuId || product.spuId || product.id,
@@ -241,7 +245,7 @@ export default {
         marketPrice: product.marketPrice,
         status: productStatus, // 统一使用 status 字段
         productStatus: productStatus, // 同时保留 productStatus 字段以保持兼容
-        stock: product.stock || 0,
+        stock: totalStock, // 使用计算后的总库存
         specType: product.specType,
         imageUrl: product.imageUrl,
         coverImage: product.coverImage,
@@ -251,6 +255,28 @@ export default {
         shopAvatar: product.shopAvatar, // 商家头像
         originalData: product
       }
+    },
+    
+    // 计算总库存（与 product-detail.vue 保持一致）
+    calculateStock(product) {
+      if (!product) return 0
+      
+      const productId = product.productSpuId || product.spuId || product.id
+      if (!productId) return 0
+      
+      // 如果有SKU列表，累加所有SKU的库存
+      if (this.productSkusMap.has(productId)) {
+        const skuList = this.productSkusMap.get(productId)
+        if (skuList && Array.isArray(skuList) && skuList.length > 0) {
+          return skuList.reduce((total, sku) => {
+            const stock = sku.stock || sku.stockQuantity || sku.quantity || 0
+            return total + Number(stock || 0)
+          }, 0)
+        }
+      }
+      
+      // 如果没有SKU，使用SPU的库存
+      return product.stock || product.stockQuantity || 0
     },
 
     async loadData() {
@@ -263,8 +289,11 @@ export default {
           this.allProducts = res.data || []
           // 重置页码
           this.pageNum = 1
-          // 预加载当前页商品图片
-          await this.loadImagesForCurrentPage()
+          // 预加载当前页商品图片和SKU数据
+          await Promise.all([
+            this.loadImagesForCurrentPage(),
+            this.loadSkusForCurrentPage()
+          ])
           this.updateLoadMoreStatus()
         } else {
           this.allProducts = []
@@ -308,6 +337,30 @@ export default {
         } catch (err) {
           console.error('加载商品图片失败:', err)
           this.productImagesMap.set(spuId, [])
+        }
+      })
+
+      await Promise.all(promises)
+    },
+    
+    // 加载当前页商品的SKU数据（用于计算总库存）
+    async loadSkusForCurrentPage() {
+      const currentPageItems = this.displayList
+      const promises = currentPageItems.map(async item => {
+        const spuId = item.id
+        if (!spuId || this.productSkusMap.has(spuId)) return
+
+        try {
+          const skuRes = await productApi.getProductSkusBySpuId(spuId)
+          if (skuRes && skuRes.code === 200) {
+            const skuList = Array.isArray(skuRes.data) ? skuRes.data : []
+            this.productSkusMap.set(spuId, skuList)
+          } else {
+            this.productSkusMap.set(spuId, [])
+          }
+        } catch (err) {
+          console.error('加载商品SKU失败:', err)
+          this.productSkusMap.set(spuId, [])
         }
       })
 
@@ -387,8 +440,11 @@ export default {
       }
       this.pageNum += 1
       this.updateLoadMoreStatus()
-      // 为新页商品预加载图片
-      await this.loadImagesForCurrentPage()
+      // 为新页商品预加载图片和SKU数据
+      await Promise.all([
+        this.loadImagesForCurrentPage(),
+        this.loadSkusForCurrentPage()
+      ])
     },
 
     goCart() {
@@ -399,6 +455,8 @@ export default {
 
     refresh() {
       this.refreshing = true
+      // 清空SKU缓存，重新加载
+      this.productSkusMap.clear()
       this.loadData()
     },
 
@@ -422,7 +480,7 @@ export default {
       }
       return '0'
     },
-
+    
     async performAddToCart(product) {
       if (!product || !product.id) {
         uni.showToast({ title: '商品信息缺失', icon: 'none' })
@@ -432,7 +490,8 @@ export default {
         uni.showToast({ title: '商品未上架', icon: 'none' })
         return false
       }
-      if (product.specType === '1') {
+      // 数据库中使用2表示多规格
+      if (product.specType === '2' || product.specType === 2) {
         uni.showToast({ title: '多规格商品请前往详情选择规格', icon: 'none' })
         return false
       }
@@ -471,7 +530,7 @@ export default {
         })
       }
     },
-
+    
     // 跳转到商家详情页
     goToShopDetail(shopId) {
       if (!shopId) {
@@ -487,12 +546,14 @@ export default {
     async handleProductStockUpdated(payload) {
       try {
         console.log('shop-list 收到商品库存更新事件:', payload)
+        // 清空SKU缓存，重新加载
+        this.productSkusMap.clear()
         await this.loadData()
       } catch (e) {
         console.warn('shop-list 刷新商品数据失败:', e)
       }
     }
-  },
+    },
   onLoad() {
     this.loadData()
     // 监听商品库存更新事件，在用户端商品列表中实时刷新库存/状态

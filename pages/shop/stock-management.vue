@@ -152,7 +152,7 @@ export default {
   },
   
   methods: {
-    // 加载商品数据（从数据库获取最新数据）
+    // 加载商品数据（从数据库获取最新数据，确保数据同步）
     async loadProductData() {
       if (!this.productId) return;
       
@@ -160,42 +160,60 @@ export default {
       this.error = null;
       
       try {
+        console.log('📦 从数据库加载商品最新数据，productId:', this.productId);
+        
         // 并行加载商品信息和SKU列表（从数据库获取最新数据）
         const [productRes, skuRes] = await Promise.all([
           productApi.getProductSpuDetail(this.productId).catch(() => ({ code: 404, data: null })),
           productApi.getProductSkusBySpuId(this.productId)
         ]);
         
-        // 处理商品信息
+        console.log('📦 商品详情响应:', productRes);
+        console.log('📦 SKU列表响应:', skuRes);
+        
+        // 处理商品信息（使用数据库返回的最新数据）
         if (productRes.code === 200 && productRes.data) {
           this.product = productRes.data;
+          console.log('✅ 商品信息已从数据库加载:', {
+            productName: this.product.productName,
+            stock: this.product.stock,
+            salesVolume: this.product.salesVolume,
+            clickCount: this.product.clickCount,
+            productStatus: this.product.productStatus,
+            specType: this.product.specType
+          });
         } else {
           // 如果获取商品信息失败，使用基本信息
           this.product = {
             productSpuId: this.productId,
             productName: this.productName || '未知商品',
-            specType: '1' // 默认多规格
+            specType: '2' // 默认多规格（数据库中使用2表示多规格）
           };
+          console.warn('⚠️ 商品信息获取失败，使用默认值');
         }
         
         // 处理SKU列表（从数据库获取最新库存）
-        if (skuRes.code === 200) {
+        if (skuRes && skuRes.code === 200) {
           const skus = skuRes.data || [];
+          console.log('✅ SKU列表已从数据库加载，数量:', skus.length);
+          
           // 规范化SKU列表，解析JSON格式的skuDetail
           this.skuList = skus.map(sku => {
             const parsedDetail = this.parseSkuDetail(sku);
             const specText = this.buildSkuSpecText(parsedDetail, sku);
+            // 确保使用数据库中的最新 stockQuantity 字段
+            const dbStock = sku.stockQuantity || sku.stock || 0;
             return {
               ...sku,
               parsedDetail,
               specText,
-              // 确保使用数据库中的 stockQuantity 字段
-              stockQuantity: sku.stockQuantity || sku.stock || 0,
-              editStock: sku.stockQuantity || sku.stock || 0
+              stockQuantity: dbStock,
+              stock: dbStock,
+              editStock: dbStock // 初始化编辑值为数据库中的最新值
             };
           });
           
-          // 根据SKU数量判断规格类型
+          // 根据SKU数量判断规格类型（与数据库保持一致：0=单规格，2=多规格）
           if (this.skuList.length === 0) {
             // 没有SKU，可能是单规格商品
             this.product.specType = '0';
@@ -204,17 +222,18 @@ export default {
             this.product.specType = '0';
             this.singleStockValue = this.skuList[0].stockQuantity || this.skuList[0].stock || 0;
           } else {
-            // 多个SKU，是多规格
-            this.product.specType = '1';
+            // 多个SKU，是多规格（数据库中使用2表示多规格）
+            this.product.specType = '2';
           }
         } else {
           this.skuList = [];
           // 如果没有SKU，默认为单规格
           this.product.specType = '0';
           this.singleStockValue = 0;
+          console.warn('⚠️ SKU列表获取失败或为空');
         }
       } catch (error) {
-        console.error('加载商品数据失败:', error);
+        console.error('❌ 加载商品数据失败:', error);
         this.error = error.message || '加载失败，请重试';
       } finally {
         this.loading = false;
@@ -351,48 +370,65 @@ export default {
       try {
         uni.showLoading({ title: '保存中...' });
         
+        // 确保所有字段都是正确的类型和格式
         const updateData = {
-          productSkuId: sku.productSkuId,
-          spuId: this.productId,
-          salePrice: salePrice,
-          costPrice: costPrice,
-          stockQuantity: stockValue,
-          skuDetail: sku.skuDetail || sku.sku_detail || '',
+          productSkuId: Number(sku.productSkuId),
+          spuId: Number(this.productId),
+          salePrice: Number(salePrice),
+          costPrice: Number(costPrice),
+          stockQuantity: Number(stockValue),
+          skuDetail: sku.skuDetail || sku.sku_detail || sku.detail || '',
           skuStatus: String(sku.skuStatus || sku.sku_status || '0')
         };
         
+        console.log('📦 准备更新SKU库存:', {
+          productSkuId: updateData.productSkuId,
+          spuId: updateData.spuId,
+          stockQuantity: updateData.stockQuantity,
+          updateData: updateData
+        });
+        
         const res = await productApi.updateProductSku(updateData);
+        
+        console.log('📦 SKU更新响应:', res);
         
         uni.hideLoading();
         
-        if (res.code === 200) {
-          // 更新本地数据
-          sku.stockQuantity = stockValue;
-          sku.stock = stockValue;
-          
-          // 如果是单规格，更新单规格库存值
-          if (this.isSingleSpec) {
-            this.singleStockValue = stockValue;
-          }
+        if (res && res.code === 200) {
+          console.log('✅ SKU库存更新成功，响应数据:', res.data);
           
           uni.showToast({
             title: '保存成功',
-            icon: 'success'
+            icon: 'success',
+            duration: 2000
           });
           
-          // 重新加载数据以确保与数据库同步
-          setTimeout(() => {
-            this.loadProductData();
-          }, 500);
+          // 立即从数据库重新加载最新数据，确保数据同步（包括库存、销售量、点击量等所有字段）
+          await this.loadProductData();
+          
+          // 触发库存更新事件，通知其他页面刷新
+          uni.$emit('productStockUpdated', {
+            productId: this.productId,
+            skuId: sku.productSkuId,
+            stockQuantity: stockValue
+          });
         } else {
-          throw new Error(res.message || '保存失败');
+          const errorMsg = res?.message || res?.msg || '保存失败';
+          console.error('❌ SKU更新失败:', res);
+          throw new Error(errorMsg);
         }
       } catch (error) {
         uni.hideLoading();
-        console.error('保存库存失败:', error);
+        console.error('❌ 保存库存失败:', error);
+        console.error('❌ 错误详情:', {
+          message: error.message,
+          response: error.response,
+          data: error.data
+        });
         uni.showToast({
-          title: error.message || '保存失败，请重试',
-          icon: 'none'
+          title: error.message || error.response?.data?.message || '保存失败，请重试',
+          icon: 'none',
+          duration: 3000
         });
       } finally {
         this.saving = false;
@@ -430,53 +466,97 @@ export default {
       try {
         uni.showLoading({ title: '批量设置中...' });
         
+        console.log('📦 准备批量更新SKU库存:', {
+          spuId: this.productId,
+          stockValue: stockValue,
+          skuCount: this.skuList.length
+        });
+        
         // 并行更新所有SKU
-        const updatePromises = this.skuList.map(sku => {
+        const updatePromises = this.skuList.map(async (sku, index) => {
           // 验证必填字段
           const salePrice = parseFloat(sku.salePrice || sku.sale_price || 0);
           const costPrice = parseFloat(sku.costPrice || sku.cost_price || 0);
           
           if (!salePrice || salePrice <= 0 || !costPrice || costPrice <= 0) {
+            console.error(`❌ SKU ${sku.productSkuId} 的价格信息不完整:`, {
+              salePrice,
+              costPrice,
+              sku
+            });
             throw new Error(`SKU ${sku.productSkuId} 的价格信息不完整`);
           }
           
           const updateData = {
-            productSkuId: sku.productSkuId,
-            spuId: this.productId,
-            salePrice: salePrice,
-            costPrice: costPrice,
-            stockQuantity: stockValue,
-            skuDetail: sku.skuDetail || sku.sku_detail || '',
+            productSkuId: Number(sku.productSkuId),
+            spuId: Number(this.productId),
+            salePrice: Number(salePrice),
+            costPrice: Number(costPrice),
+            stockQuantity: Number(stockValue),
+            skuDetail: sku.skuDetail || sku.sku_detail || sku.detail || '',
             skuStatus: String(sku.skuStatus || sku.sku_status || '0')
           };
-          return productApi.updateProductSku(updateData);
+          
+          console.log(`📦 更新SKU ${index + 1}/${this.skuList.length}:`, updateData);
+          
+          try {
+            const res = await productApi.updateProductSku(updateData);
+            console.log(`✅ SKU ${sku.productSkuId} 更新响应:`, res);
+            
+            if (res && res.code === 200) {
+              return { success: true, skuId: sku.productSkuId };
+            } else {
+              console.error(`❌ SKU ${sku.productSkuId} 更新失败:`, res);
+              return { success: false, skuId: sku.productSkuId, error: res?.message || res?.msg };
+            }
+          } catch (err) {
+            console.error(`❌ SKU ${sku.productSkuId} 更新异常:`, err);
+            return { success: false, skuId: sku.productSkuId, error: err.message };
+          }
         });
         
-        await Promise.all(updatePromises);
+        const results = await Promise.all(updatePromises);
         
-        // 更新本地数据
-        this.skuList.forEach(sku => {
-          sku.stockQuantity = stockValue;
-          sku.stock = stockValue;
-          sku.editStock = stockValue;
+        // 检查结果
+        const successCount = results.filter(r => r.success).length;
+        const failCount = results.filter(r => !r.success).length;
+        
+        console.log('📦 批量更新结果:', {
+          total: results.length,
+          success: successCount,
+          failed: failCount,
+          results: results
         });
+        
+        if (failCount > 0) {
+          const failedSkus = results.filter(r => !r.success).map(r => r.skuId).join(', ');
+          throw new Error(`${failCount} 个SKU更新失败 (ID: ${failedSkus})`);
+        }
+        
+        console.log('✅ 批量更新完成，成功:', successCount, '失败:', failCount);
         
         uni.hideLoading();
         uni.showToast({
-          title: '批量设置成功',
-          icon: 'success'
+          title: `批量设置成功 (${successCount}个SKU)`,
+          icon: 'success',
+          duration: 2000
         });
         
-        // 重新加载数据以确保与数据库同步
-        setTimeout(() => {
-          this.loadProductData();
-        }, 500);
+        // 立即从数据库重新加载最新数据，确保数据同步（包括库存、销售量、点击量等所有字段）
+        await this.loadProductData();
+        
+        // 触发库存更新事件，通知其他页面刷新
+        uni.$emit('productStockUpdated', {
+          productId: this.productId,
+          stockQuantity: stockValue
+        });
       } catch (error) {
         uni.hideLoading();
-        console.error('批量设置库存失败:', error);
+        console.error('❌ 批量设置库存失败:', error);
         uni.showToast({
-          title: '批量设置失败，请重试',
-          icon: 'none'
+          title: error.message || '批量设置失败，请重试',
+          icon: 'none',
+          duration: 3000
         });
       } finally {
         this.saving = false;
