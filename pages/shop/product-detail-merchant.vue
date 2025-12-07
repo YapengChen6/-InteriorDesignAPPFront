@@ -4,26 +4,26 @@
       <!-- 图片轮播 -->
       <view class="media-section" v-if="imageList.length">
         <view class="swiper-container">
-          <swiper
+        <swiper
             ref="swiper"
-            class="media-swiper"
-            :indicator-dots="true"
+          class="media-swiper"
+          :indicator-dots="true"
             :autoplay="true"
             :interval="3000"
             :duration="500"
-            circular
+          circular
             :current="currentSwiperIndex"
             @change="onSwiperChange"
-          >
-            <swiper-item v-for="(img, index) in imageList" :key="index">
-              <image
-                :src="img.fileUrl || img.url || img"
-                class="swiper-image"
-                mode="aspectFill"
-                @click="previewImage(index)"
-              ></image>
-            </swiper-item>
-          </swiper>
+        >
+          <swiper-item v-for="(img, index) in imageList" :key="index">
+            <image
+              :src="img.fileUrl || img.url || img"
+              class="swiper-image"
+              mode="aspectFill"
+              @click="previewImage(index)"
+            ></image>
+          </swiper-item>
+        </swiper>
           <!-- 左右切换按钮 -->
           <view class="swiper-nav-btn swiper-nav-prev" v-if="imageList.length > 1" @click.stop="prevImage">
             <text class="nav-icon">‹</text>

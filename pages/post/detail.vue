@@ -1,6 +1,6 @@
 <template>
 	<view class="post-detail-container">
-
+		
 
 		<!-- 加载状态 -->
 		<view v-if="loading" class="loading-container">
@@ -20,7 +20,7 @@
 				<!-- 帖子头部 -->
 				<view class="post-header">
 					<h1 class="post-title">{{ post.title || '无标题' }}</h1>
-
+					
 					<!-- 作者信息 -->
 					<view class="author-info">
 						<image :src="post.authorAvatar || getDefaultAvatar()" class="author-avatar" mode="aspectFill"
@@ -129,37 +129,31 @@
 		<!-- 底部操作栏 -->
 		<view class="bottom-actions">
 			<view class="action-left">
-				<!-- 评论输入框 -->
-				<view class="comment-input-container">
-					<input v-model="commentText" class="comment-input" placeholder="说点什么..." @focus="onCommentFocus" />
-				</view>
+				<!-- 评论输入框改为绿色按钮样式 -->
+				<button class="comment-btn" @click="onCommentFocus">
+					<text class="comment-btn-icon">💬</text>
+					<text class="comment-btn-text">说点什么...</text>
+				</button>
 			</view>
-
+			
 			<view class="action-right">
 				<!-- 点赞 -->
-				<button :class="['action-btn', { liked: isLiked }]" @click="handleLike" :disabled="likeLoading">
+				<view :class="['action-item', { liked: isLiked }]" @click="handleLike">
 					<text class="action-icon">{{ isLiked ? '❤️' : '🤍' }}</text>
 					<text class="action-count">{{ post ? post.likeCount : 0 }}</text>
-				</button>
+				</view>
 
 				<!-- 收藏 -->
-				<button :class="['action-btn', { collected: isCollected }]" @click="handleCollect"
-					:disabled="collectLoading">
+				<view :class="['action-item', { collected: isCollected }]" @click="handleCollect">
 					<text class="action-icon">{{ isCollected ? '⭐' : '☆' }}</text>
 					<text class="action-count">{{ post ? post.collectCount : 0 }}</text>
-				</button>
-
-				<!-- 评论 -->
-				<button class="action-btn" @click="onCommentFocus">
-					<text class="action-icon">💬</text>
-					<text class="action-count">{{ post ? post.commentCount : 0 }}</text>
-				</button>
+				</view>
 
 				<!-- 分享 -->
-				<button class="action-btn" @click="handleShare">
+				<view class="action-item" @click="handleShare">
 					<text class="action-icon">📤</text>
 					<text class="action-count">分享</text>
-				</button>
+				</view>
 			</view>
 		</view>
 
@@ -177,79 +171,41 @@
 						<text>暂无评论，快来抢沙发吧~</text>
 					</view>
 
-					<!-- 评论项 -->
-					<view v-for="comment in comments" :key="comment.id" class="comment-item" :data-comment-id="comment.id">
+					<!-- 评论项 - 抖音风格：平铺显示 -->
+					<view v-for="item in comments" :key="item.id" class="comment-item" :class="{ 'is-reply': item.isReply }" :data-comment-id="item.id">
 						<!-- 评论者头像 -->
-						<image :src="comment.userAvatar || getDefaultAvatar()" class="comment-avatar" mode="aspectFill"
+						<image :src="item.userAvatar || getDefaultAvatar()" class="comment-avatar" mode="aspectFill"
 							@error="handleAvatarError"></image>
 
 						<!-- 评论内容区域 -->
 						<view class="comment-content">
-							<!-- 评论者信息 -->
-							<view class="comment-header">
-								<text class="comment-author">{{ comment.userName || comment.author || '匿名用户' }}</text>
-								<text class="comment-time">{{ formatDate(comment.createTime) }}</text>
-							</view>
-
-							<!-- 评论内容 -->
-							<text class="comment-text">{{ comment.content }}</text>
-
-							<!-- 评论操作 -->
-							<view class="comment-actions">
-								<view class="comment-action-btn" :class="{ liked: likedComments.has(comment.id) }"
-									@click="handleLikeComment(comment)">
-									<text class="action-icon">{{ likedComments.has(comment.id) ? '❤️' : '🤍' }}</text>
-									<text class="action-count">{{ comment.likeCount || 0 }}</text>
+							<!-- 评论者信息和内容 -->
+							<view class="comment-main">
+								<!-- 用户名和内容 -->
+								<view class="comment-text-wrapper">
+									<text class="comment-author">{{ item.userName || '匿名用户' }}</text>
+									<text v-if="item.isReply && item.replyToUserName" class="reply-mention">@{{ item.replyToUserName }}</text>
+									<text class="comment-text">{{ item.content }}</text>
 								</view>
-								<view class="comment-action-btn" @click="startReply(comment)">
-									<text class="action-icon">💬</text>
-									<text class="action-text">回复</text>
-								</view>
-								<!-- 删除按钮（仅作者可见） -->
-								<view v-if="comment.canDelete" class="comment-action-btn delete-btn"
-									@click="handleDeleteComment(comment)">
-									<text class="action-text">删除</text>
-								</view>
-							</view>
-
-							<!-- 回复列表 -->
-							<view v-if="comment.replies && comment.replies.length > 0" class="replies-container">
-								<view v-for="reply in comment.replies" :key="reply.id" class="reply-item" :data-comment-id="reply.id">
-									<image :src="reply.userAvatar || getDefaultAvatar()" class="reply-avatar"
-										mode="aspectFill" @error="handleAvatarError"></image>
-									<view class="reply-content">
-										<view class="reply-header">
-											<text
-												class="reply-author">{{ reply.userName || reply.author || '匿名用户' }}</text>
-											<text v-if="reply.replyToUserName" class="reply-to">
-												回复 @{{ reply.replyToUserName }}
-											</text>
-											<text class="reply-time">{{ formatDate(reply.createTime) }}</text>
+								
+								<!-- 时间和操作 -->
+								<view class="comment-footer">
+									<text class="comment-time">{{ formatDate(item.createTime) }}</text>
+									<view class="comment-actions">
+										<view class="comment-action-btn" :class="{ liked: likedComments.has(item.id) }"
+											@click="handleLikeComment(item)">
+											<text class="action-icon">{{ likedComments.has(item.id) ? '❤️' : '🤍' }}</text>
+											<text class="action-count" v-if="item.likeCount > 0">{{ item.likeCount }}</text>
 										</view>
-										<text class="reply-text">{{ reply.content }}</text>
-										<view class="reply-actions">
-											<view class="reply-action-btn"
-												:class="{ liked: likedComments.has(reply.id) }"
-												@click="handleLikeComment(reply)">
-												<text
-													class="action-icon">{{ likedComments.has(reply.id) ? '❤️' : '🤍' }}</text>
-												<text class="action-count">{{ reply.likeCount || 0 }}</text>
-											</view>
-											<view class="reply-action-btn" @click="startReply(comment, reply)">
-												<text class="action-text">回复</text>
-											</view>
-											<view v-if="reply.canDelete" class="reply-action-btn delete-btn"
-												@click="handleDeleteComment(reply, comment)">
-												<text class="action-text">删除</text>
-											</view>
+										<view class="comment-action-btn" @click="startReply(item)">
+											<text class="action-text">回复</text>
+										</view>
+										<!-- 删除按钮（仅作者可见） -->
+										<view v-if="item.canDelete" class="comment-action-btn delete-btn"
+											@click="handleDeleteComment(item)">
+											<text class="action-text">删除</text>
 										</view>
 									</view>
-								</view>
-
-								<!-- 查看更多回复 -->
-								<view v-if="comment.replyCount > comment.replies.length" class="load-more-replies"
-									@click="loadMoreReplies(comment)">
-									<text>查看更多回复 ({{ comment.replyCount - comment.replies.length }})</text>
 								</view>
 							</view>
 						</view>
@@ -317,32 +273,32 @@
 		checkFollow
 	} from '@/api/social.js'
 
-	export default {
-		data() {
-			return {
-				// 帖子ID
-				postId: null,
-
-				// 帖子数据
-				post: null,
-				loading: false,
-				error: null,
-
-				// 用户交互状态
-				isLiked: false,
-				isCollected: false,
-				isFollowed: false,
-				likeLoading: false,
-				collectLoading: false,
-				followLoading: false,
-				commentLoading: false,
-
-				// UI状态
-				showCommentModal: false,
-
-				// 评论相关
-				commentText: '',
-				comments: [],
+export default {
+	data() {
+		return {
+			// 帖子ID
+			postId: null,
+			
+			// 帖子数据
+			post: null,
+			loading: false,
+			error: null,
+			
+			// 用户交互状态
+			isLiked: false,
+			isCollected: false,
+			isFollowed: false,
+			likeLoading: false,
+			collectLoading: false,
+			followLoading: false,
+			commentLoading: false,
+			
+			// UI状态
+			showCommentModal: false,
+			
+			// 评论相关
+			commentText: '',
+			comments: [],
 				commentPageNum: 1,
 				commentPageSize: 20,
 				hasMoreComments: true,
@@ -351,253 +307,256 @@
 				replyText: '', // 回复内容
 				likedComments: new Set(), // 已点赞的评论ID集合
 				textareaFocused: false, // textarea 是否聚焦
-
-				// 相关推荐
-				relatedPosts: [],
-
-				// 轮播图当前索引
-				currentImageIndex: 0,
-
-				// 轮播图自动播放控制
+			
+			// 相关推荐
+			relatedPosts: [],
+			
+			// 轮播图当前索引
+			currentImageIndex: 0,
+			
+			// 轮播图自动播放控制
 				swiperAutoplay: true,
 
 				// 评论滚动位置
 				commentScrollTop: 0
+		}
+	},
+	
+	computed: {
+		// 是否有图片
+		hasImages() {
+			if (!this.post) return false
+			const imgs = this.getImageList()
+			return (imgs && imgs.length > 0) || !!this.post.coverUrl
+		},
+		
+		// 内容是否为富文本（包含 HTML 标签）
+		isRichContent() {
+			if (!this.post || !this.post.content) {
+				return false
 			}
-		},
-
-		computed: {
-			// 是否有图片
-			hasImages() {
-				if (!this.post) return false
-				const imgs = this.getImageList()
-				return (imgs && imgs.length > 0) || !!this.post.coverUrl
-			},
-
-			// 内容是否为富文本（包含 HTML 标签）
-			isRichContent() {
-				if (!this.post || !this.post.content) {
-					return false
-				}
-				// 简单判断：只要包含 HTML 标签（如 <p>、<br> 等），就按富文本渲染
-				const content = this.post.content
-				return /<[^>]+>/.test(content)
-			}
-		},
-
-		onLoad(options) {
-			console.log('📖 进入帖子详情页，参数:', options)
-
-			if (options && options.id) {
-				this.postId = options.id
-				this.fetchPostDetail()
-			} else {
-				this.error = '帖子ID不存在'
-			}
-		},
-
-		onShow() {
-			// 页面显示时恢复自动播放
-			if (this.post && this.getImageList().length > 1) {
-				this.swiperAutoplay = true
-			}
-		},
-
-		onHide() {
-			// 页面隐藏时暂停自动播放，节省资源
-			this.swiperAutoplay = false
-		},
-
-		methods: {
-			// 获取帖子详情
-			async fetchPostDetail() {
-				try {
-					this.loading = true
-					this.error = null
-
-					console.log('🔍 开始获取帖子详情，ID:', this.postId)
-
-					const response = await getPostDetail(this.postId)
-					console.log('📨 帖子详情响应:', response)
-
-					if (response && response.code === 200) {
-						// 处理API返回的数据
-						this.post = this.processPostData(response.data)
-						console.log('✅ 帖子详情处理完成:', this.post)
-
-						// 加载相关推荐
-						this.loadRelatedPosts()
-
-						// 加载用户交互状态（点赞、收藏、关注）
-						this.loadUserInteractionStatus()
-
+			// 简单判断：只要包含 HTML 标签（如 <p>、<br> 等），就按富文本渲染
+			const content = this.post.content
+			return /<[^>]+>/.test(content)
+		}
+	},
+	
+	onLoad(options) {
+		console.log('📖 进入帖子详情页，参数:', options)
+		
+		if (options && options.id) {
+			this.postId = options.id
+			this.fetchPostDetail()
+		} else {
+			this.error = '帖子ID不存在'
+		}
+	},
+	
+	onShow() {
+		// 页面显示时恢复自动播放
+		if (this.post && this.getImageList().length > 1) {
+			this.swiperAutoplay = true
+		}
+	},
+	
+	onHide() {
+		// 页面隐藏时暂停自动播放，节省资源
+		this.swiperAutoplay = false
+	},
+	
+	methods: {
+		// 获取帖子详情
+		async fetchPostDetail(loadCommentsFlag = true) {
+			try {
+				this.loading = true
+				this.error = null
+				
+				console.log('🔍 开始获取帖子详情，ID:', this.postId)
+				
+				const response = await getPostDetail(this.postId)
+				console.log('📨 帖子详情响应:', response)
+				
+				if (response && response.code === 200) {
+					// 处理API返回的数据
+					this.post = this.processPostData(response.data)
+					console.log('✅ 帖子详情处理完成:', this.post)
+					
+					// 加载相关推荐
+					this.loadRelatedPosts()
+					
+					// 加载用户交互状态（点赞、收藏、关注）
+					this.loadUserInteractionStatus()
+					
+					// 根据参数决定是否加载评论列表
+					if (loadCommentsFlag) {
 						// 加载评论列表
 						this.loadComments()
-
-					} else {
-						throw new Error(response ? response.message : '获取帖子详情失败')
 					}
 
-				} catch (error) {
-					console.error('❌ 获取帖子详情失败:', error)
-					this.error = error.message || '加载失败，请稍后重试'
-					this.useMockDataAsFallback()
-				} finally {
-					this.loading = false
+				} else {
+					throw new Error(response ? response.message : '获取帖子详情失败')
 				}
-			},
-
-			// 处理帖子数据
-			processPostData(data) {
-				if (!data) return null
-
-				// 根据API返回的数据结构处理
-				return {
-					// 基础信息
-					id: data.id || data.thread_id,
-					title: data.title || '无标题',
-					content: data.content || '暂无内容',
-
-					// 作者信息
-					author: this.getAuthorName(data),
-					authorAvatar: data.avatar || data.authorAvatar,
-					userId: data.userId || data.user_id,
-					roleType: data.roleType || data.role_type,
-
-					// 统计信息
-					viewCount: data.viewCount || data.view_count || 0,
-					likeCount: data.likeCount || data.like_count || 0,
-					commentCount: data.commentCount || data.comment_count || 0,
-					collectCount: data.collectCount || data.collect_count || 0,
-
-					// 媒体信息
-					coverUrl: data.coverUrl || data.cover_url,
-					mediaUrls: data.mediaUrls || data.media_urls || [],
-
-					// 分类和类型
-					threadType: data.threadType || data.thread_type,
-					categoryId: data.categoryId || data.category_id,
-
-					// 时间信息
-					createTime: data.createTime || data.create_time,
-					updateTime: data.updateTime || data.update_time,
-
-					// 状态
-					status: data.status,
-					delFlag: data.delFlag || data.del_flag,
-
-					// 模板数据
-					normalPost: data.normalPost,
-					portfolio: data.portfolio,
-					caseStudy: data.caseStudy,
-					materialShow: data.materialShow,
-
-					// 标签（如果有）
-					tags: data.tags || []
+				
+			} catch (error) {
+				console.error('❌ 获取帖子详情失败:', error)
+				this.error = error.message || '加载失败，请稍后重试'
+				this.useMockDataAsFallback()
+			} finally {
+				this.loading = false
+			}
+		},
+		
+		// 处理帖子数据
+		processPostData(data) {
+			if (!data) return null
+			
+			// 根据API返回的数据结构处理
+			return {
+				// 基础信息
+				id: data.id || data.thread_id,
+				title: data.title || '无标题',
+				content: data.content || '暂无内容',
+				
+				// 作者信息
+				author: this.getAuthorName(data),
+				authorAvatar: data.avatar || data.authorAvatar,
+				userId: data.userId || data.user_id,
+				roleType: data.roleType || data.role_type,
+				
+				// 统计信息
+				viewCount: data.viewCount || data.view_count || 0,
+				likeCount: data.likeCount || data.like_count || 0,
+				commentCount: data.commentCount || data.comment_count || 0,
+				collectCount: data.collectCount || data.collect_count || 0,
+				
+				// 媒体信息
+				coverUrl: data.coverUrl || data.cover_url,
+				mediaUrls: data.mediaUrls || data.media_urls || [],
+				
+				// 分类和类型
+				threadType: data.threadType || data.thread_type,
+				categoryId: data.categoryId || data.category_id,
+				
+				// 时间信息
+				createTime: data.createTime || data.create_time,
+				updateTime: data.updateTime || data.update_time,
+				
+				// 状态
+				status: data.status,
+				delFlag: data.delFlag || data.del_flag,
+				
+				// 模板数据
+				normalPost: data.normalPost,
+				portfolio: data.portfolio,
+				caseStudy: data.caseStudy,
+				materialShow: data.materialShow,
+				
+				// 标签（如果有）
+				tags: data.tags || []
+			}
+		},
+		
+		// 获取作者名称
+		getAuthorName(data) {
+			if (!data) return '匿名用户'
+			
+			const possibleFields = [
+				data.authorName,
+				data.nickName,
+				data.nickname,
+				data.userName,
+				data.username,
+				data.author,
+				data.realName,
+				data.contactName
+			]
+			
+			if (data.user) {
+				possibleFields.push(
+					data.user.nickName,
+					data.user.nickname,
+					data.user.userName,
+					data.user.username,
+					data.user.realName
+				)
+			}
+			
+			const name = possibleFields
+				.map(item => {
+					if (typeof item === 'string') {
+						return item.trim()
+					}
+					return item
+				})
+				.find(item => item)
+			
+			if (name) {
+				return name
+			}
+			
+			const roleType = data.roleType || data.role_type
+			const roleNames = {
+				1: '普通用户',
+				2: '设计师',
+				3: '监理',
+				4: '材料商'
+			}
+			
+			return roleNames[roleType] || '匿名用户'
+		},
+		
+		// 加载相关推荐
+		async loadRelatedPosts() {
+			try {
+				// 根据当前帖子的分类或类型加载相关帖子
+				const queryParams = {
+					pageNum: 1,
+					pageSize: 3,
+					categoryId: this.post ? this.post.categoryId : null,
+					threadType: this.post ? this.post.threadType : null,
+					excludeId: this.postId // 排除当前帖子
 				}
-			},
-
-			// 获取作者名称
-			getAuthorName(data) {
-				if (!data) return '匿名用户'
-
-				const possibleFields = [
-					data.authorName,
-					data.nickName,
-					data.nickname,
-					data.userName,
-					data.username,
-					data.author,
-					data.realName,
-					data.contactName
-				]
-
-				if (data.user) {
-					possibleFields.push(
-						data.user.nickName,
-						data.user.nickname,
-						data.user.userName,
-						data.user.username,
-						data.user.realName
-					)
-				}
-
-				const name = possibleFields
-					.map(item => {
-						if (typeof item === 'string') {
-							return item.trim()
+				
+				const response = await getPostList(queryParams)
+				
+				if (response && response.code === 200) {
+					let posts = []
+					
+					// 处理响应数据
+					if (response.data) {
+						if (response.data.rows) {
+							posts = response.data.rows
+						} else if (response.data.list) {
+							posts = response.data.list
+						} else if (Array.isArray(response.data)) {
+							posts = response.data
 						}
-						return item
-					})
-					.find(item => item)
-
-				if (name) {
-					return name
-				}
-
-				const roleType = data.roleType || data.role_type
-				const roleNames = {
-					1: '普通用户',
-					2: '设计师',
-					3: '监理',
-					4: '材料商'
-				}
-
-				return roleNames[roleType] || '匿名用户'
-			},
-
-			// 加载相关推荐
-			async loadRelatedPosts() {
-				try {
-					// 根据当前帖子的分类或类型加载相关帖子
-					const queryParams = {
-						pageNum: 1,
-						pageSize: 3,
-						categoryId: this.post ? this.post.categoryId : null,
-						threadType: this.post ? this.post.threadType : null,
-						excludeId: this.postId // 排除当前帖子
 					}
-
-					const response = await getPostList(queryParams)
-
-					if (response && response.code === 200) {
-						let posts = []
-
-						// 处理响应数据
-						if (response.data) {
-							if (response.data.rows) {
-								posts = response.data.rows
-							} else if (response.data.list) {
-								posts = response.data.list
-							} else if (Array.isArray(response.data)) {
-								posts = response.data
-							}
-						}
-
-						this.relatedPosts = posts.slice(0, 3).map(post => this.processPostData(post))
-					}
-
-				} catch (error) {
-					console.error('加载相关推荐失败:', error)
-					// 失败时不显示相关推荐，不影响主流程
+					
+					this.relatedPosts = posts.slice(0, 3).map(post => this.processPostData(post))
 				}
-			},
-
-			// 加载用户交互状态
-			async loadUserInteractionStatus() {
-				if (!this.post || !this.postId) return
-
-				try {
-					// 并行加载点赞、收藏、关注状态
-					const [likedRes, favoriteRes, followRes] = await Promise.allSettled([
-						// 检查是否已点赞 - 通过尝试查询点赞记录
-						// 由于后端没有直接查询是否点赞的接口，我们需要通过其他方式判断
-						// 这里先设置为false，实际可通过其他API或从帖子详情中获取
+				
+			} catch (error) {
+				console.error('加载相关推荐失败:', error)
+				// 失败时不显示相关推荐，不影响主流程
+			}
+		},
+		
+		// 加载用户交互状态
+		async loadUserInteractionStatus() {
+			if (!this.post || !this.postId) return
+			
+			try {
+				// 并行加载点赞、收藏、关注状态
+				const [likedRes, favoriteRes, followRes] = await Promise.allSettled([
+					// 检查是否已点赞 - 通过尝试查询点赞记录
+					// 由于后端没有直接查询是否点赞的接口，我们需要通过其他方式判断
+					// 这里先设置为false，实际可通过其他API或从帖子详情中获取
 						Promise.resolve({
 							data: false
 						}),
-
-						// 检查是否已收藏
+					
+					// 检查是否已收藏
 						getFavorites({
 							postId: this.postId
 						}).catch(() => ({
@@ -605,230 +564,230 @@
 								rows: []
 							}
 						})),
-
-						// 检查是否已关注（如果有作者userId）
+					
+					// 检查是否已关注（如果有作者userId）
 						this.post.userId ? checkFollow(this.post.userId).catch(() => ({
 							data: false
 						})) : Promise.resolve({
 							data: false
 						})
-					])
-
-					// 处理点赞状态（如果有接口可以查询）
-					this.isLiked = false // 默认未点赞，实际应该通过API查询
-
-					// 处理收藏状态
-					if (favoriteRes.status === 'fulfilled' && favoriteRes.value) {
-						const favoriteData = favoriteRes.value.data || favoriteRes.value
-						if (favoriteData.rows && favoriteData.rows.length > 0) {
-							this.isCollected = true
-						} else if (Array.isArray(favoriteData) && favoriteData.length > 0) {
-							this.isCollected = true
-						} else {
-							this.isCollected = false
-						}
-					}
-
-					// 处理关注状态
-					if (followRes.status === 'fulfilled' && followRes.value) {
-						const followData = followRes.value.data !== undefined ? followRes.value.data : followRes.value
-						this.isFollowed = !!followData
+				])
+				
+				// 处理点赞状态（如果有接口可以查询）
+				this.isLiked = false // 默认未点赞，实际应该通过API查询
+				
+				// 处理收藏状态
+				if (favoriteRes.status === 'fulfilled' && favoriteRes.value) {
+					const favoriteData = favoriteRes.value.data || favoriteRes.value
+					if (favoriteData.rows && favoriteData.rows.length > 0) {
+						this.isCollected = true
+					} else if (Array.isArray(favoriteData) && favoriteData.length > 0) {
+						this.isCollected = true
 					} else {
-						this.isFollowed = false
+						this.isCollected = false
 					}
-
-					console.log('✅ 用户交互状态加载完成:', {
-						isLiked: this.isLiked,
-						isCollected: this.isCollected,
-						isFollowed: this.isFollowed
-					})
-
-				} catch (error) {
-					console.error('加载用户交互状态失败:', error)
-					// 失败时使用默认值
-					this.isLiked = false
-					this.isCollected = false
+				}
+				
+				// 处理关注状态
+				if (followRes.status === 'fulfilled' && followRes.value) {
+					const followData = followRes.value.data !== undefined ? followRes.value.data : followRes.value
+					this.isFollowed = !!followData
+				} else {
 					this.isFollowed = false
 				}
-			},
-
-			// 处理点赞
-			async handleLike() {
-				if (this.likeLoading || !this.postId) return
-
-				try {
-					this.likeLoading = true
-
-					// 调用点赞/取消点赞接口
-					const api = this.isLiked ? unlikePost : likePost
-					const response = await api(this.postId)
-
-					// 检查响应
-					if (response && response.code === 200) {
-						// 更新本地状态
-						if (this.isLiked) {
-							this.post.likeCount = Math.max(0, (this.post.likeCount || 0) - 1)
-						} else {
-							this.post.likeCount = (this.post.likeCount || 0) + 1
-						}
-						this.isLiked = !this.isLiked
-
-						// 通知首页更新点赞数
-						uni.$emit('postLikeUpdated', {
-							postId: this.postId,
-							likeCount: this.post.likeCount,
-							isLiked: this.isLiked
-						})
-
-						uni.showToast({
-							title: this.isLiked ? '点赞成功' : '已取消点赞',
-							icon: 'success'
-						})
+				
+				console.log('✅ 用户交互状态加载完成:', {
+					isLiked: this.isLiked,
+					isCollected: this.isCollected,
+					isFollowed: this.isFollowed
+				})
+				
+			} catch (error) {
+				console.error('加载用户交互状态失败:', error)
+				// 失败时使用默认值
+				this.isLiked = false
+				this.isCollected = false
+				this.isFollowed = false
+			}
+		},
+		
+		// 处理点赞
+		async handleLike() {
+			if (this.likeLoading || !this.postId) return
+			
+			try {
+				this.likeLoading = true
+				
+				// 调用点赞/取消点赞接口
+				const api = this.isLiked ? unlikePost : likePost
+				const response = await api(this.postId)
+				
+				// 检查响应
+				if (response && response.code === 200) {
+					// 更新本地状态
+					if (this.isLiked) {
+						this.post.likeCount = Math.max(0, (this.post.likeCount || 0) - 1)
 					} else {
-						throw new Error(response ? response.msg || response.message : '操作失败')
+						this.post.likeCount = (this.post.likeCount || 0) + 1
 					}
-
-				} catch (error) {
-					console.error('点赞操作失败:', error)
-
-					// 显示错误信息
-					const errorMsg = error.msg || error.message || '操作失败'
-					uni.showToast({
-						title: errorMsg,
-						icon: 'none'
+					this.isLiked = !this.isLiked
+					
+					// 通知首页更新点赞数
+					uni.$emit('postLikeUpdated', {
+						postId: this.postId,
+						likeCount: this.post.likeCount,
+						isLiked: this.isLiked
 					})
-
-					// 如果是"请先登录"错误，可以引导用户登录
-					if (errorMsg.includes('登录')) {
-						setTimeout(() => {
-							uni.navigateTo({
-								url: '/pages/login/login'
-							})
-						}, 1500)
-					}
-				} finally {
-					this.likeLoading = false
+					
+					uni.showToast({
+						title: this.isLiked ? '点赞成功' : '已取消点赞',
+						icon: 'success'
+					})
+				} else {
+					throw new Error(response ? response.msg || response.message : '操作失败')
 				}
-			},
-
-			// 处理收藏
-			async handleCollect() {
-				if (this.collectLoading || !this.postId) return
-
-				try {
-					this.collectLoading = true
-
-					// 调用收藏/取消收藏接口
-					let response
-					if (this.isCollected) {
-						// 取消收藏
-						response = await removeFavorite(this.postId)
-					} else {
-						// 添加收藏
+				
+			} catch (error) {
+				console.error('点赞操作失败:', error)
+				
+				// 显示错误信息
+				const errorMsg = error.msg || error.message || '操作失败'
+				uni.showToast({
+					title: errorMsg,
+					icon: 'none'
+				})
+				
+				// 如果是"请先登录"错误，可以引导用户登录
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
+			} finally {
+				this.likeLoading = false
+			}
+		},
+		
+		// 处理收藏
+		async handleCollect() {
+			if (this.collectLoading || !this.postId) return
+			
+			try {
+				this.collectLoading = true
+				
+				// 调用收藏/取消收藏接口
+				let response
+				if (this.isCollected) {
+					// 取消收藏
+					response = await removeFavorite(this.postId)
+				} else {
+					// 添加收藏
 						response = await addFavorite({
 							postId: this.postId
 						})
-					}
-
-					// 检查响应
-					if (response && response.code === 200) {
-						// 更新本地状态
-						if (this.isCollected) {
-							this.post.collectCount = Math.max(0, (this.post.collectCount || 0) - 1)
-						} else {
-							this.post.collectCount = (this.post.collectCount || 0) + 1
-						}
-						this.isCollected = !this.isCollected
-
-						uni.showToast({
-							title: this.isCollected ? '收藏成功' : '已取消收藏',
-							icon: 'success'
-						})
-					} else {
-						throw new Error(response ? response.msg || response.message : '操作失败')
-					}
-
-					this.closeActionMenu()
-
-				} catch (error) {
-					console.error('收藏操作失败:', error)
-
-					// 显示错误信息
-					const errorMsg = error.msg || error.message || '操作失败'
-					uni.showToast({
-						title: errorMsg,
-						icon: 'none'
-					})
-
-					// 如果是"请先登录"错误，可以引导用户登录
-					if (errorMsg.includes('登录')) {
-						setTimeout(() => {
-							uni.navigateTo({
-								url: '/pages/login/login'
-							})
-						}, 1500)
-					}
-				} finally {
-					this.collectLoading = false
 				}
-			},
-
-			// 处理关注
-			async handleFollow() {
-				if (this.followLoading || !this.post || !this.post.userId) return
-
-				// 不能关注自己
-				// 这里需要获取当前登录用户的ID，暂时跳过这个检查
-
-				try {
-					this.followLoading = true
-
-					// 调用关注/取消关注接口
-					let response
-					if (this.isFollowed) {
-						// 取消关注
-						response = await unfollowUser(this.post.userId)
+				
+				// 检查响应
+				if (response && response.code === 200) {
+					// 更新本地状态
+					if (this.isCollected) {
+						this.post.collectCount = Math.max(0, (this.post.collectCount || 0) - 1)
 					} else {
-						// 添加关注
+						this.post.collectCount = (this.post.collectCount || 0) + 1
+					}
+					this.isCollected = !this.isCollected
+					
+					uni.showToast({
+						title: this.isCollected ? '收藏成功' : '已取消收藏',
+						icon: 'success'
+					})
+				} else {
+					throw new Error(response ? response.msg || response.message : '操作失败')
+				}
+				
+				this.closeActionMenu()
+				
+			} catch (error) {
+				console.error('收藏操作失败:', error)
+				
+				// 显示错误信息
+				const errorMsg = error.msg || error.message || '操作失败'
+				uni.showToast({
+					title: errorMsg,
+					icon: 'none'
+				})
+				
+				// 如果是"请先登录"错误，可以引导用户登录
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
+			} finally {
+				this.collectLoading = false
+			}
+		},
+		
+		// 处理关注
+		async handleFollow() {
+			if (this.followLoading || !this.post || !this.post.userId) return
+			
+			// 不能关注自己
+			// 这里需要获取当前登录用户的ID，暂时跳过这个检查
+			
+			try {
+				this.followLoading = true
+				
+				// 调用关注/取消关注接口
+				let response
+				if (this.isFollowed) {
+					// 取消关注
+					response = await unfollowUser(this.post.userId)
+				} else {
+					// 添加关注
 						response = await followUser({
 							targetUserId: this.post.userId
 						})
-					}
-
-					// 检查响应
-					if (response && response.code === 200) {
-						this.isFollowed = !this.isFollowed
-
-						uni.showToast({
-							title: this.isFollowed ? '关注成功' : '已取消关注',
-							icon: 'success'
-						})
-					} else {
-						throw new Error(response ? response.msg || response.message : '操作失败')
-					}
-
-				} catch (error) {
-					console.error('关注操作失败:', error)
-
-					// 显示错误信息
-					const errorMsg = error.msg || error.message || '操作失败'
-					uni.showToast({
-						title: errorMsg,
-						icon: 'none'
-					})
-
-					// 如果是"请先登录"或"不能关注自己"等错误
-					if (errorMsg.includes('登录')) {
-						setTimeout(() => {
-							uni.navigateTo({
-								url: '/pages/login/login'
-							})
-						}, 1500)
-					}
-				} finally {
-					this.followLoading = false
 				}
-			},
+				
+				// 检查响应
+				if (response && response.code === 200) {
+					this.isFollowed = !this.isFollowed
+					
+					uni.showToast({
+						title: this.isFollowed ? '关注成功' : '已取消关注',
+						icon: 'success'
+					})
+				} else {
+					throw new Error(response ? response.msg || response.message : '操作失败')
+				}
+				
+			} catch (error) {
+				console.error('关注操作失败:', error)
+				
+				// 显示错误信息
+				const errorMsg = error.msg || error.message || '操作失败'
+				uni.showToast({
+					title: errorMsg,
+					icon: 'none'
+				})
+				
+				// 如果是"请先登录"或"不能关注自己"等错误
+				if (errorMsg.includes('登录')) {
+					setTimeout(() => {
+						uni.navigateTo({
+							url: '/pages/login/login'
+						})
+					}, 1500)
+				}
+			} finally {
+				this.followLoading = false
+			}
+		},
 
 			// 加载评论列表
 			async loadComments() {
@@ -837,9 +796,12 @@
 				try {
 					this.commentLoading = true
 
+					// 添加时间戳防止缓存
+					const timestamp = new Date().getTime()
 					const response = await getPostComments(this.postId, {
 						pageNum: this.commentPageNum,
-						pageSize: this.commentPageSize
+						pageSize: this.commentPageSize,
+						_t: timestamp
 					})
 
 					if (response && response.code === 200) {
@@ -871,6 +833,11 @@
 						this.hasMoreComments = commentList.length === this.commentPageSize
 
 						console.log('✅ 评论加载完成，当前评论数:', this.comments.length)
+						
+						// 强制更新视图
+						this.$nextTick(() => {
+							this.$forceUpdate()
+						})
 					}
 
 				} catch (error) {
@@ -896,39 +863,51 @@
 				}
 			},
 
-			// 处理评论数据
+			// 处理评论数据 - 抖音风格：扁平化评论和回复
 			processComments(comments) {
 				if (!Array.isArray(comments)) return []
 
-				return comments.map(comment => {
-					// 处理回复数据
-					let replies = []
-					if (comment.replies && Array.isArray(comment.replies)) {
-						replies = comment.replies.map(reply => ({
-							id: reply.id || reply.comment_id,
-							content: reply.content,
-							userName: reply.userName || reply.user_name || reply.author,
-							userAvatar: reply.userAvatar || reply.user_avatar || reply.avatar,
-							replyToUserId: reply.replyToUserId || reply.reply_to_user_id,
-							replyToUserName: reply.replyToUserName || reply.reply_to_user_name,
-							likeCount: reply.likeCount || reply.like_count || 0,
-							createTime: reply.createTime || reply.create_time,
-							canDelete: reply.canDelete !== undefined ? reply.canDelete : false
-						}))
-					}
-
-					return {
+				const flatList = []
+				
+				comments.forEach(comment => {
+					// 处理主评论
+					const mainComment = {
 						id: comment.id || comment.comment_id,
 						content: comment.content,
 						userName: comment.userName || comment.user_name || comment.author,
 						userAvatar: comment.userAvatar || comment.user_avatar || comment.avatar,
 						likeCount: comment.likeCount || comment.like_count || 0,
-						replyCount: comment.replyCount || comment.reply_count || replies.length,
+						replyCount: comment.replyCount || comment.reply_count || 0,
 						createTime: comment.createTime || comment.create_time,
-						replies: replies,
-						canDelete: comment.canDelete !== undefined ? comment.canDelete : false
+						canDelete: comment.canDelete !== undefined ? comment.canDelete : false,
+						isReply: false, // 标记为主评论
+						parentId: null,
+						replyToUserName: null
+					}
+					flatList.push(mainComment)
+
+					// 处理回复，扁平化到列表中
+					if (comment.replies && Array.isArray(comment.replies)) {
+						comment.replies.forEach(reply => {
+							flatList.push({
+								id: reply.id || reply.comment_id,
+								content: reply.content,
+								userName: reply.userName || reply.user_name || reply.author,
+								userAvatar: reply.userAvatar || reply.user_avatar || reply.avatar,
+								replyToUserId: reply.replyToUserId || reply.reply_to_user_id,
+								replyToUserName: reply.replyToUserName || reply.reply_to_user_name || mainComment.userName,
+								likeCount: reply.likeCount || reply.like_count || 0,
+								createTime: reply.createTime || reply.create_time,
+								canDelete: reply.canDelete !== undefined ? reply.canDelete : false,
+								isReply: true, // 标记为回复
+								parentId: mainComment.id,
+								parentComment: mainComment // 保存父评论引用，用于回复时定位
+							})
+						})
 					}
 				})
+
+				return flatList
 			},
 
 			// 加载更多评论
@@ -944,49 +923,80 @@
 				// TODO: 如果有单独的加载回复接口，可以在这里实现
 				console.log('加载更多回复:', comment.id)
 			},
-
-			// 提交评论
-			async submitComment() {
+		
+		// 提交评论
+		async submitComment() {
 				if (!this.commentText.trim() || this.commentLoading || !this.postId) return
-
-				try {
-					this.commentLoading = true
-
+			
+			try {
+				this.commentLoading = true
+				
 					const response = await submitComment(this.postId, {
 						content: this.commentText.trim()
 					})
-
+				
 					if (response && response.code === 200) {
-						// 更新评论数
-						this.post.commentCount = (this.post.commentCount || 0) + 1
 						const commentContent = this.commentText.trim()
-						this.commentText = ''
+				this.commentText = ''
 
-						// 重新加载评论列表（实时刷新）
+						// 先显示成功提示
+						uni.showToast({
+							title: '评论成功',
+							icon: 'success',
+							duration: 1000
+						})
+
+						// 重新获取帖子详情，确保评论数正确（不自动加载评论，由后续逻辑处理）
+						await this.fetchPostDetail(false)
+						
+						// 清空评论列表，强制刷新
+						this.comments = []
 						this.commentPageNum = 1
-						await this.loadComments()
+						
+						// 使用重试机制加载评论，确保新评论显示
+						let retryCount = 0
+						const maxRetries = 5
+						let success = false
+						
+						while (retryCount < maxRetries && !success) {
+							// 等待一段时间，确保后端数据已保存
+							await new Promise(resolve => setTimeout(resolve, 500 + retryCount * 200))
+							
+							// 重新加载评论列表
+							await this.loadComments()
+							
+							// 检查是否加载到了新评论（通过评论数量或内容匹配）
+							if (this.comments.length > 0) {
+								// 检查是否有匹配的评论内容
+								const hasNewComment = this.comments.some(comment => 
+									comment.content === commentContent
+								)
+								if (hasNewComment) {
+									success = true
+									break
+								}
+							}
+							
+							retryCount++
+						}
 
 						// 滚动到顶部，显示新评论
 						this.$nextTick(() => {
 							this.scrollToTop()
-						})
-
-						uni.showToast({
-							title: '评论成功',
-							icon: 'success',
-							duration: 1500
+							// 强制更新视图
+							this.$forceUpdate()
 						})
 					} else {
 						throw new Error(response ? response.msg || response.message : '评论失败')
 					}
-
-				} catch (error) {
-					console.error('评论提交失败:', error)
+				
+			} catch (error) {
+				console.error('评论提交失败:', error)
 					const errorMsg = error.msg || error.message || '评论失败'
-					uni.showToast({
+				uni.showToast({
 						title: errorMsg,
-						icon: 'none'
-					})
+					icon: 'none'
+				})
 
 					// 如果是"请先登录"错误，引导用户登录
 					if (errorMsg.includes('登录')) {
@@ -996,25 +1006,28 @@
 							})
 						}, 1500)
 					}
-				} finally {
-					this.commentLoading = false
-				}
-			},
+			} finally {
+				this.commentLoading = false
+			}
+		},
 
 			// 开始回复
-			startReply(comment, reply = null) {
-				// 如果回复的是回复，则设置回复目标
-				if (reply) {
+			startReply(item) {
+				// 抖音风格：如果回复的是回复，则回复给被回复的用户；否则回复给主评论
+				if (item.isReply && item.replyToUserName) {
+					// 回复的是回复，回复给被回复的用户
 					this.replyingTo = {
-						id: reply.id,
-						userName: reply.userName || reply.author,
-						parentId: comment.id
+						id: item.id,
+						userName: item.userName || '匿名用户',
+						parentId: item.parentId || item.id,
+						replyToUserName: item.replyToUserName
 					}
 				} else {
+					// 回复主评论
 					this.replyingTo = {
-						id: comment.id,
-						userName: comment.userName || comment.author,
-						parentId: null
+						id: item.id,
+						userName: item.userName || '匿名用户',
+						parentId: item.isReply ? item.parentId : null
 					}
 				}
 				this.replyText = ''
@@ -1046,7 +1059,8 @@
 					this.commentLoading = true
 
 					// 保存回复目标信息，用于后续定位
-					const targetCommentId = this.replyingTo.id
+					// 抖音风格：parentId 应该是主评论的 ID（如果是回复回复，则使用 parentId；否则使用 id）
+					const targetCommentId = this.replyingTo.parentId || this.replyingTo.id
 					const targetParentId = this.replyingTo.parentId
 
 					const response = await submitComment(this.postId, {
@@ -1055,24 +1069,56 @@
 					})
 
 					if (response && response.code === 200) {
-						// 更新评论数
-						this.post.commentCount = (this.post.commentCount || 0) + 1
+						const replyContent = this.replyText.trim()
 						this.replyText = ''
 						this.replyingTo = null
 
-						// 重新加载评论列表（实时刷新）
+						// 先显示成功提示
+						uni.showToast({
+							title: '回复成功',
+							icon: 'success',
+							duration: 1000
+						})
+
+						// 重新获取帖子详情，确保评论数正确（不自动加载评论，由后续逻辑处理）
+						await this.fetchPostDetail(false)
+
+						// 清空评论列表，强制刷新
+						this.comments = []
 						this.commentPageNum = 1
-						await this.loadComments()
+						
+						// 使用重试机制加载评论，确保新回复显示
+						let retryCount = 0
+						const maxRetries = 5
+						let success = false
+						
+						while (retryCount < maxRetries && !success) {
+							// 等待一段时间，确保后端数据已保存
+							await new Promise(resolve => setTimeout(resolve, 500 + retryCount * 200))
+							
+							// 重新加载评论列表
+							await this.loadComments()
+							
+							// 检查是否加载到了新回复（抖音风格：评论和回复都是平铺的）
+							if (this.comments.length > 0) {
+								// 查找是否有匹配的回复内容
+								const hasNewReply = this.comments.some(item => 
+									item.content === replyContent && item.isReply
+								)
+								if (hasNewReply) {
+									success = true
+									break
+								}
+							}
+							
+							retryCount++
+						}
 
 						// 滚动到对应的评论位置
 						this.$nextTick(() => {
 							this.scrollToComment(targetCommentId)
-						})
-
-						uni.showToast({
-							title: '回复成功',
-							icon: 'success',
-							duration: 1500
+							// 强制更新视图
+							this.$forceUpdate()
 						})
 					} else {
 						throw new Error(response ? response.msg || response.message : '回复失败')
@@ -1123,9 +1169,9 @@
 				}
 			},
 
-			// 删除评论
-			async handleDeleteComment(comment, parentComment = null) {
-				if (!this.postId || !comment.id) return
+			// 删除评论（抖音风格：评论和回复都是平铺的）
+			async handleDeleteComment(item) {
+				if (!this.postId || !item.id) return
 
 				uni.showModal({
 					title: '确认删除',
@@ -1133,28 +1179,16 @@
 					success: async (res) => {
 						if (res.confirm) {
 							try {
-								const response = await deleteComment(this.postId, comment.id)
+								const response = await deleteComment(this.postId, item.id)
 
 								if (response && response.code === 200) {
 									// 更新评论数
 									this.post.commentCount = Math.max(0, (this.post.commentCount || 0) - 1)
 
-									// 从列表中移除
-									if (parentComment) {
-										// 删除回复
-										const index = parentComment.replies.findIndex(r => r.id === comment
-											.id)
-										if (index !== -1) {
-											parentComment.replies.splice(index, 1)
-											parentComment.replyCount = Math.max(0, (parentComment
-												.replyCount || 0) - 1)
-										}
-									} else {
-										// 删除主评论
-										const index = this.comments.findIndex(c => c.id === comment.id)
-										if (index !== -1) {
-											this.comments.splice(index, 1)
-										}
+									// 从列表中移除（抖音风格：直接删除，因为都是平铺的）
+									const index = this.comments.findIndex(c => c.id === item.id)
+									if (index !== -1) {
+										this.comments.splice(index, 1)
 									}
 
 									uni.showToast({
@@ -1176,20 +1210,20 @@
 					}
 				})
 			},
-
-			// 图片预览
-			previewImage(index) {
-				const images = this.getImageList()
-
+		
+		// 图片预览
+		previewImage(index) {
+			const images = this.getImageList()
+			
 				if (images && images.length > 0) {
 					// 确保 index 在有效范围内
 					const currentIndex = typeof index === 'number' ? index : this.currentImageIndex
 					const validIndex = Math.max(0, Math.min(currentIndex, images.length - 1))
 
-					uni.previewImage({
-						urls: images,
+				uni.previewImage({
+					urls: images,
 						current: images[validIndex] || images[0],
-						indicator: 'number',
+					indicator: 'number',
 						loop: true,
 						longPressActions: {
 							itemList: ['保存图片'],
@@ -1200,9 +1234,9 @@
 								}
 							}
 						}
-					})
-				}
-			},
+				})
+			}
+		},
 
 			// 处理 swiper 点击事件
 			handleSwiperTap(e) {
@@ -1243,136 +1277,136 @@
 					}
 				})
 			},
+		
+		// 获取图片列表（统一处理 mediaUrls 和 coverUrl）
+		getImageList() {
+			if (!this.post) return []
 
-			// 获取图片列表（统一处理 mediaUrls 和 coverUrl）
-			getImageList() {
-				if (!this.post) return []
+			const urls = Array.isArray(this.post.mediaUrls) ? this.post.mediaUrls : []
+			// 过滤出图片（非视频）
+			const imageUrls = urls.filter(url => !this.isVideoUrl(url))
 
-				const urls = Array.isArray(this.post.mediaUrls) ? this.post.mediaUrls : []
-				// 过滤出图片（非视频）
-				const imageUrls = urls.filter(url => !this.isVideoUrl(url))
-
-				if (imageUrls.length > 0) {
-					return imageUrls
-				} else if (this.post.coverUrl) {
-					return [this.post.coverUrl]
-				}
-				return []
-			},
-
-			// 轮播图切换事件
-			onSwiperChange(e) {
-				this.currentImageIndex = e.detail.current
-			},
-
-			// 轮播图动画完成事件（用于检测手动滑动）
-			onSwiperAnimationFinish(e) {
-				this.currentImageIndex = e.detail.current
-				// 手动滑动后，短暂暂停自动播放，给用户时间查看
-				if (!this.swiperAutoplay) {
-					setTimeout(() => {
-						this.swiperAutoplay = true
-					}, 3000)
-				}
-			},
-
-			// 切换到上一张图片
-			prevImage() {
-				const imageList = this.getImageList()
-				if (imageList.length <= 1) return
-
-				// 暂停自动播放
-				this.swiperAutoplay = false
-
-				// 计算上一张的索引（支持循环）
-				let prevIndex = this.currentImageIndex - 1
-				if (prevIndex < 0) {
-					prevIndex = imageList.length - 1 // 循环到最后一张
-				}
-
-				// 更新当前索引，swiper会通过:current绑定自动更新
-				this.currentImageIndex = prevIndex
-
-				// 3秒后恢复自动播放
+			if (imageUrls.length > 0) {
+				return imageUrls
+			} else if (this.post.coverUrl) {
+				return [this.post.coverUrl]
+			}
+			return []
+		},
+		
+		// 轮播图切换事件
+		onSwiperChange(e) {
+			this.currentImageIndex = e.detail.current
+		},
+		
+		// 轮播图动画完成事件（用于检测手动滑动）
+		onSwiperAnimationFinish(e) {
+			this.currentImageIndex = e.detail.current
+			// 手动滑动后，短暂暂停自动播放，给用户时间查看
+			if (!this.swiperAutoplay) {
 				setTimeout(() => {
-					if (this.post && this.getImageList().length > 1) {
-						this.swiperAutoplay = true
-					}
+					this.swiperAutoplay = true
 				}, 3000)
-			},
-
-			// 切换到下一张图片
-			nextImage() {
-				const imageList = this.getImageList()
-				if (imageList.length <= 1) return
-
-				// 暂停自动播放
-				this.swiperAutoplay = false
-
-				// 计算下一张的索引（支持循环）
-				let nextIndex = this.currentImageIndex + 1
-				if (nextIndex >= imageList.length) {
-					nextIndex = 0 // 循环到第一张
+			}
+		},
+		
+		// 切换到上一张图片
+		prevImage() {
+			const imageList = this.getImageList()
+			if (imageList.length <= 1) return
+			
+			// 暂停自动播放
+			this.swiperAutoplay = false
+			
+			// 计算上一张的索引（支持循环）
+			let prevIndex = this.currentImageIndex - 1
+			if (prevIndex < 0) {
+				prevIndex = imageList.length - 1 // 循环到最后一张
+			}
+			
+			// 更新当前索引，swiper会通过:current绑定自动更新
+			this.currentImageIndex = prevIndex
+			
+			// 3秒后恢复自动播放
+			setTimeout(() => {
+				if (this.post && this.getImageList().length > 1) {
+					this.swiperAutoplay = true
 				}
-
-				// 更新当前索引，swiper会通过:current绑定自动更新
-				this.currentImageIndex = nextIndex
-
-				// 3秒后恢复自动播放
-				setTimeout(() => {
-					if (this.post && this.getImageList().length > 1) {
-						this.swiperAutoplay = true
-					}
-				}, 3000)
-			},
-
-			// 简单判断是否为视频URL
-			isVideoUrl(url) {
-				if (!url || typeof url !== 'string') return false
-				return /\.(mp4|mov|wmv|avi|flv|m3u8|webm)$/i.test(url)
-			},
-
-			// 获取视频列表（从 mediaUrls 中筛选视频）
-			getVideoList() {
-				if (!this.post || !Array.isArray(this.post.mediaUrls)) return []
-				return this.post.mediaUrls.filter(url => this.isVideoUrl(url))
-			},
-
-			// 获取帖子图片URL
-			getPostImageUrl(post) {
-				if (!post) return ''
-				if (post.coverUrl) return post.coverUrl
-
-				if (post.mediaUrls && post.mediaUrls.length > 0) {
-					// 相关推荐里只显示图片封面，过滤掉视频
-					const firstImg = post.mediaUrls.find(u => !this.isVideoUrl(u))
-					return firstImg || post.mediaUrls[0]
+			}, 3000)
+		},
+		
+		// 切换到下一张图片
+		nextImage() {
+			const imageList = this.getImageList()
+			if (imageList.length <= 1) return
+			
+			// 暂停自动播放
+			this.swiperAutoplay = false
+			
+			// 计算下一张的索引（支持循环）
+			let nextIndex = this.currentImageIndex + 1
+			if (nextIndex >= imageList.length) {
+				nextIndex = 0 // 循环到第一张
+			}
+			
+			// 更新当前索引，swiper会通过:current绑定自动更新
+			this.currentImageIndex = nextIndex
+			
+			// 3秒后恢复自动播放
+			setTimeout(() => {
+				if (this.post && this.getImageList().length > 1) {
+					this.swiperAutoplay = true
 				}
-				return ''
-			},
+			}, 3000)
+		},
+		
+		// 简单判断是否为视频URL
+		isVideoUrl(url) {
+			if (!url || typeof url !== 'string') return false
+			return /\.(mp4|mov|wmv|avi|flv|m3u8|webm)$/i.test(url)
+		},
 
-			// 图片加载处理
-			handleImageLoad() {
-				console.log('图片加载成功')
-			},
+		// 获取视频列表（从 mediaUrls 中筛选视频）
+		getVideoList() {
+			if (!this.post || !Array.isArray(this.post.mediaUrls)) return []
+			return this.post.mediaUrls.filter(url => this.isVideoUrl(url))
+		},
+		
+		// 获取帖子图片URL
+		getPostImageUrl(post) {
+			if (!post) return ''
+			if (post.coverUrl) return post.coverUrl
 
-			handleImageError() {
-				console.log('图片加载失败')
-			},
+			if (post.mediaUrls && post.mediaUrls.length > 0) {
+				// 相关推荐里只显示图片封面，过滤掉视频
+				const firstImg = post.mediaUrls.find(u => !this.isVideoUrl(u))
+				return firstImg || post.mediaUrls[0]
+			}
+			return ''
+		},
+		
+		// 图片加载处理
+		handleImageLoad() {
+			console.log('图片加载成功')
+		},
+		
+		handleImageError() {
+			console.log('图片加载失败')
+		},
 
-			handleVideoError(e) {
-				console.log('视频加载失败', e)
-			},
-
-			// 返回上一页
-			goBack() {
-				uni.navigateBack()
-			},
-
-			// 滚动到底部
-			onScrollToLower() {
-				console.log('滚动到底部')
-			},
+		handleVideoError(e) {
+			console.log('视频加载失败', e)
+		},
+		
+		// 返回上一页
+		goBack() {
+			uni.navigateBack()
+		},
+		
+		// 滚动到底部
+		onScrollToLower() {
+			console.log('滚动到底部')
+		},
 
 			// 评论滚动事件
 			onCommentScroll(e) {
@@ -1415,19 +1449,19 @@
 					}).exec()
 				})
 			},
-
-			// 评论输入框聚焦
-			onCommentFocus() {
-				this.showCommentModal = true
+		
+		// 评论输入框聚焦
+		onCommentFocus() {
+			this.showCommentModal = true
 				// 如果评论列表为空，加载评论
 				if (this.comments.length === 0 && !this.commentLoading) {
 					this.loadComments()
 				}
-			},
-
-			// 关闭评论弹窗
-			closeCommentModal() {
-				this.showCommentModal = false
+		},
+		
+		// 关闭评论弹窗
+		closeCommentModal() {
+			this.showCommentModal = false
 				this.replyingTo = null
 				this.replyText = ''
 				this.textareaFocused = false
@@ -1456,211 +1490,211 @@
 				} else {
 					this.commentText = value
 				}
-			},
-
-			// 显示操作菜单
-			showActionSheet() {
-				this.$refs.actionMenu.open()
-			},
-
-			// 关闭操作菜单
-			closeActionMenu() {
-				this.$refs.actionMenu.close()
-			},
-
-			// 处理分享
-			handleShare() {
-				uni.share({
-					provider: 'weixin',
-					scene: 'WXSceneSession',
-					type: 0,
-					href: `https://your-domain.com/post/${this.postId}`,
-					title: this.post.title,
-					summary: this.post.content ? this.post.content.substring(0, 100) : '分享一个有趣的帖子',
-					success: function(res) {
-						console.log('分享成功:', res)
-					},
-					fail: function(err) {
-						console.log('分享失败:', err)
+		},
+		
+		// 显示操作菜单
+		showActionSheet() {
+			this.$refs.actionMenu.open()
+		},
+		
+		// 关闭操作菜单
+		closeActionMenu() {
+			this.$refs.actionMenu.close()
+		},
+		
+		// 处理分享
+		handleShare() {
+			uni.share({
+				provider: 'weixin',
+				scene: 'WXSceneSession',
+				type: 0,
+				href: `https://your-domain.com/post/${this.postId}`,
+				title: this.post.title,
+				summary: this.post.content ? this.post.content.substring(0, 100) : '分享一个有趣的帖子',
+				success: function(res) {
+					console.log('分享成功:', res)
+				},
+				fail: function(err) {
+					console.log('分享失败:', err)
+				}
+			})
+			this.closeActionMenu()
+		},
+		
+		// 处理举报
+		handleReport() {
+			uni.showModal({
+				title: '举报帖子',
+				content: '请选择举报原因',
+				showCancel: true,
+				success: (res) => {
+					if (res.confirm) {
+						uni.showToast({
+							title: '举报成功',
+							icon: 'success'
+						})
 					}
-				})
-				this.closeActionMenu()
-			},
-
-			// 处理举报
-			handleReport() {
-				uni.showModal({
-					title: '举报帖子',
-					content: '请选择举报原因',
-					showCancel: true,
-					success: (res) => {
-						if (res.confirm) {
-							uni.showToast({
-								title: '举报成功',
-								icon: 'success'
-							})
-						}
-					}
-				})
-				this.closeActionMenu()
-			},
-
-			// 通过标签搜索
-			searchByTag(tag) {
-				uni.navigateTo({
-					url: `/pages/search/result?keyword=${tag}&type=tag`
-				})
-			},
-
-			// 查看相关帖子
-			viewRelatedPost(postId) {
-				uni.navigateTo({
-					url: `/pages/post/detail?id=${postId}`
-				})
-			},
-
-			// 格式化日期
-			formatDate(dateString) {
-				if (!dateString) return '未知时间'
-
-				const date = new Date(dateString)
-				const now = new Date()
-				const diff = now - date
-
-				// 一分钟内
-				if (diff < 60000) {
-					return '刚刚'
 				}
-
-				// 一小时内
-				if (diff < 3600000) {
-					return `${Math.floor(diff / 60000)}分钟前`
-				}
-
-				// 一天内
-				if (diff < 86400000) {
-					return `${Math.floor(diff / 3600000)}小时前`
-				}
-
-				// 一周内
-				if (diff < 604800000) {
-					return `${Math.floor(diff / 86400000)}天前`
-				}
-
-				// 返回完整日期
-				return date.toLocaleDateString('zh-CN', {
-					year: 'numeric',
-					month: 'long',
-					day: 'numeric'
-				})
-			},
-
-			// 降级方案：使用模拟数据
-			useMockDataAsFallback() {
-				console.log('🔄 使用模拟数据作为降级方案')
-
-				this.post = {
-					id: this.postId,
-					title: '现代简约风格家居设计',
-					content: '这是一个关于现代简约风格家居设计的详细分享。我们从空间规划、材料选择到软装搭配都做了精心设计，希望能给大家带来一些装修灵感。\n\n客厅采用了开放式设计，让空间更加通透。主色调以白色和浅灰色为主，搭配原木元素，营造出温馨舒适的氛围。',
-					author: '设计师张工',
-					authorAvatar: '/static/images/default-avatar.png',
-					userId: 123,
-					roleType: 2,
-					viewCount: 2300,
-					likeCount: 156,
-					commentCount: 42,
-					collectCount: 89,
-					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',
-					mediaUrls: [
-						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',
-						'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/5c92c50d76b047308767329292ccddf7.jpg'
-					],
-					threadType: 1,
-					categoryId: 1,
-					createTime: new Date().toISOString(),
-					tags: ['现代简约', '家居设计', '装修灵感']
-				}
-
-				// 加载模拟的相关推荐
-				this.relatedPosts = [{
-						id: 2,
-						title: '欧式古典风格别墅设计',
-						author: '设计工作室',
-						coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2-preview.jpg'
-					},
-					{
-						id: 3,
-						title: '小户型改造案例分享',
-						author: '改造专家',
-						coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1-preview.jpg'
-					}
-				]
+			})
+			this.closeActionMenu()
+		},
+		
+		// 通过标签搜索
+		searchByTag(tag) {
+			uni.navigateTo({
+				url: `/pages/search/result?keyword=${tag}&type=tag`
+			})
+		},
+		
+		// 查看相关帖子
+		viewRelatedPost(postId) {
+			uni.navigateTo({
+				url: `/pages/post/detail?id=${postId}`
+			})
+		},
+		
+		// 格式化日期
+		formatDate(dateString) {
+			if (!dateString) return '未知时间'
+			
+			const date = new Date(dateString)
+			const now = new Date()
+			const diff = now - date
+			
+			// 一分钟内
+			if (diff < 60000) {
+				return '刚刚'
 			}
+			
+			// 一小时内
+			if (diff < 3600000) {
+				return `${Math.floor(diff / 60000)}分钟前`
+			}
+			
+			// 一天内
+			if (diff < 86400000) {
+				return `${Math.floor(diff / 3600000)}小时前`
+			}
+			
+			// 一周内
+			if (diff < 604800000) {
+				return `${Math.floor(diff / 86400000)}天前`
+			}
+			
+			// 返回完整日期
+			return date.toLocaleDateString('zh-CN', {
+				year: 'numeric',
+				month: 'long',
+				day: 'numeric'
+			})
+		},
+		
+		// 降级方案：使用模拟数据
+		useMockDataAsFallback() {
+			console.log('🔄 使用模拟数据作为降级方案')
+			
+			this.post = {
+				id: this.postId,
+				title: '现代简约风格家居设计',
+				content: '这是一个关于现代简约风格家居设计的详细分享。我们从空间规划、材料选择到软装搭配都做了精心设计，希望能给大家带来一些装修灵感。\n\n客厅采用了开放式设计，让空间更加通透。主色调以白色和浅灰色为主，搭配原木元素，营造出温馨舒适的氛围。',
+				author: '设计师张工',
+				authorAvatar: '/static/images/default-avatar.png',
+				userId: 123,
+				roleType: 2,
+				viewCount: 2300,
+				likeCount: 156,
+				commentCount: 42,
+				collectCount: 89,
+				coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',
+				mediaUrls: [
+					'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/c0609e506f304cb48d0fd526255e51e7.jpg',
+					'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/5c92c50d76b047308767329292ccddf7.jpg'
+				],
+				threadType: 1,
+				categoryId: 1,
+				createTime: new Date().toISOString(),
+				tags: ['现代简约', '家居设计', '装修灵感']
+			}
+			
+			// 加载模拟的相关推荐
+				this.relatedPosts = [{
+					id: 2,
+					title: '欧式古典风格别墅设计',
+					author: '设计工作室',
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/design-2-preview.jpg'
+				},
+				{
+					id: 3,
+					title: '小户型改造案例分享',
+					author: '改造专家',
+					coverUrl: 'https://cypphoto.oss-cn-chengdu.aliyuncs.com/photo//2025/10/30/case-1-preview.jpg'
+				}
+			]
 		}
 	}
+}
 </script>
 
 <style scoped>
-	.post-detail-container {
-		height: 100vh;
-		background-color: #ffffff;
-		display: flex;
-		flex-direction: column;
-	}
+.post-detail-container {
+	height: 100vh;
+	background-color: #ffffff;
+	display: flex;
+	flex-direction: column;
+}
 
-	/* 导航栏 */
-	.navbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 15px;
-		background-color: #fff;
-		border-bottom: 1px solid #f0f0f0;
-		position: sticky;
-		top: 0;
-		z-index: 100;
-	}
+/* 导航栏 */
+.navbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 15px;
+	background-color: #fff;
+	border-bottom: 1px solid #f0f0f0;
+	position: sticky;
+	top: 0;
+	z-index: 100;
+}
 
 	.nav-left,
 	.nav-right {
-		width: 60px;
-	}
+	width: 60px;
+}
 
 	.back-icon,
 	.more-icon {
-		font-size: 20px;
-		color: #333;
-		cursor: pointer;
-	}
+	font-size: 20px;
+	color: #333;
+	cursor: pointer;
+}
 
-	.nav-title {
-		font-size: 18px;
-		font-weight: 600;
-		color: #333;
-	}
+.nav-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: #333;
+}
 
-	/* 加载状态 */
+/* 加载状态 */
 	.loading-container,
 	.error-container {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 60px 20px;
-	}
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 60px 20px;
+}
 
-	.loading-spinner {
-		width: 40px;
-		height: 40px;
-		border: 4px solid #f3f3f3;
-		border-top: 4px solid #ff2e63;
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-		margin-bottom: 16px;
-	}
+.loading-spinner {
+	width: 40px;
+	height: 40px;
+	border: 4px solid #f3f3f3;
+	border-top: 4px solid #ff2e63;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+	margin-bottom: 16px;
+}
 
-	@keyframes spin {
+@keyframes spin {
 		0% {
 			transform: rotate(0deg);
 		}
@@ -1668,113 +1702,113 @@
 		100% {
 			transform: rotate(360deg);
 		}
-	}
+}
 
 	.loading-text,
 	.error-text {
-		font-size: 16px;
-		color: #666;
-		text-align: center;
-	}
+	font-size: 16px;
+	color: #666;
+	text-align: center;
+}
 
-	.retry-btn {
-		margin-top: 16px;
-		padding: 8px 16px;
-		background-color: #ff2e63;
-		color: white;
-		border: none;
-		border-radius: 6px;
-		cursor: pointer;
-	}
+.retry-btn {
+	margin-top: 16px;
+	padding: 8px 16px;
+	background-color: #ff2e63;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+}
 
-	/* 帖子内容 */
-	.post-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-	}
+/* 帖子内容 */
+.post-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
 
-	.scroll-content {
-		flex: 1;
-	}
+.scroll-content {
+	flex: 1;
+}
 
-	/* 帖子头部 */
-	.post-header {
-		padding: 20px 15px 0;
-	}
+/* 帖子头部 */
+.post-header {
+	padding: 20px 15px 0;
+}
 
-	.post-title {
-		font-size: 22px;
-		font-weight: 600;
-		line-height: 1.4;
-		color: #1a1a1a;
-		margin-bottom: 16px;
-	}
+.post-title {
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.4;
+	color: #1a1a1a;
+	margin-bottom: 16px;
+}
 
-	.author-info {
-		display: flex;
-		align-items: center;
-		margin-bottom: 20px;
-	}
+.author-info {
+	display: flex;
+	align-items: center;
+	margin-bottom: 20px;
+}
 
-	.author-avatar {
-		width: 44px;
-		height: 44px;
-		border-radius: 50%;
-		margin-right: 12px;
-	}
+.author-avatar {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	margin-right: 12px;
+}
 
-	.author-details {
-		flex: 1;
-	}
+.author-details {
+	flex: 1;
+}
 
-	.author-name {
-		display: block;
-		font-size: 16px;
-		font-weight: 500;
-		color: #333;
-		margin-bottom: 4px;
-	}
+.author-name {
+	display: block;
+	font-size: 16px;
+	font-weight: 500;
+	color: #333;
+	margin-bottom: 4px;
+}
 
-	.post-meta {
-		display: flex;
-		gap: 12px;
-	}
+.post-meta {
+	display: flex;
+	gap: 12px;
+}
 
 	.post-date,
 	.post-views {
-		font-size: 13px;
-		color: #999;
-	}
+	font-size: 13px;
+	color: #999;
+}
 
-	.follow-btn {
-		padding: 6px 16px;
-		background-color: #ff2e63;
-		color: white;
-		border: none;
-		border-radius: 16px;
-		font-size: 13px;
-		cursor: pointer;
-	}
+.follow-btn {
+	padding: 6px 16px;
+	background-color: #ff2e63;
+	color: white;
+	border: none;
+	border-radius: 16px;
+	font-size: 13px;
+	cursor: pointer;
+}
 
-	.follow-btn.followed {
-		background-color: #ccc;
-	}
+.follow-btn.followed {
+	background-color: #ccc;
+}
 
-	/* 图片展示 */
-	.post-images {
-		padding: 0 15px 20px;
-	}
+/* 图片展示 */
+.post-images {
+	padding: 0 15px 20px;
+}
 
-	.single-image {
-		width: 100%;
-		border-radius: 8px;
-		overflow: hidden;
-	}
+.single-image {
+	width: 100%;
+	border-radius: 8px;
+	overflow: hidden;
+}
 
-	.post-image {
-		width: 100%;
-		display: block;
+.post-image {
+	width: 100%;
+	display: block;
 		/* 确保可以点击 */
 		cursor: pointer;
 		user-select: none;
@@ -1785,37 +1819,37 @@
 
 	.post-image:active {
 		opacity: 0.8;
-	}
+}
 
-	/* 轮播图容器 */
-	.swiper-container {
-		position: relative;
-		width: 100%;
-		height: 400rpx;
-		border-radius: 8px;
-		overflow: hidden;
-		background-color: #f5f5f5;
-	}
+/* 轮播图容器 */
+.swiper-container {
+	position: relative;
+	width: 100%;
+	height: 400rpx;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #f5f5f5;
+}
 
-	.post-swiper {
-		width: 100%;
-		height: 100%;
-	}
+.post-swiper {
+	width: 100%;
+	height: 100%;
+}
 
-	.swiper-item {
-		width: 100%;
-		height: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+.swiper-item {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 		/* 确保可以点击 */
 		position: relative;
-	}
+}
 
-	.swiper-image {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
+.swiper-image {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
 		/* 确保可以点击 */
 		cursor: pointer;
 		user-select: none;
@@ -1826,358 +1860,398 @@
 
 	.swiper-image:active {
 		opacity: 0.8;
-	}
+}
 
-	/* 左右箭头 */
-	.swiper-arrow {
-		position: absolute;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 60rpx;
-		height: 60rpx;
-		background: rgba(0, 0, 0, 0.4);
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 20;
-		cursor: pointer;
-		transition: all 0.3s;
-	}
+/* 左右箭头 */
+.swiper-arrow {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 60rpx;
+	height: 60rpx;
+	background: rgba(0, 0, 0, 0.4);
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 20;
+	cursor: pointer;
+	transition: all 0.3s;
+}
 
-	.swiper-arrow:active {
-		background: rgba(0, 0, 0, 0.6);
-		transform: translateY(-50%) scale(0.95);
-	}
+.swiper-arrow:active {
+	background: rgba(0, 0, 0, 0.6);
+	transform: translateY(-50%) scale(0.95);
+}
 
-	.swiper-arrow-left {
-		left: 20rpx;
-	}
+.swiper-arrow-left {
+	left: 20rpx;
+}
 
-	.swiper-arrow-right {
-		right: 20rpx;
-	}
+.swiper-arrow-right {
+	right: 20rpx;
+}
 
-	/* 图片数量指示器 */
-	.swiper-indicator-text {
-		position: absolute;
-		bottom: 10rpx;
-		right: 10rpx;
-		background: rgba(0, 0, 0, 0.6);
-		color: white;
-		padding: 4rpx 12rpx;
-		border-radius: 20rpx;
-		font-size: 24rpx;
-		z-index: 10;
-	}
+/* 图片数量指示器 */
+.swiper-indicator-text {
+	position: absolute;
+	bottom: 10rpx;
+	right: 10rpx;
+	background: rgba(0, 0, 0, 0.6);
+	color: white;
+	padding: 4rpx 12rpx;
+	border-radius: 20rpx;
+	font-size: 24rpx;
+	z-index: 10;
+}
 
-	/* 视频展示 */
-	.post-videos {
-		padding: 0 15px 20px;
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-	}
+/* 视频展示 */
+.post-videos {
+	padding: 0 15px 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
 
-	.video-wrapper {
-		width: 100%;
-		border-radius: 8px;
-		overflow: hidden;
-		background-color: #000;
-	}
+.video-wrapper {
+	width: 100%;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #000;
+}
 
-	.post-video {
-		width: 100%;
-		height: 220px;
-		object-fit: contain;
-		background-color: #000;
-	}
+.post-video {
+	width: 100%;
+	height: 220px;
+	object-fit: contain;
+	background-color: #000;
+}
 
-	/* 帖子正文 */
-	.post-body {
-		padding: 0 15px 20px;
-	}
+/* 帖子正文 */
+.post-body {
+	padding: 0 15px 20px;
+}
 
-	.content-text {
-		font-size: 16px;
-		line-height: 1.8;
-		color: #333;
-		margin-bottom: 16px;
-		white-space: pre-line;
-	}
+.content-text {
+	font-size: 16px;
+	line-height: 1.8;
+	color: #333;
+	margin-bottom: 16px;
+	white-space: pre-line;
+}
 
-	.post-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		margin-bottom: 16px;
-	}
+.post-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+}
 
-	.tag {
-		padding: 4px 12px;
-		background-color: #f5f5f5;
-		color: #666;
-		border-radius: 16px;
-		font-size: 13px;
-		cursor: pointer;
-	}
+.tag {
+	padding: 4px 12px;
+	background-color: #f5f5f5;
+	color: #666;
+	border-radius: 16px;
+	font-size: 13px;
+	cursor: pointer;
+}
 
-	.post-stats {
-		display: flex;
-		gap: 16px;
-	}
+.post-stats {
+	display: flex;
+	gap: 16px;
+}
 
-	.stat-item {
-		font-size: 13px;
-		color: #999;
-	}
+.stat-item {
+	font-size: 13px;
+	color: #999;
+}
 
-	/* 相关推荐 */
-	.related-posts {
-		padding: 20px 15px;
-		border-top: 8px solid #f8f9fa;
-	}
+/* 相关推荐 */
+.related-posts {
+	padding: 20px 15px;
+	border-top: 8px solid #f8f9fa;
+}
 
-	.section-title {
-		font-size: 18px;
-		font-weight: 600;
-		color: #333;
-		margin-bottom: 12px;
-	}
+.section-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: #333;
+	margin-bottom: 12px;
+}
 
-	.related-list {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
+.related-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
 
-	.related-item {
-		display: flex;
-		gap: 12px;
-		padding: 12px;
-		background-color: #f8f9fa;
-		border-radius: 8px;
-		cursor: pointer;
-	}
+.related-item {
+	display: flex;
+	gap: 12px;
+	padding: 12px;
+	background-color: #f8f9fa;
+	border-radius: 8px;
+	cursor: pointer;
+}
 
-	.related-image {
-		width: 80px;
-		height: 80px;
-		border-radius: 6px;
-		object-fit: cover;
-	}
+.related-image {
+	width: 80px;
+	height: 80px;
+	border-radius: 6px;
+	object-fit: cover;
+}
 
-	.related-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		justify-content: space-between;
-	}
+.related-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
 
-	.related-title {
-		font-size: 14px;
-		font-weight: 500;
-		color: #333;
-		line-height: 1.4;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
+.related-title {
+	font-size: 14px;
+	font-weight: 500;
+	color: #333;
+	line-height: 1.4;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
 
-	.related-author {
-		font-size: 12px;
-		color: #999;
-	}
+.related-author {
+	font-size: 12px;
+	color: #999;
+}
 
-	/* 底部操作栏 */
-	.bottom-actions {
-		display: flex;
-		align-items: center;
-		padding: 12px 15px;
-		background-color: #fff;
-		border-top: 1px solid #f0f0f0;
-		position: sticky;
-		bottom: 0;
-		z-index: 100;
-	}
+/* 底部操作栏 */
+.bottom-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 15px;
+	background-color: #fff;
+	border-top: 1px solid #f0f0f0;
+	position: sticky;
+	bottom: 0;
+	z-index: 100;
+}
 
-	.action-left {
-		flex: 1;
-		margin-right: 12px;
-		max-width: 200px;
-	}
+.action-left {
+	flex-shrink: 0;
+	margin-right: 12px;
+}
 
-	.comment-input-container {
-		background-color: #f5f5f5;
-		border-radius: 20px;
-		padding: 6px 12px;
-	}
+/* 评论按钮（绿色按钮样式，类似图二的"我的家"按钮） */
+.comment-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: linear-gradient(135deg, #67C23A, #85CE61);
+	border: none;
+	border-radius: 20px;
+	padding: 8px 16px;
+	min-width: auto;
+	cursor: pointer;
+	box-shadow: 0 2px 8px rgba(103, 194, 58, 0.2);
+}
 
-	.comment-input {
-		width: 100%;
-		border: none;
-		background: transparent;
-		outline: none;
-		font-size: 13px;
-		line-height: 1.4;
-	}
+.comment-btn-icon {
+	font-size: 18px;
+	margin-right: 6px;
+}
 
-	.action-right {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-	}
+.comment-btn-text {
+	font-size: 14px;
+	color: #ffffff;
+	font-weight: 500;
+}
 
-	.action-btn {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		background: none;
-		border: none;
-		padding: 4px 8px;
-		min-width: auto;
-		cursor: pointer;
-	}
+.action-right {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex: 1;
+	margin-left: 20px;
+}
 
-	.action-btn:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
+/* 操作项（水平排列，无背景卡片） */
+.action-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	flex: 1;
+}
 
-	.action-icon {
-		font-size: 20px;
-		margin-bottom: 2px;
-	}
+.action-icon {
+	font-size: 22px;
+	margin-bottom: 4px;
+}
 
-	.action-count {
-		font-size: 11px;
-		color: #666;
-	}
+.action-count {
+	font-size: 12px;
+	color: #333;
+	font-weight: 500;
+}
 
-	.action-btn.liked .action-count,
-	.action-btn.collected .action-count {
-		color: #ff2e63;
-	}
+.action-item.liked .action-count,
+.action-item.collected .action-count {
+	color: #ff2e63;
+}
 
-	/* 评论弹窗 */
-	.comment-modal {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		z-index: 1000;
+/* 评论弹窗 */
+.comment-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1000;
 		/* 小程序中确保弹窗在最上层 */
-	}
+}
 
-	.modal-mask {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-	}
+.modal-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+}
 
-	.modal-content {
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		background: #fff;
-		border-radius: 16px 16px 0 0;
-		max-height: 70vh;
-		display: flex;
-		flex-direction: column;
+.modal-content {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background: #fff;
+	border-radius: 16px 16px 0 0;
+	max-height: 70vh;
+	display: flex;
+	flex-direction: column;
 		/* 小程序中确保内容可以正常显示 */
 		transform: translateZ(0);
 		-webkit-transform: translateZ(0);
-	}
+}
 
-	.modal-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 16px;
-		border-bottom: 1px solid #f0f0f0;
-	}
+.modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px;
+	border-bottom: 1px solid #f0f0f0;
+}
 
-	.modal-title {
-		font-size: 16px;
-		font-weight: 600;
-		color: #333;
-	}
+.modal-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #333;
+}
 
-	.modal-close {
-		font-size: 24px;
-		color: #999;
-		cursor: pointer;
-	}
+.modal-close {
+	font-size: 24px;
+	color: #999;
+	cursor: pointer;
+}
 
-	.comment-list {
-		flex: 1;
-		padding: 16px;
-		overflow-y: auto;
+.comment-list {
+	flex: 1;
+	padding: 16px;
+	overflow-y: auto;
 		max-height: 400px;
 		/* 小程序中确保滚动正常 */
 		-webkit-overflow-scrolling: touch;
-	}
+}
 
-	.no-comments {
-		text-align: center;
-		color: #999;
-		padding: 40px 0;
-	}
+.no-comments {
+	text-align: center;
+	color: #999;
+	padding: 40px 0;
+}
 
-	/* 评论项 */
+	/* 评论项 - 抖音风格 */
 	.comment-item {
 		display: flex;
-		margin-bottom: 20px;
-		padding-bottom: 16px;
-		border-bottom: 1px solid #f0f0f0;
+		margin-bottom: 16px;
+		padding-bottom: 12px;
 	}
 
 	.comment-item:last-child {
 		border-bottom: none;
 	}
 
+	/* 回复项样式（抖音风格中回复和评论视觉上类似） */
+	.comment-item.is-reply {
+		padding-left: 0;
+		margin-bottom: 12px;
+	}
+
 	.comment-avatar {
-		width: 36px;
-		height: 36px;
+		width: 32px;
+		height: 32px;
 		border-radius: 50%;
-		margin-right: 12px;
+		margin-right: 10px;
 		flex-shrink: 0;
 	}
 
 	.comment-content {
 		flex: 1;
+		min-width: 0;
 	}
 
-	.comment-header {
+	.comment-main {
 		display: flex;
-		align-items: center;
-		margin-bottom: 8px;
-		gap: 8px;
+		flex-direction: column;
+	}
+
+	/* 评论文本区域 - 抖音风格：用户名和内容在同一行 */
+	.comment-text-wrapper {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		margin-bottom: 6px;
+		line-height: 1.5;
 	}
 
 	.comment-author {
 		font-size: 14px;
 		font-weight: 500;
 		color: #333;
+		margin-right: 4px;
 	}
 
-	.comment-time {
-		font-size: 12px;
-		color: #999;
+	.reply-mention {
+		font-size: 14px;
+		color: #ff2e63;
+		margin-right: 4px;
+		font-weight: 500;
 	}
 
 	.comment-text {
 		font-size: 14px;
-		line-height: 1.6;
+		line-height: 1.5;
 		color: #333;
-		margin-bottom: 8px;
 		word-break: break-word;
+		flex: 1;
+	}
+
+	/* 评论底部：时间和操作 */
+	.comment-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 4px;
+	}
+
+	.comment-time {
+		font-size: 11px;
+		color: #999;
+		margin-right: 12px;
 	}
 
 	.comment-actions {
@@ -2193,6 +2267,7 @@
 		cursor: pointer;
 		font-size: 12px;
 		color: #666;
+		padding: 2px 4px;
 	}
 
 	.comment-action-btn.liked {
@@ -2204,7 +2279,8 @@
 	}
 
 	.action-count {
-		font-size: 12px;
+		font-size: 11px;
+		color: #999;
 	}
 
 	.action-text {
@@ -2213,85 +2289,6 @@
 
 	.delete-btn {
 		color: #ff4d4f;
-	}
-
-	/* 回复容器 */
-	.replies-container {
-		margin-top: 12px;
-		padding-left: 12px;
-		border-left: 2px solid #f0f0f0;
-	}
-
-	.reply-item {
-		display: flex;
-		margin-bottom: 12px;
-	}
-
-	.reply-item:last-child {
-		margin-bottom: 0;
-	}
-
-	.reply-avatar {
-		width: 28px;
-		height: 28px;
-		border-radius: 50%;
-		margin-right: 8px;
-		flex-shrink: 0;
-	}
-
-	.reply-content {
-		flex: 1;
-	}
-
-	.reply-header {
-		display: flex;
-		align-items: center;
-		margin-bottom: 4px;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-
-	.reply-author {
-		font-size: 13px;
-		font-weight: 500;
-		color: #333;
-	}
-
-	.reply-to {
-		font-size: 12px;
-		color: #ff2e63;
-	}
-
-	.reply-time {
-		font-size: 11px;
-		color: #999;
-	}
-
-	.reply-text {
-		font-size: 13px;
-		line-height: 1.5;
-		color: #666;
-		margin-bottom: 6px;
-		word-break: break-word;
-	}
-
-	.reply-actions {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.reply-action-btn {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		cursor: pointer;
-		font-size: 11px;
-		color: #666;
-	}
-
-	.reply-action-btn.liked {
-		color: #ff2e63;
 	}
 
 	.load-more-replies {
@@ -2311,12 +2308,12 @@
 		font-size: 12px;
 	}
 
-	.comment-input-area {
-		display: flex;
+.comment-input-area {
+	display: flex;
 		flex-direction: column;
-		padding: 16px;
-		border-top: 1px solid #f0f0f0;
-		gap: 12px;
+	padding: 16px;
+	border-top: 1px solid #f0f0f0;
+	gap: 12px;
 		/* 小程序中确保输入区域固定在底部 */
 		background-color: #fff;
 		position: relative;
@@ -2337,38 +2334,38 @@
 	.cancel-reply {
 		color: #ff2e63;
 		cursor: pointer;
-	}
+}
 
-	.comment-textarea {
-		flex: 1;
-		min-height: 80px;
+.comment-textarea {
+	flex: 1;
+	min-height: 80px;
 		max-height: 200px;
-		padding: 12px;
-		border: 1px solid #e0e0e0;
-		border-radius: 8px;
-		font-size: 14px;
-		resize: none;
+	padding: 12px;
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	font-size: 14px;
+	resize: none;
 		/* 小程序中确保 textarea 可以正常使用 */
 		box-sizing: border-box;
 		line-height: 1.5;
-	}
+}
 
-	.submit-comment-btn {
-		padding: 8px 16px;
-		background-color: #ff2e63;
-		color: white;
-		border: none;
-		border-radius: 6px;
-		font-size: 14px;
-		cursor: pointer;
+.submit-comment-btn {
+	padding: 8px 16px;
+	background-color: #ff2e63;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	font-size: 14px;
+	cursor: pointer;
 		/* 小程序中确保按钮可以正常点击 */
 		line-height: 1.5;
 		white-space: nowrap;
-	}
+}
 
-	.submit-comment-btn:disabled {
-		background-color: #ccc;
-		cursor: not-allowed;
+.submit-comment-btn:disabled {
+	background-color: #ccc;
+	cursor: not-allowed;
 		opacity: 0.6;
 	}
 
@@ -2380,51 +2377,51 @@
 	.button-hover {
 		opacity: 0.8;
 		transform: scale(0.98);
+}
+
+/* 操作菜单 */
+.action-menu {
+	background: #fff;
+	border-radius: 12px 12px 0 0;
+	padding: 10px 0;
+}
+
+.menu-item {
+	padding: 16px 20px;
+	text-align: center;
+	font-size: 16px;
+	color: #333;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.menu-item:last-child {
+	border-bottom: none;
+}
+
+.menu-item.cancel {
+	color: #666;
+	margin-top: 8px;
+	background: #f8f9fa;
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+	.post-title {
+		font-size: 20px;
 	}
-
-	/* 操作菜单 */
-	.action-menu {
-		background: #fff;
-		border-radius: 12px 12px 0 0;
-		padding: 10px 0;
+	
+	.author-avatar {
+		width: 40px;
+		height: 40px;
 	}
-
-	.menu-item {
-		padding: 16px 20px;
-		text-align: center;
-		font-size: 16px;
-		color: #333;
-		border-bottom: 1px solid #f0f0f0;
+	
+	.action-right {
+		gap: 4px;
 	}
-
-	.menu-item:last-child {
-		border-bottom: none;
+	
+	.action-btn {
+		min-width: 45px;
+		padding: 6px;
 	}
-
-	.menu-item.cancel {
-		color: #666;
-		margin-top: 8px;
-		background: #f8f9fa;
-	}
-
-	/* 响应式设计 */
-	@media (max-width: 480px) {
-		.post-title {
-			font-size: 20px;
-		}
-
-		.author-avatar {
-			width: 40px;
-			height: 40px;
-		}
-
-		.action-right {
-			gap: 4px;
-		}
-
-		.action-btn {
-			min-width: 45px;
-			padding: 6px;
-		}
-	}
+}
 </style>

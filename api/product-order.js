@@ -6,15 +6,21 @@ const prefix = '/api/product-order'
  * 从购物车创建订单（按商家分组）
  * @param {Array<number>} cartIds 购物车ID列表
  * @param {number} addressId 收货地址ID
+ * @param {number} projectId 关联的项目/设计师订单ID（可选）
  */
-export function createOrdersFromCart(cartIds, addressId) {
+export function createOrdersFromCart(cartIds, addressId, projectId) {
+  const data = {
+    cartIds,
+    addressId
+  }
+  // 如果提供了projectId，添加到请求数据中
+  if (projectId) {
+    data.projectId = projectId
+  }
   return request({
     url: `${prefix}/create-from-cart`,
     method: 'post',
-    data: {
-      cartIds,
-      addressId
-    }
+    data
   })
 }
 
@@ -120,17 +126,34 @@ export function payOrder(orderId) {
  * @param {number} skuId 商品SKU ID（可选）
  * @param {number} quantity 购买数量
  * @param {number} addressId 收货地址ID
+ * @param {number} projectId 关联的项目/设计师订单ID（可选）
  */
-export function createOrderDirect(spuId, skuId, quantity, addressId) {
+export function createOrderDirect(spuId, skuId, quantity, addressId, projectId) {
+  const data = {
+    spuId,
+    skuId,
+    quantity,
+    addressId
+  }
+  // 如果提供了projectId，添加到请求数据中
+  if (projectId) {
+    data.projectId = projectId
+  }
   return request({
     url: `${prefix}/create-direct`,
     method: 'post',
-    data: {
-      spuId,
-      skuId,
-      quantity,
-      addressId
-    }
+    data
+  })
+}
+
+/**
+ * 根据设计师订单ID查询关联的材料订单列表
+ * @param {number} designerOrderId 设计师订单ID
+ */
+export function getMaterialOrdersByDesignerOrderId(designerOrderId) {
+  return request({
+    url: `${prefix}/by-designer-order/${designerOrderId}`,
+    method: 'get'
   })
 }
 
@@ -144,6 +167,7 @@ export default {
   cancelOrder,
   confirmReceipt,
   payOrder,
-  createOrderDirect
+  createOrderDirect,
+  getMaterialOrdersByDesignerOrderId
 }
 

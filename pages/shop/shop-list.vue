@@ -217,7 +217,7 @@ export default {
       
       // 计算总库存（与 product-detail.vue 保持一致）
       const totalStock = this.calculateStock(product)
-
+      
       return {
         id: product.productSpuId || product.spuId || product.id,
         productName: product.productName,
@@ -484,7 +484,7 @@ export default {
         console.warn('shop-list 刷新商品数据失败:', e)
       }
     }
-    },
+  },
   onLoad() {
     this.loadData()
     // 监听商品库存更新事件，在用户端商品列表中实时刷新库存/状态

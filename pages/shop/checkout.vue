@@ -66,13 +66,13 @@
         >
           关联设计师订单
         </button>
-        <button
-          class="pay-btn"
-          :disabled="!canPay || loading"
-          @click="handleVirtualPay"
-        >
-          使用微信支付（模拟）
-        </button>
+      <button
+        class="pay-btn"
+        :disabled="!canPay || loading"
+        @click="handleVirtualPay"
+      >
+        使用微信支付（模拟）
+      </button>
       </view>
     </view>
 
@@ -95,12 +95,18 @@
             @click="selectOrder(order)"
           >
             <view class="order-header">
-              <text class="order-id">订单号：{{ order.orderNumber || order.orderId }}</text>
-              <text class="order-status" :style="{ color: getOrderStatusColor(order.status) }">
-                {{ getOrderStatusText(order.status) }}
-              </text>
+              <text class="order-id">订单号：{{ order.orderNumber || order.orderId || order.order_id }}</text>
+              <view class="order-status-group">
+                <text class="order-status" :style="{ color: getOrderStatusColor(order.status) }">
+                  {{ getOrderStatusText(order.status) }}
+                </text>
+                <text class="order-type" v-if="!order.contractorId && !order.contractor_id">
+                  待分配设计师
+                </text>
+              </view>
             </view>
-            <view class="order-items">
+            <!-- 设计师订单可能没有orderItems，显示订单基本信息 -->
+            <view class="order-items" v-if="order.orderItems && order.orderItems.length > 0">
               <view
                 v-for="(item, index) in order.orderItems"
                 :key="index"
@@ -121,8 +127,17 @@
                 </view>
               </view>
             </view>
+            <view class="order-info" v-else>
+              <text class="order-info-text">设计师订单</text>
+              <text class="order-info-detail" v-if="order.projectId || order.project_id">项目ID: {{ order.projectId || order.project_id }}</text>
+            </view>
             <view class="order-footer">
-              <text class="order-total">共 {{ (order.orderItems && order.orderItems.length) || 0 }} 件商品，合计：￥{{ formatPrice(order.totalAmount || order.totalPrice || 0) }}</text>
+              <text class="order-total" v-if="order.orderItems && order.orderItems.length > 0">
+                共 {{ (order.orderItems && order.orderItems.length) || 0 }} 件商品，合计：￥{{ formatPrice(order.totalAmount || order.totalPrice || order.total_amount || 0) }}
+              </text>
+              <text class="order-total" v-else>
+                订单金额：￥{{ formatPrice(order.totalAmount || order.totalPrice || order.total_amount || 0) }}
+              </text>
             </view>
           </view>
         </scroll-view>
@@ -137,6 +152,7 @@
 <script>
 import * as cartApi from '@/api/cart.js'
 import * as orderApi from '@/api/product-order.js'
+import { orderApi as designOrderApi } from '@/api/order.js'
 import * as productApi from '@/api/product.js'
 import { getDefaultAddress, getAddressList } from '@/api/address.js'
 
@@ -157,7 +173,9 @@ export default {
       // 订单列表相关
       showOrderListModal: false,
       orderList: [],
-      orderListLoading: false
+      orderListLoading: false,
+      // 关联的设计师订单ID
+      linkedDesignerOrderId: null
     }
   },
   computed: {
@@ -189,6 +207,11 @@ export default {
     // 如果订单列表弹窗打开，重新加载订单列表
     if (this.showOrderListModal) {
       this.loadOrderList()
+    }
+    // 从本地存储读取关联的设计师订单ID
+    const linkedOrderId = uni.getStorageSync('linkedDesignerOrderId')
+    if (linkedOrderId) {
+      this.linkedDesignerOrderId = linkedOrderId
     }
   },
   methods: {
@@ -417,7 +440,7 @@ export default {
       }
     },
     
-    // 加载设计师订单列表
+    // 加载设计师订单列表（只显示已完成的设计师订单，status=2）
     async loadOrderList() {
       this.orderListLoading = true
       try {
@@ -426,11 +449,22 @@ export default {
         if (!currentUserId) {
           uni.showToast({ title: '请先登录', icon: 'none' })
           this.orderList = []
+          this.orderListLoading = false
           return
         }
         
-        // 获取所有订单
-        const res = await orderApi.getUserOrderList()
+        console.log('📋 加载设计师订单列表，当前用户ID:', currentUserId)
+        
+        // 查询type=1的设计师订单（通过user_id与当前用户ID关联）
+        // type=1是设计师订单，type=2是监理订单
+        const res = await designOrderApi.getList({
+          type: 1,   // type=1是设计师订单
+          userId: currentUserId, // 通过user_id与当前用户ID关联
+          status: 2, // status=2是已完成
+          pageNum: 1,
+          pageSize: 100  // 获取足够多的订单
+        })
+        
         if (res && res.code === 200) {
           // 处理响应数据
           let orders = []
@@ -440,84 +474,117 @@ export default {
             orders = res.data.rows
           } else if (res.data && Array.isArray(res.data.list)) {
             orders = res.data.list
+          } else if (res.data && Array.isArray(res.data.records)) {
+            orders = res.data.records
           }
           
-          // 过滤设计师订单：contractorId等于当前用户ID的订单
-          // 或者根据订单类型/服务类型判断
+          // 再次过滤确保：
+          // 1. type = 1（设计师订单）
+          // 2. user_id = 当前用户ID
+          // 3. status = 2（已完成）
           this.orderList = orders.filter(order => {
-            // 1. 检查订单状态（只显示未完成/未取消的订单）
+            const orderType = order.type || order.orderType
+            const orderUserId = order.userId || order.user_id
             const status = order.status || order.orderStatus
-            const isValidStatus = status !== 'CANCELLED' && status !== 'COMPLETED' && status !== 5 && status !== 6
             
-            // 2. 检查是否是设计师订单
-            // 方式1：contractorId等于当前用户ID（当前用户是设计师）
-            const isDesignerOrder = order.contractorId && Number(order.contractorId) === Number(currentUserId)
+            // 确保是设计师订单（type=1）
+            const isDesignOrder = orderType === 1 || orderType === '1'
+            // 确保是当前用户的订单
+            const isCurrentUserOrder = String(orderUserId) === String(currentUserId)
+            // 确保是已完成的订单（status = 2）
+            const isCompleted = status === 2 || status === '2' || status === 'COMPLETED'
             
-            // 方式2：根据订单类型判断（如果有orderType字段）
-            const isDesignerOrderType = order.orderType === 'DESIGNER' || order.orderType === 2 || order.serviceType === 'DESIGNER'
-            
-            // 方式3：根据角色类型判断（如果订单中有roleType字段）
-            const isDesignerRole = order.roleType === 2 || order.userRole === 2
-            
-            return isValidStatus && (isDesignerOrder || isDesignerOrderType || isDesignerRole)
+            return isDesignOrder && isCurrentUserOrder && isCompleted
           })
           
+          // 按创建时间倒序排列
+          this.orderList.sort((a, b) => {
+            const timeA = new Date(a.createTime || a.create_time || 0).getTime()
+            const timeB = new Date(b.createTime || b.create_time || 0).getTime()
+            return timeB - timeA
+          })
+          
+          console.log('✅ 找到符合条件的设计师订单:', this.orderList.length, '个')
+          
           if (this.orderList.length === 0) {
-            uni.showToast({ title: '暂无设计师订单', icon: 'none' })
+            uni.showToast({ title: '暂无已完成的设计师订单', icon: 'none' })
           }
         } else {
           this.orderList = []
+          if (res && res.msg) {
+            uni.showToast({ title: res.msg || '加载订单失败', icon: 'none' })
+          }
         }
       } catch (error) {
-        console.error('加载设计师订单列表失败:', error)
-        uni.showToast({ title: '加载订单失败', icon: 'none' })
+        console.error('❌ 加载设计师订单列表失败:', error)
+        uni.showToast({ title: error.message || '加载订单失败', icon: 'none' })
         this.orderList = []
       } finally {
         this.orderListLoading = false
       }
     },
     
-    // 选择订单，将订单商品添加到结算列表
+    // 选择订单，将订单关联到当前结算
     selectOrder(order) {
-      if (!order || !order.orderItems || order.orderItems.length === 0) {
-        uni.showToast({ title: '订单无商品', icon: 'none' })
+      if (!order) {
+        uni.showToast({ title: '订单信息无效', icon: 'none' })
         return
       }
       
-      // 将订单项转换为购物车项格式
-      const newItems = order.orderItems.map(item => {
-        return {
-          cartId: `order_${order.orderId}_${item.orderItemId || Date.now()}`,
-          productSpu: {
-            productSpuId: item.productSpuId || item.spuId,
-            productName: item.productName,
-            marketPrice: item.salePrice || item.price,
-            shopName: order.shopName || '店铺',
-            createdBy: order.shopId || order.sellerId
-          },
-          productSku: item.productSkuId ? {
-            productSkuId: item.productSkuId,
-            salePrice: item.salePrice || item.price,
-            skuDetail: item.skuDetail
-          } : null,
-          quantity: item.quantity,
-          unitPrice: item.salePrice || item.price,
-          skuText: item.skuDetail ? this.formatSkuDetail(item.skuDetail) : null,
-          imageUrl: item.imageUrl || item.productImage
+      // 设计师订单可能没有orderItems，需要关联订单ID
+      // 将订单ID保存到本地，用于后续创建材料订单时关联
+      try {
+        // 保存关联的订单ID到本地存储和data中
+        const linkedOrderId = order.orderId || order.order_id
+        this.linkedDesignerOrderId = linkedOrderId
+        uni.setStorageSync('linkedDesignerOrderId', linkedOrderId)
+        
+        // 如果订单有orderItems，添加到结算列表
+        if (order.orderItems && order.orderItems.length > 0) {
+          const newItems = order.orderItems.map(item => {
+            return {
+              cartId: `order_${linkedOrderId}_${item.orderItemId || Date.now()}`,
+              productSpu: {
+                productSpuId: item.productSpuId || item.spuId,
+                productName: item.productName,
+                marketPrice: item.salePrice || item.price,
+                shopName: order.shopName || '店铺',
+                createdBy: order.shopId || order.sellerId
+              },
+              productSku: item.productSkuId ? {
+                productSkuId: item.productSkuId,
+                salePrice: item.salePrice || item.price,
+                skuDetail: item.skuDetail
+              } : null,
+              quantity: item.quantity,
+              unitPrice: item.salePrice || item.price,
+              skuText: item.skuDetail ? this.formatSkuDetail(item.skuDetail) : null,
+              imageUrl: item.imageUrl || item.productImage
+            }
+          })
+          
+          // 合并到现有购物车项
+          this.cartItems = [...this.cartItems, ...newItems]
+          this.shopGroups = this.groupByShop(this.cartItems)
+          
+          uni.showToast({
+            title: `已关联订单并添加 ${newItems.length} 件商品`,
+            icon: 'success'
+          })
+        } else {
+          // 没有商品项，只关联订单
+          uni.showToast({
+            title: `已关联设计师订单 #${linkedOrderId}`,
+            icon: 'success'
+          })
         }
-      })
-      
-      // 合并到现有购物车项
-      this.cartItems = [...this.cartItems, ...newItems]
-      this.shopGroups = this.groupByShop(this.cartItems)
-      
-      // 关闭弹窗
-      this.showOrderListModal = false
-      
-      uni.showToast({
-        title: `已添加 ${newItems.length} 件商品`,
-        icon: 'success'
-      })
+        
+        // 关闭弹窗
+        this.showOrderListModal = false
+      } catch (error) {
+        console.error('关联订单失败:', error)
+        uni.showToast({ title: '关联订单失败', icon: 'none' })
+      }
     },
     
     // 获取订单项图片
@@ -546,40 +613,32 @@ export default {
       }
     },
     
-    // 获取订单状态文本
+    // 获取订单状态文本（根据order表的状态定义：0-待确认,1-进行中,2-已完成,3-已取消）
     getOrderStatusText(status) {
       const statusMap = {
-        'PENDING': '待支付',
-        'PAID': '已支付',
-        'SHIPPED': '已发货',
-        'DELIVERED': '已送达',
+        0: '待确认',
+        1: '进行中',
+        2: '已完成',
+        3: '已取消',
+        'PENDING': '待确认',
+        'PROCESSING': '进行中',
         'COMPLETED': '已完成',
-        'CANCELLED': '已取消',
-        0: '待支付',
-        1: '已支付',
-        2: '已发货',
-        3: '已送达',
-        4: '已完成',
-        5: '已取消'
+        'CANCELLED': '已取消'
       }
       return statusMap[status] || '未知状态'
     },
     
-    // 获取订单状态颜色
+    // 获取订单状态颜色（根据order表的状态定义）
     getOrderStatusColor(status) {
       const colorMap = {
+        0: '#fa541c',      // 待确认 - 橙色
+        1: '#1890ff',      // 进行中 - 蓝色
+        2: '#13c2c2',      // 已完成 - 青色
+        3: '#999',         // 已取消 - 灰色
         'PENDING': '#fa541c',
-        'PAID': '#1890ff',
-        'SHIPPED': '#52c41a',
-        'DELIVERED': '#722ed1',
+        'PROCESSING': '#1890ff',
         'COMPLETED': '#13c2c2',
-        'CANCELLED': '#999',
-        0: '#fa541c',
-        1: '#1890ff',
-        2: '#52c41a',
-        3: '#722ed1',
-        4: '#13c2c2',
-        5: '#999'
+        'CANCELLED': '#999'
       }
       return colorMap[status] || '#666'
     },
@@ -610,11 +669,26 @@ export default {
         
         // 直接购买模式：使用 createOrderDirect
         if (this.directBuy) {
+          // 构建订单数据，包含关联的设计师订单ID（作为projectId传递）
+          const orderData = {
+            spuId: this.directBuySpuId,
+            skuId: this.directBuySkuId,
+            quantity: this.directBuyQuantity,
+            addressId: this.address.addressId
+          }
+          
+          // 如果有关联的设计师订单，添加到订单数据中
+          if (this.linkedDesignerOrderId) {
+            orderData.projectId = this.linkedDesignerOrderId
+            console.log('📦 创建材料订单，关联设计师订单ID:', this.linkedDesignerOrderId)
+          }
+          
           const orderRes = await orderApi.createOrderDirect(
-            this.directBuySpuId,
-            this.directBuySkuId,
-            this.directBuyQuantity,
-            this.address.addressId
+            orderData.spuId,
+            orderData.skuId,
+            orderData.quantity,
+            orderData.addressId,
+            orderData.projectId  // 传递关联的设计师订单ID
           )
           if (!orderRes || orderRes.code !== 200) {
             uni.hideLoading()
@@ -626,7 +700,12 @@ export default {
         } else {
           // 购物车模式：使用 createOrdersFromCart
           const cartIds = this.cartItems.map(i => i.cartId)
-          const orderRes = await orderApi.createOrdersFromCart(cartIds, this.address.addressId)
+          // 如果有关联的设计师订单，传递 projectId
+          const projectId = this.linkedDesignerOrderId || null
+          if (projectId) {
+            console.log('📦 创建材料订单（购物车模式），关联设计师订单ID:', projectId)
+          }
+          const orderRes = await orderApi.createOrdersFromCart(cartIds, this.address.addressId, projectId)
           if (!orderRes || orderRes.code !== 200 || !Array.isArray(orderRes.data)) {
             uni.hideLoading()
             uni.showToast({ title: (orderRes && orderRes.msg) || '创建订单失败', icon: 'none' })
@@ -972,9 +1051,42 @@ export default {
   color: #606266;
 }
 
+.order-status-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
+}
+
 .order-status {
   font-size: 24rpx;
   font-weight: 500;
+}
+
+.order-type {
+  font-size: 20rpx;
+  color: #fa541c;
+  background: #fff2e8;
+  padding: 2rpx 8rpx;
+  border-radius: 4rpx;
+}
+
+.order-info {
+  padding: 24rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.order-info-text {
+  font-size: 28rpx;
+  color: #303133;
+  font-weight: 500;
+}
+
+.order-info-detail {
+  font-size: 24rpx;
+  color: #909399;
 }
 
 .order-items {

@@ -147,23 +147,15 @@
           <!-- 操作按钮 -->
           <view class="action-buttons">
             <button class="view-btn" @click="viewProductDetail(product)">
-              <uni-icons type="eye" size="14" color="#909399"></uni-icons>
               详情
             </button>
             <button class="stock-btn" @click="goToStockManagement(product)" :disabled="actionLoading">
-              <uni-icons type="shop" size="14" color="#409EFF"></uni-icons>
               库存
             </button>
             <button class="status-btn" @click="toggleProductStatus(product)" :disabled="actionLoading">
-              <uni-icons 
-                :type="getProductStatus(product) === '0' ? 'arrowdown' : 'arrowup'" 
-                size="14" 
-                :color="getProductStatus(product) === '0' ? '#E6A23C' : '#67C23A'"
-              ></uni-icons>
               {{ getProductStatus(product) === '0' ? '下架' : '上架' }}
             </button>
             <button class="delete-btn" @click="handleDelete(product)" :disabled="actionLoading">
-              <uni-icons type="trash" size="14" color="#F56C6C"></uni-icons>
               删除
             </button>
           </view>
@@ -1079,10 +1071,20 @@ export default {
             return null
           }
 
-        // 统一获取商品状态，优先使用 productStatus
-        const productStatus = product.productStatus !== undefined 
-          ? String(product.productStatus) 
-          : (product.status !== undefined ? String(product.status) : '0')
+        // 统一获取商品状态，优先使用 productStatus（对应数据库 product_status 字段）
+        // 数据库值：'0' 代表上架，'2' 代表下架
+        let productStatus = '0' // 默认上架
+        if (product.productStatus !== undefined && product.productStatus !== null) {
+          productStatus = String(product.productStatus)
+        } else if (product.status !== undefined && product.status !== null) {
+          productStatus = String(product.status)
+        }
+        
+        // 确保状态值有效（只允许 '0' 或 '2'）
+        if (productStatus !== '0' && productStatus !== '2') {
+          console.warn('商品状态值异常:', productStatus, '商品:', product.productName, '使用默认值: 0')
+          productStatus = '0'
+        }
         
         const extractedShopId = this.extractProductShopId(product);
         const normalizedShopId = extractedShopId != null ? Number(extractedShopId) : null;
@@ -1096,7 +1098,7 @@ export default {
           marketPrice: product.marketPrice,
           costPrice: product.costPrice,
           status: productStatus, // 统一使用 status 字段
-          productStatus: productStatus, // 同时保留 productStatus 字段以保持一致性
+          productStatus: productStatus, // 同时保留 productStatus 字段以保持一致性（对应数据库 product_status 字段）
           specType: product.specType,
           imageUrl: product.imageUrl,
           coverImage: product.coverImage,
@@ -1207,12 +1209,12 @@ export default {
           });
           
           // 立即从数据库重新加载商品列表，确保获取最新数据
-          this.pageParams.pageNum = 1;
-          if (this.selectedCategoryId) {
+            this.pageParams.pageNum = 1;
+            if (this.selectedCategoryId) {
             await this.loadProductsByCategory();
-          } else {
+            } else {
             await this.loadProducts();
-          }
+            }
         } else {
           uni.showToast({
             title: res.message || '删除失败',
@@ -1235,12 +1237,23 @@ export default {
     
     // 统一获取商品状态
     getProductStatus(product) {
-      if (product.productStatus !== undefined) {
-        return String(product.productStatus);
+      // 优先使用 productStatus 字段（对应数据库 product_status 字段）
+      // 数据库值：'0' 代表上架，'2' 代表下架
+      if (product.productStatus !== undefined && product.productStatus !== null) {
+        const status = String(product.productStatus);
+        // 验证状态值是否有效
+        if (status === '0' || status === '2') {
+          return status;
+        }
+        console.warn('商品状态值异常:', status, '商品:', product.productName);
       }
-      if (product.status !== undefined) {
-        return String(product.status);
+      if (product.status !== undefined && product.status !== null) {
+        const status = String(product.status);
+        if (status === '0' || status === '2') {
+          return status;
+        }
       }
+      // 默认返回上架状态
       return '0';
     },
     
@@ -1299,10 +1312,10 @@ export default {
           });
           
           // 立即从数据库重新加载商品列表，确保获取最新数据（包括状态、库存、销售量、点击量等）
-          this.pageParams.pageNum = 1;
-          if (this.selectedCategoryId) {
+              this.pageParams.pageNum = 1;
+              if (this.selectedCategoryId) {
             await this.loadProductsByCategory();
-          } else {
+              } else {
             await this.loadProducts();
           }
         } else {

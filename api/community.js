@@ -160,13 +160,23 @@ export function getUserLikedPosts(params) {
  * @param {number} params.pageSize - 每页大小
  */
 export function getPostComments(postId, params = {}) {
+  // 构建请求参数，包含分页参数和可能的其他参数（如时间戳）
+  const requestParams = {
+    pageNum: params.pageNum || 1,
+    pageSize: params.pageSize || 20
+  }
+  
+  // 如果传入了其他参数（如 _t 时间戳），也一并传递
+  Object.keys(params).forEach(key => {
+    if (key !== 'pageNum' && key !== 'pageSize') {
+      requestParams[key] = params[key]
+    }
+  })
+  
   return request({
     url: `/api/community/posts/${postId}/comments`,
     method: 'get',
-    params: {
-      pageNum: params.pageNum || 1,
-      pageSize: params.pageSize || 20
-    }
+    params: requestParams
   })
 }
 

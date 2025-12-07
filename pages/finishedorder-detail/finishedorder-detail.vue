@@ -252,6 +252,71 @@
 				</view>
 			</view>
 
+			<!-- 关联的材料订单信息（仅设计订单显示，显示在设计方案下方） -->
+			<view v-if="!isSupervisionOrder">
+				<view class="info-card" v-if="materialOrders.length > 0">
+					<view class="card-title">
+						<view class="scheme-title-wrapper">
+							<text class="scheme-icon">📦</text>
+							<text class="scheme-title">购买的材料</text>
+						</view>
+					</view>
+					<view class="material-orders-list">
+						<view
+							v-for="materialOrder in materialOrders"
+							:key="materialOrder.orderId"
+							class="material-order-item"
+							@click="viewMaterialOrderDetail(materialOrder.orderId)"
+						>
+							<view class="material-order-header">
+								<text class="material-order-id">材料订单号：{{ materialOrder.orderNo || materialOrder.orderNumber || materialOrder.orderId }}</text>
+								<text class="material-order-status" :style="{ color: getMaterialOrderStatusColor(materialOrder.orderStatus || materialOrder.status) }">
+									{{ getMaterialOrderStatusText(materialOrder.orderStatus || materialOrder.status) }}
+								</text>
+							</view>
+							<view class="material-order-items">
+								<view
+									v-for="(item, index) in materialOrder.orderItems"
+									:key="index"
+									class="material-item-row"
+								>
+									<image
+										class="material-item-image"
+										:src="getMaterialItemImage(item)"
+										mode="aspectFill"
+									/>
+									<view class="material-item-info">
+										<text class="material-item-name">{{ item.productName || '商品' }}</text>
+										<text class="material-item-sku" v-if="item.skuDetail">{{ formatSkuDetail(item.skuDetail) }}</text>
+										<view class="material-item-bottom">
+											<text class="material-item-price">￥{{ formatPrice(item.salePrice || item.price || 0) }}</text>
+											<text class="material-item-qty">x{{ item.quantity }}</text>
+										</view>
+									</view>
+								</view>
+							</view>
+							<view class="material-order-footer">
+								<text class="material-order-total">共 {{ (materialOrder.orderItems && materialOrder.orderItems.length) || 0 }} 件商品，合计：￥{{ formatPrice(materialOrder.totalAmount || materialOrder.totalPrice || 0) }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+				
+				<!-- 暂无材料订单提示 -->
+				<view class="info-card" v-if="materialOrders.length === 0 && !loading">
+					<view class="card-title">
+						<view class="scheme-title-wrapper">
+							<text class="scheme-icon">📦</text>
+							<text class="scheme-title">购买的材料</text>
+						</view>
+					</view>
+					<view class="no-scheme-tip">
+						<text class="no-scheme-icon">📦</text>
+						<text class="no-scheme-text">暂无关联的材料订单</text>
+					</view>
+				</view>
+			</view>
+
 			<!-- 操作按钮区域 -->
 			<view class="action-section" v-if="showActionButtons">
 				<!-- 设计订单：评价按钮 -->
@@ -291,6 +356,7 @@ import { orderService, OrderStatus, OrderType } from '@/api/order.js'
 import { getDesignSchemeList } from '@/api/designScheme.js'
 import { getCurrentRole, getUserById } from '@/api/users.js'
 import { orderReviewApi } from '@/api/orderReview.js'
+import * as productOrderApi from '@/api/product-order.js'
 // 导入在线咨询相关工具函数
 import { isUserLoggedIn, handleNotLoggedIn, createConversationAndNavigate } from "@/utils/conversationHelper.js"
 
@@ -333,7 +399,10 @@ export default {
 			
 			// 评价状态
 			hasReviewed: false,
-			orderReview: null // 评价详情
+			orderReview: null, // 评价详情
+			
+			// 关联的材料订单列表
+			materialOrders: []
 		}
 	},
 	
@@ -560,7 +629,13 @@ export default {
 					await this.loadDesignSchemes();
 				}
 				
-				// 3. 检查评价状态
+			// 3. 加载关联的材料订单（对于设计订单，查询关联的材料订单）
+			// 通过 purchase_order_id 关联表查询材料订单
+			if (!this.isSupervisionOrder) { // 设计订单（type=1）才显示关联材料
+				await this.loadMaterialOrders();
+			}
+				
+				// 4. 检查评价状态
 				await this.checkReviewStatus();
 				
 				console.log('✅ 订单详情加载完成:', this.orderInfo);
@@ -1163,6 +1238,160 @@ export default {
 				return dateStr.split('T')[0];
 			}
 			return dateStr.split(' ')[0];
+		},
+		
+		// 加载关联的材料订单
+		async loadMaterialOrders() {
+			try {
+				// 使用当前设计师订单的orderId查询关联的材料订单
+				const designerOrderId = this.orderInfo.orderId || this.orderId;
+				console.log('📦 加载关联的材料订单，设计师订单ID:', designerOrderId);
+				
+				if (!designerOrderId) {
+					console.warn('⚠️ 设计师订单ID为空，无法查询材料订单');
+					this.materialOrders = [];
+					return;
+				}
+				
+				// 使用新的API查询关联的材料订单（通过关联表 purchase_order_id）
+				const res = await productOrderApi.getMaterialOrdersByDesignerOrderId(designerOrderId);
+				if (res && res.code === 200) {
+					let orders = [];
+					if (Array.isArray(res.data)) {
+						orders = res.data;
+					} else if (res.data && Array.isArray(res.data.rows)) {
+						orders = res.data.rows;
+					} else if (res.data && Array.isArray(res.data.list)) {
+						orders = res.data.list;
+					} else if (res.data && Array.isArray(res.data.records)) {
+						orders = res.data.records;
+					}
+					
+					this.materialOrders = orders;
+					console.log('✅ 找到关联的材料订单:', this.materialOrders.length, '个', this.materialOrders);
+				} else {
+					console.warn('⚠️ 获取材料订单列表失败:', res);
+					this.materialOrders = [];
+				}
+			} catch (error) {
+				console.error('❌ 加载材料订单失败:', error);
+				this.materialOrders = [];
+			}
+		},
+		
+		// 获取材料订单项图片
+		getMaterialItemImage(item) {
+			// 优先使用订单项直接包含的图片
+			if (item.imageUrl) return item.imageUrl;
+			if (item.productImage) return item.productImage;
+			if (item.coverImage) return item.coverImage;
+			
+			// 使用商品SPU的图片
+			if (item.productSpu) {
+				// 优先使用主图
+				if (item.productSpu.mainImageUrl) return item.productSpu.mainImageUrl;
+				// 使用封面图
+				if (item.productSpu.coverImage) return item.productSpu.coverImage;
+				// 使用图片列表的第一张
+				if (item.productSpu.imageUrls && item.productSpu.imageUrls.length > 0) {
+					return item.productSpu.imageUrls[0];
+				}
+			}
+			
+			// 使用商品SKU的图片
+			if (item.productSku && item.productSku.imageUrl) return item.productSku.imageUrl;
+			
+			// 默认图片
+			return '/static/images/default-product.jpg';
+		},
+		
+		// 格式化SKU详情
+		formatSkuDetail(skuDetail) {
+			if (!skuDetail) return null;
+			try {
+				const parsed = typeof skuDetail === 'string' ? JSON.parse(skuDetail) : skuDetail;
+				if (parsed?.combination?.length) {
+					return parsed.combination
+						.map(item => `${item.name || item.attrName || ''}${item.value ? ':' : ''}${item.value || item.attrValue || ''}`.trim())
+						.filter(Boolean)
+						.join(' / ');
+				}
+				if (parsed?.description) return parsed.description;
+				return skuDetail;
+			} catch (error) {
+				return skuDetail;
+			}
+		},
+		
+		// 格式化价格
+		formatPrice(value) {
+			const num = Number(value);
+			if (Number.isNaN(num)) return '0.00';
+			return num.toFixed(2);
+		},
+		
+		// 获取材料订单状态文本
+		getMaterialOrderStatusText(status) {
+			const statusMap = {
+				'PENDING': '待支付',
+				'PAID': '已支付',
+				'SHIPPED': '已发货',
+				'DELIVERED': '已送达',
+				'COMPLETED': '已完成',
+				'CANCELLED': '已取消',
+				0: '待支付',
+				1: '已支付',
+				2: '已发货',
+				3: '已送达',
+				4: '已完成',
+				5: '已取消'
+			};
+			return statusMap[status] || '未知状态';
+		},
+		
+		// 获取材料订单状态颜色
+		getMaterialOrderStatusColor(status) {
+			const colorMap = {
+				'PENDING': '#fa541c',
+				'PAID': '#1890ff',
+				'SHIPPED': '#52c41a',
+				'DELIVERED': '#722ed1',
+				'COMPLETED': '#13c2c2',
+				'CANCELLED': '#999',
+				0: '#fa541c',
+				1: '#1890ff',
+				2: '#52c41a',
+				3: '#722ed1',
+				4: '#13c2c2',
+				5: '#999'
+			};
+			return colorMap[status] || '#666';
+		},
+		
+		// 查看材料订单详情（只有用户身份可以跳转）
+		viewMaterialOrderDetail(orderId) {
+			if (!orderId) {
+				uni.showToast({
+					title: '订单ID不能为空',
+					icon: 'none'
+				});
+				return;
+			}
+			
+			// 只有用户身份可以跳转到材料订单详情页
+			if (this.userRole !== 'user') {
+				uni.showToast({
+					title: '只有用户身份可以查看材料订单详情',
+					icon: 'none',
+					duration: 2000
+				});
+				return;
+			}
+			
+			// 跳转到订单详情页
+			uni.navigateTo({
+				url: `/pages/shop/order-detail?orderId=${orderId}`
+			});
 		},
 		
 		// 统一的错误处理
@@ -1852,5 +2081,107 @@ export default {
 	.refresh-text {
 		font-size: 28rpx;
 		color: #999;
+	}
+	
+	/* 材料订单样式 */
+	.material-orders-list {
+		display: flex;
+		flex-direction: column;
+		gap: 24rpx;
+	}
+	
+	.material-order-item {
+		background: #f8f9fa;
+		border-radius: 16rpx;
+		padding: 24rpx;
+		border: 1px solid #e5e5e5;
+	}
+	
+	.material-order-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 16rpx;
+		padding-bottom: 16rpx;
+		border-bottom: 1px solid #e5e5e5;
+	}
+	
+	.material-order-id {
+		font-size: 26rpx;
+		color: #606266;
+	}
+	
+	.material-order-status {
+		font-size: 24rpx;
+		font-weight: 500;
+	}
+	
+	.material-order-items {
+		margin-bottom: 16rpx;
+	}
+	
+	.material-item-row {
+		display: flex;
+		margin-bottom: 16rpx;
+	}
+	
+	.material-item-row:last-child {
+		margin-bottom: 0;
+	}
+	
+	.material-item-image {
+		width: 120rpx;
+		height: 120rpx;
+		border-radius: 12rpx;
+		background: #f2f3f5;
+		margin-right: 16rpx;
+	}
+	
+	.material-item-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	
+	.material-item-name {
+		font-size: 28rpx;
+		color: #303133;
+		margin-bottom: 8rpx;
+	}
+	
+	.material-item-sku {
+		font-size: 24rpx;
+		color: #909399;
+		margin-bottom: 8rpx;
+	}
+	
+	.material-item-bottom {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-top: auto;
+	}
+	
+	.material-item-price {
+		font-size: 28rpx;
+		color: #fa541c;
+		font-weight: 600;
+	}
+	
+	.material-item-qty {
+		font-size: 24rpx;
+		color: #606266;
+	}
+	
+	.material-order-footer {
+		padding-top: 16rpx;
+		border-top: 1px solid #e5e5e5;
+	}
+	
+	.material-order-total {
+		font-size: 28rpx;
+		color: #303133;
+		font-weight: 500;
+		text-align: right;
 	}
 </style>

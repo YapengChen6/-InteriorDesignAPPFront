@@ -253,20 +253,27 @@
 
           <!-- 商品上下架状态 -->
           <view class="form-group">
-            <text class="form-label">商品状态</text>
-            <picker
-              :value="productStatusIndex"
-              :range="productStatusOptions"
-              range-key="name"
-              @change="onProductStatusChange"
-              class="picker"
-            >
-              <view class="picker-text">
-                {{ productStatusOptions[productStatusIndex].name }}
+            <text class="form-label">商品状态 <text class="required-mark">*</text></text>
+            <view class="status-selector-container">
+              <picker
+                :value="productStatusIndex"
+                :range="productStatusOptions"
+                range-key="name"
+                @change="onProductStatusChange"
+                class="status-picker"
+              >
+                <view class="picker-text status-picker-text" :class="getStatusClass(productData.productStatus)">
+                  <text class="status-icon">{{ getStatusIcon(productData.productStatus) }}</text>
+                  <text class="status-name">{{ productStatusOptions[productStatusIndex].name }}</text>
+                  <text class="picker-arrow">▼</text>
+                </view>
+              </picker>
+              <view class="status-tip">
+                <text class="tip-text">
+                  <text class="tip-icon">ℹ️</text>
+                  选择"上架"时，商品将立即在用户端显示并可购买；选择"下架"时，用户端将暂时无法购买该商品。
+                </text>
               </view>
-            </picker>
-            <view class="status-tip">
-              <text class="tip-text">选择“下架”时，用户端将暂时无法购买该商品。</text>
             </view>
           </view>
           
@@ -612,7 +619,32 @@ export default {
       const index = parseInt(e.detail.value)
       this.productStatusIndex = index
       const option = this.productStatusOptions[index]
-      this.productData.productStatus = option ? option.id : '0'
+      const newStatus = option ? option.id : '0'
+      this.productData.productStatus = newStatus
+      
+      console.log('商品状态已更改:', {
+        状态名称: option ? option.name : '未知',
+        状态值: newStatus,
+        数据库字段: 'product_status',
+        说明: newStatus === '0' ? '上架' : '下架'
+      })
+      
+      // 显示状态变更提示
+      uni.showToast({
+        title: `已设置为${option ? option.name : '上架'}`,
+        icon: 'success',
+        duration: 1500
+      })
+    },
+    
+    // 获取状态样式类
+    getStatusClass(status) {
+      return status === '0' ? 'status-on' : 'status-off'
+    },
+    
+    // 获取状态图标
+    getStatusIcon(status) {
+      return status === '0' ? '✅' : '⏸️'
     },
     
     // 一级分类选择
@@ -1521,11 +1553,19 @@ export default {
         })
 
         // 1. 构建SPU数据
+        // 确保 productStatus 值正确（'0' 上架，'2' 下架）
+        let productStatus = this.productData.productStatus || '0'
+        if (productStatus !== '0' && productStatus !== '2') {
+          console.warn('商品状态值异常:', productStatus, '使用默认值: 0 (上架)')
+          productStatus = '0'
+        }
+        
         const spuData = {
           productName: this.productData.productName.trim(),
           productDetail: this.productData.productDetail.trim(),
           categoryId: Number(this.selectedCategory3Id),
-          productStatus: this.productData.productStatus || '0',
+          // 商品状态：'0' 代表上架，'2' 代表下架（对应数据库 product_status 字段）
+          productStatus: productStatus,
           specType: this.specifications.length > 0 ? '2' : '0',
           marketPrice: Number(this.referencePrice) || 0,
           costPrice: Number(this.referencePrice) * 0.8 || 0,
@@ -1535,6 +1575,13 @@ export default {
         }
 
         console.log('提交SPU数据:', spuData)
+        console.log('商品状态信息:', {
+          状态值: spuData.productStatus,
+          状态名称: spuData.productStatus === '0' ? '上架' : '下架',
+          数据库字段: 'product_status',
+          说明: '此值将保存到 product_spu 表的 product_status 字段',
+          验证: spuData.productStatus === '0' || spuData.productStatus === '2' ? '✅ 有效' : '❌ 无效'
+        })
         
         // 2. 如果有规格，构建SKU列表
         if (this.specifications.length > 0) {
@@ -1958,6 +2005,81 @@ export default {
   font-size: 22rpx;
   color: #666;
   margin-bottom: 5rpx;
+}
+
+/* 商品状态选择器样式 */
+.status-selector-container {
+  margin-top: 10rpx;
+}
+
+.status-picker {
+  background: white;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  margin-bottom: 15rpx;
+}
+
+.status-picker-text {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.status-picker-text.status-on {
+  color: #10b981;
+  border-color: #10b981;
+}
+
+.status-picker-text.status-off {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.status-icon {
+  font-size: 32rpx;
+  margin-right: 10rpx;
+}
+
+.status-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.picker-arrow {
+  font-size: 24rpx;
+  color: #999;
+  margin-left: 10rpx;
+}
+
+.status-tip {
+  background: #f0f9ff;
+  border: 1rpx solid #bae6fd;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-top: 15rpx;
+}
+
+.status-tip .tip-text {
+  display: flex;
+  align-items: flex-start;
+  font-size: 24rpx;
+  color: #0369a1;
+  line-height: 1.6;
+}
+
+.tip-icon {
+  margin-right: 8rpx;
+  font-size: 24rpx;
+}
+
+.required-mark {
+  color: #ff4757;
+  margin-left: 4rpx;
+  font-size: 28rpx;
 }
 
 .image-preview {
