@@ -22,7 +22,7 @@
         <view class="info-content">
           <text class="info-item">• 展示项目所有施工阶段状态</text>
           <text class="info-item">• 阶段状态会根据施工进度更新</text>
-          <text class="info-item">• 当前可操作的阶段会显示操作按钮</text>
+          <text class="info-item">• 只有"待验收"状态的阶段可以验收</text>
           <text class="info-item">• 点击阶段可查看详细信息</text>
           <text class="info-item">• 点击查看日志可查看历史施工记录</text>
         </view>
@@ -45,24 +45,23 @@
                   <view class="stage-number">{{ stage.sequence }}</view>
                   <view class="stage-info">
                     <text class="stage-name">{{ stage.name }}</text>
-                    <!-- 修改：使用数据中的预计算属性 -->
+                    <!-- 使用数据中的预计算属性 -->
                     <view class="stage-status" :class="stage.statusClass">
                       {{ stage.statusText }}
                     </view>
                   </view>
                 </view>
                 
-                <!-- 操作按钮区域 - 所有阶段都显示验收按钮 -->
+                <!-- 操作按钮区域 - 只在待验收状态显示验收按钮 -->
                 <view class="stage-actions-right">
-                  <!-- 所有可验收的阶段（状态0-3）都显示验收按钮 -->
+                  <!-- 只在状态3（待验收）显示验收按钮 -->
                   <button 
-                    v-if="stage.status >= 0 && stage.status <= 3" 
+                    v-if="stage.status === 3" 
                     class="btn-inspect"
-                    :class="stage.inspectBtnClass"
                     @tap.stop="completeStage(stage)"
                   >
-                    <text class="iconfont" :class="stage.inspectIconClass">{{ stage.inspectIconText }}</text>
-                    <text class="btn-text">{{ stage.inspectBtnText }}</text>
+                    <text class="iconfont icon-check">✓</text>
+                    <text class="btn-text">确认验收</text>
                   </button>
                   
                   <!-- 已完成的阶段 -->
@@ -75,6 +74,12 @@
                   <view v-else-if="stage.status === 5" class="cancelled-badge">
                     <text class="iconfont icon-cancelled">✗</text>
                     <text class="badge-text">已取消</text>
+                  </view>
+                  
+                  <!-- 待确认、已确认、进行中的阶段 -->
+                  <view v-else-if="stage.status >= 0 && stage.status <= 2" class="status-badge">
+                    <text class="iconfont icon-waiting">⏳</text>
+                    <text class="badge-text">{{ stage.statusText }}</text>
                   </view>
                 </view>
               </view>
@@ -163,7 +168,7 @@
       </view>
     </view>
 
-    <!-- 日志详情模态框 - 修复滚动问题 -->
+    <!-- 日志详情模态框 -->
     <view v-if="showLogModal" class="log-modal" @tap="closeLogModal">
       <view class="modal-content" @tap.stop>
         <view class="modal-header">
@@ -174,7 +179,6 @@
           <text class="iconfont icon-close" @tap="closeLogModal">×</text>
         </view>
         
-        <!-- 修改scroll-view，确保可以滚动 -->
         <scroll-view 
           scroll-y 
           class="modal-body"
@@ -251,7 +255,7 @@ export default {
         4: '已完成',
         5: '已取消'
       },
-      modalScrollHeight: '400px', // 动态计算滚动区域高度
+      modalScrollHeight: '400px',
       systemInfo: null
     }
   },
@@ -274,7 +278,6 @@ export default {
     }
     this.loadStages()
     
-    // 获取系统信息，用于计算弹窗高度
     this.getSystemInfo()
   },
 
@@ -283,22 +286,20 @@ export default {
       try {
         const res = await uni.getSystemInfoSync()
         this.systemInfo = res
-        // 计算弹窗滚动区域高度（屏幕高度的70% - 头部和底部高度）
         const windowHeight = res.windowHeight
-        const headerHeight = 100 // 头部大约100px
-        const footerHeight = 80  // 底部大约80px
-        const padding = 60       // 上下padding
+        const headerHeight = 100
+        const footerHeight = 80
+        const padding = 60
         
         this.modalScrollHeight = `${windowHeight * 0.7 - headerHeight - footerHeight - padding}px`
       } catch (error) {
         console.error('获取系统信息失败:', error)
-        this.modalScrollHeight = '400px' // 默认高度
+        this.modalScrollHeight = '400px'
       }
     },
     
     onScroll(e) {
-      // 如果需要可以在这里处理滚动事件
-      // console.log('滚动位置:', e.detail.scrollTop)
+      // 滚动事件处理
     },
 
     async loadStages() {
@@ -329,13 +330,9 @@ export default {
               description: item.description || '',
               expanded: false,
               recentLogs: [],
-              // 预计算所有显示相关的属性
+              // 预计算显示相关的属性
               statusClass: this.getStatusClass(status),
               statusText: this.getStatusText(status),
-              inspectBtnClass: this.getInspectBtnClass(status),
-              inspectBtnText: this.getInspectBtnText(status),
-              inspectIconClass: this.getInspectIcon(status),
-              inspectIconText: this.getInspectIconText(status),
               creatorInfo: creatorMap[item.createBy] || null
             }
 
@@ -388,20 +385,17 @@ export default {
       }
     },
 
-    // 获取用户信息映射表 - 使用统一的用户信息接口
     async getUserInfoMap(userIds) {
       if (!userIds || userIds.length === 0) return {}
       
       const userMap = {}
       
-      // 批量获取用户信息，统一使用 getUserById 方法
       const userPromises = userIds.map(async (userId) => {
         try {
           const { getUserById } = require('@/api/users.js')
           const userResponse = await getUserById({ userId })
           
           if (userResponse && userResponse.code === 200 && userResponse.data) {
-            // 根据示例数据格式处理响应
             const userData = userResponse.data
             userMap[userId] = {
               userId: userData.userId,
@@ -434,28 +428,10 @@ export default {
       }
     },
 
-    async completeStage(stage) {
-      let confirmTitle = '确认验收'
-      let confirmContent = `确定要完成"${stage.name}"阶段的验收吗？`
-      
-      // 根据阶段状态显示不同的提示信息
-      if (stage.status === 0) {
-        confirmTitle = '确认验收'
-        confirmContent = `"${stage.name}"阶段尚未确认，确定要直接验收吗？`
-      } else if (stage.status === 1) {
-        confirmTitle = '确认验收'
-        confirmContent = `"${stage.name}"阶段尚未开始施工，确定要直接验收吗？`
-      } else if (stage.status === 2) {
-        confirmTitle = '提前验收'
-        confirmContent = `"${stage.name}"阶段仍在进行中，确定要提前验收吗？`
-      } else if (stage.status === 3) {
-        confirmTitle = '确认验收'
-        confirmContent = `确定要完成"${stage.name}"阶段的验收吗？`
-      }
-      
+    completeStage(stage) {
       uni.showModal({
-        title: confirmTitle,
-        content: confirmContent,
+        title: '确认验收',
+        content: `确定要完成"${stage.name}"阶段的验收吗？`,
         success: async (res) => {
           if (res.confirm) {
             this.loading = true
@@ -494,7 +470,6 @@ export default {
         })
         
         if (response && response.data && response.data.length > 0) {
-          // 获取任务创建者信息
           const creatorIds = response.data
             .filter(task => task.createBy)
             .map(task => task.createBy)
@@ -556,50 +531,6 @@ export default {
         5: 'status-cancelled'
       }
       return classMap[status] || 'status-unknown'
-    },
-
-    // 获取验收按钮文本
-    getInspectBtnText(status) {
-      const textMap = {
-        0: '直接验收',
-        1: '开始并验收',
-        2: '提前验收',
-        3: '确认验收'
-      }
-      return textMap[status] || '验收'
-    },
-    
-    // 获取验收按钮样式类
-    getInspectBtnClass(status) {
-      const classMap = {
-        0: 'btn-inspect-pending',
-        1: 'btn-inspect-confirmed',
-        2: 'btn-inspect-progress',
-        3: 'btn-inspect-waiting'
-      }
-      return classMap[status] || 'btn-inspect-default'
-    },
-    
-    // 获取验收按钮图标
-    getInspectIcon(status) {
-      const iconMap = {
-        0: 'icon-fast-check',
-        1: 'icon-play-check',
-        2: 'icon-early-check',
-        3: 'icon-check'
-      }
-      return iconMap[status] || 'icon-check'
-    },
-    
-    // 获取验收按钮图标文本
-    getInspectIconText(status) {
-      const iconTextMap = {
-        0: '⚡',
-        1: '▶',
-        2: '⏱️',
-        3: '✓'
-      }
-      return iconTextMap[status] || '✓'
     },
 
     formatDate(dateString) {
@@ -743,8 +674,8 @@ export default {
     align-items: center;
     gap: 10rpx;
     
-    /* 验收按钮基础样式 */
-    button {
+    /* 验收按钮 - 只在待验收状态显示 */
+    .btn-inspect {
       min-width: 160rpx;
       height: 60rpx;
       border: none;
@@ -757,6 +688,7 @@ export default {
       font-weight: 600;
       padding: 0 24rpx;
       color: white;
+      background: linear-gradient(135deg, #ff9800, #f57c00);
       
       .iconfont {
         font-size: 24rpx;
@@ -766,31 +698,6 @@ export default {
         opacity: 0.8;
         transform: scale(0.98);
       }
-    }
-    
-    /* 待确认阶段的验收按钮 */
-    .btn-inspect-pending {
-      background: linear-gradient(135deg, #9e9e9e, #757575);
-    }
-    
-    /* 已确认阶段的验收按钮 */
-    .btn-inspect-confirmed {
-      background: linear-gradient(135deg, #4caf50, #2e7d32);
-    }
-    
-    /* 进行中阶段的验收按钮 */
-    .btn-inspect-progress {
-      background: linear-gradient(135deg, #2196f3, #0d47a1);
-    }
-    
-    /* 待验收阶段的验收按钮 */
-    .btn-inspect-waiting {
-      background: linear-gradient(135deg, #ff9800, #f57c00);
-    }
-    
-    /* 默认验收按钮样式 */
-    .btn-inspect-default {
-      background: linear-gradient(135deg, #2c6aa0, #1a4a7a);
     }
     
     /* 已完成的阶段 */
@@ -836,6 +743,30 @@ export default {
       
       .badge-text {
         color: #9e9e9e;
+        font-size: 24rpx;
+        font-weight: 500;
+      }
+    }
+    
+    /* 待确认、已确认、进行中的阶段状态徽章 */
+    .status-badge {
+      min-width: 120rpx;
+      height: 60rpx;
+      border-radius: 30rpx;
+      background: #f0f7ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8rpx;
+      padding: 0 20rpx;
+      
+      .iconfont {
+        color: #2c6aa0;
+        font-size: 24rpx;
+      }
+      
+      .badge-text {
+        color: #2c6aa0;
         font-size: 24rpx;
         font-weight: 500;
       }
@@ -1023,7 +954,7 @@ export default {
   }
 }
 
-/* 修复弹窗滚动问题 */
+/* 日志弹窗 */
 .log-modal {
   position: fixed;
   top: 0;
@@ -1041,10 +972,9 @@ export default {
     background: white;
     border-radius: 20rpx;
     width: 100%;
-    max-height: 80vh; /* 限制最大高度为视口的80% */
+    max-height: 80vh;
     display: flex;
     flex-direction: column;
-    /* 关键：不要设置 overflow: hidden */
   }
   
   .modal-header {
@@ -1054,7 +984,7 @@ export default {
     padding: 30rpx;
     background: #2c6aa0;
     color: white;
-    flex-shrink: 0; /* 防止头部被压缩 */
+    flex-shrink: 0;
     
     .modal-title {
       font-size: 30rpx;
@@ -1080,9 +1010,7 @@ export default {
   }
   
   .modal-body {
-    flex: 1; /* 占据剩余空间 */
-    /* 关键：scroll-view 自己会处理滚动 */
-    /* 不要在这里设置 overflow，让 scroll-view 处理 */
+    flex: 1;
   }
   
   .logs-list {
@@ -1217,7 +1145,7 @@ export default {
     gap: 20rpx;
     padding: 30rpx;
     border-top: 1rpx solid #e1e4e8;
-    flex-shrink: 0; /* 防止底部被压缩 */
+    flex-shrink: 0;
     
     button {
       flex: 1;
@@ -1256,12 +1184,10 @@ export default {
   }
 }
 
-/* 确保 scroll-view 正常工作 */
 .scroll-view {
   box-sizing: border-box;
 }
 
-/* 响应式调整 */
 @media screen and (max-width: 750rpx) {
   .log-modal {
     padding: 20rpx;

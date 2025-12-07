@@ -50,25 +50,25 @@
 				<view class="card-header">
 					<view class="card-icon">📎</view>
 					<text class="card-title">方案文件</text>
-					<view class="card-subtitle">{{ fileList.length }}/1 个</view>
+					<view class="card-subtitle">{{ fileList.length }}/{{ maxUploadCount }} 个</view>
 				</view>
 				<view class="card-body">
 					<view class="upload-tips">
 						<view class="tips-content">
 							<text class="tips-icon">💡</text>
-							<text class="tips-text">支持图片(JPG/PNG)、文档(PDF)格式，文件不超过10MB，只能上传1个文件</text>
+							<text class="tips-text">支持PDF格式，每个文件不超过20MB，最多可上传{{ maxUploadCount }}个文件</text>
 						</view>
 					</view>
 					
 					<!-- 文件上传区域 -->
-					<view class="file-upload-area" @click="chooseFile" v-if="fileList.length === 0">
+					<view class="file-upload-area" @click="chooseFile" v-if="fileList.length < maxUploadCount">
 						<view class="upload-content">
 							<view class="upload-icon">
 								<image class="upload-icon-img" src="/static/images/upload-icon.png" mode="aspectFit"></image>
 							</view>
-							<view class="upload-text">点击上传方案文件</view>
+							<view class="upload-text">点击添加PDF文件</view>
 							<view class="upload-desc">单个文件不超过20MB</view>
-							<view class="upload-count">支持图片、文档格式</view>
+							<view class="upload-count">还可上传 {{ maxUploadCount - fileList.length }} 个文件</view>
 						</view>
 					</view>
 
@@ -77,14 +77,14 @@
 						<view class="file-list">
 							<view class="file-item" v-for="(file, index) in fileList" :key="index">
 								<view class="file-wrapper">
-									<view class="file-icon" :class="'file-type-' + file.fileType">
-										<text class="file-type-icon">{{ getFileTypeIcon(file.fileType) }}</text>
+									<view class="file-icon file-type-document">
+										<text class="file-type-icon">📄</text>
 									</view>
 									<view class="file-info">
 										<view class="file-name">{{ file.name }}</view>
 										<view class="file-meta">
 											<text class="file-size">{{ formatFileSize(file.size) }}</text>
-											<text class="file-type">{{ getFileTypeText(file.fileType) }}</text>
+											<text class="file-type">PDF文档</text>
 										</view>
 										<view class="file-progress" v-if="file.uploading">
 											<view class="progress-container">
@@ -124,7 +124,7 @@
 
 					<!-- 上传数量提示 -->
 					<view class="upload-count-tip" v-if="fileList.length > 0">
-						<text class="count-text">已选择 1/1 个文件</text>
+						<text class="count-text">已选择 {{ fileList.length }}/{{ maxUploadCount }} 个文件</text>
 					</view>
 				</view>
 			</view>
@@ -166,7 +166,7 @@
 						<view class="btn-loading" v-if="submitting">
 							<view class="loading-spinner"></view>
 						</view>
-						<text class="btn-text">{{ submitting ? '提交中...' : '提交方案' }}</text>
+						<text class="btn-text">{{ submitting ? '提交中...' : `提交方案${fileList.length > 0 ? `(${fileList.length}个文件)` : ''}` }}</text>
 					</button>
 				</view>
 			</view>
@@ -212,42 +212,13 @@
 		EFFECT: 1,      // 效果图
 		CONSTRUCTION: 2 // 施工设计图
 	}
-
-	// 最大上传数量
-	const MAX_UPLOAD_COUNT = 1
 	
-	// 支持的文件类型映射
-	const FILE_TYPE_MAP = {
-		'jpg': 'image',
-		'jpeg': 'image',
-		'png': 'image',
-		'gif': 'image',
-		'bmp': 'image',
-		'webp': 'image',
-		'pdf': 'document',
-		'doc': 'document',
-		'docx': 'document',
-		'xls': 'document',
-		'xlsx': 'document',
-		'ppt': 'document',
-		'pptx': 'document',
-		'txt': 'document',
-		'zip': 'archive',
-		'rar': 'archive',
-		'7z': 'archive',
-		'tar': 'archive',
-		'gz': 'archive'
-	}
+	// 只支持PDF类型
+	const SUPPORTED_EXTENSIONS = ['pdf']
 	
 	// 微信小程序支持的文档类型映射
 	const WECHAT_FILE_TYPES = {
-		'pdf': 'pdf',
-		'doc': 'doc',
-		'docx': 'doc',
-		'xls': 'xls',
-		'xlsx': 'xls',
-		'ppt': 'ppt',
-		'pptx': 'ppt'
+		'pdf': 'pdf'
 	}
 	
 	export default {
@@ -280,7 +251,13 @@
 				errorMessage: '',
 				
 				// 当前正在预览的文件索引
-				currentPreviewIndex: -1
+				currentPreviewIndex: -1,
+				
+				// 成功信息
+				successFileCount: 0,
+				
+				// 新增：暴露常量到模板
+				maxUploadCount: 10  // 最大上传数量
 			}
 		},
 		
@@ -374,7 +351,7 @@
 						schemeType: this.schemeType,
 						fileTypeValue: this.fileTypeValue,
 						pageTitle: this.pageTitle,
-						maxUploadCount: MAX_UPLOAD_COUNT
+						maxUploadCount: this.maxUploadCount
 					})
 					
 				} catch (error) {
@@ -403,60 +380,86 @@
 					return
 				}
 				
-				if (this.fileList.length >= MAX_UPLOAD_COUNT) {
+				// 计算还能上传多少个文件
+				const remainingCount = this.maxUploadCount - this.fileList.length
+				if (remainingCount <= 0) {
 					uni.showToast({
-						title: `只能上传${MAX_UPLOAD_COUNT}个文件`,
+						title: `最多只能上传${this.maxUploadCount}个文件`,
 						icon: 'none'
 					})
 					return
 				}
 				
 				uni.chooseMessageFile({
-					count: 1,
+					count: remainingCount,  // 动态计算数量
 					type: 'all',
 					success: (res) => {
 						console.log('📁 选择的文件:', res)
-						const tempFile = res.tempFiles[0]
 						
-						// 检查文件大小（限制20MB）
-						if (tempFile.size > 20 * 1024 * 1024) {
-							uni.showToast({
-								title: '文件大小不能超过20MB',
-								icon: 'none'
-							})
-							return
+						// 验证所有文件
+						for (let i = 0; i < res.tempFiles.length; i++) {
+							const tempFile = res.tempFiles[i]
+							
+							// 检查文件大小（限制20MB）
+							if (tempFile.size > 20 * 1024 * 1024) {
+								uni.showToast({
+									title: `文件"${this.getFileName(tempFile.name)}"大小不能超过20MB`,
+									icon: 'none'
+								})
+								return
+							}
+							
+							// 获取文件扩展名
+							const fileExt = this.getFileExtension(tempFile.name || tempFile.path)
+							
+							// 验证文件类型 - 只允许PDF
+							if (!SUPPORTED_EXTENSIONS.includes(fileExt.toLowerCase())) {
+								uni.showToast({
+									title: `文件"${this.getFileName(tempFile.name)}"必须是PDF格式`,
+									icon: 'none'
+								})
+								return
+							}
 						}
 						
-						// 获取文件扩展名
-						const fileExt = this.getFileExtension(tempFile.path)
-						const fileType = this.getFileTypeByExt(fileExt)
-						
-						// 验证文件类型
-						if (!fileType) {
-							uni.showToast({
-								title: '不支持的文件类型',
-								icon: 'none'
+						// 添加所有文件
+						res.tempFiles.forEach(tempFile => {
+							const fileExt = this.getFileExtension(tempFile.name || tempFile.path)
+							const fileName = tempFile.name || `文件_${Date.now()}.${fileExt}`
+							
+							// 检查是否已存在同名文件
+							const exists = this.fileList.some(file => file.name === fileName)
+							if (exists) {
+								uni.showToast({
+									title: `文件"${this.getFileName(fileName)}"已存在`,
+									icon: 'none'
+								})
+								return
+							}
+							
+							this.fileList.push({
+								path: tempFile.path,
+								name: fileName,
+								size: tempFile.size,
+								fileType: 'document',
+								fileExt: fileExt,
+								uploading: false,
+								previewLoading: false,
+								progress: 0,
+								url: null
 							})
-							return
-						}
-						
-						// 清空原有文件
-						this.fileList = []
-						
-						// 添加新文件
-						this.fileList.push({
-							path: tempFile.path,
-							name: tempFile.name || `文件.${fileExt}`,
-							size: tempFile.size,
-							fileType: fileType,
-							fileExt: fileExt,
-							uploading: false,
-							previewLoading: false,
-							progress: 0,
-							url: null
 						})
 						
 						console.log('📋 更新后的文件列表:', this.fileList)
+						
+						// 显示添加成功的提示
+						if (res.tempFiles.length > 0) {
+							uni.showToast({
+								title: `添加了${res.tempFiles.length}个文件`,
+								icon: 'success',
+								duration: 1500
+							})
+						}
 						
 					},
 					fail: (error) => {
@@ -471,35 +474,16 @@
 			
 			// 获取文件扩展名
 			getFileExtension(filePath) {
-				const parts = filePath.split('.')
+				if (!filePath) return ''
+				const parts = filePath.toString().split('.')
 				return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
 			},
 			
-			// 根据扩展名获取文件类型
-			getFileTypeByExt(ext) {
-				return FILE_TYPE_MAP[ext] || 'other'
-			},
-			
-			// 获取文件类型图标
-			getFileTypeIcon(fileType) {
-				const icons = {
-					'image': '🖼️',
-					'document': '📄',
-					'archive': '📦',
-					'other': '📎'
-				}
-				return icons[fileType] || '📎'
-			},
-			
-			// 获取文件类型文本
-			getFileTypeText(fileType) {
-				const texts = {
-					'image': '图片',
-					'document': '文档',
-					'archive': '压缩包',
-					'other': '文件'
-				}
-				return texts[fileType] || '文件'
+			// 获取文件名（不带路径）
+			getFileName(fullPath) {
+				if (!fullPath) return '未知文件'
+				const parts = fullPath.toString().split('/')
+				return parts[parts.length - 1] || '文件'
 			},
 			
 			// 格式化文件大小
@@ -511,7 +495,7 @@
 				return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 			},
 			
-			// 预览文件（简化版）
+			// 预览文件 - 只处理PDF
 			async previewFile(index) {
 				const file = this.fileList[index]
 				console.log('🔍 预览文件信息:', file)
@@ -524,66 +508,20 @@
 					return
 				}
 				
+				// 验证必须是PDF
+				if (file.fileExt.toLowerCase() !== 'pdf') {
+					uni.showToast({
+						title: '只能预览PDF文件',
+						icon: 'none'
+					})
+					return
+				}
+				
 				// 设置当前预览索引和加载状态
 				this.currentPreviewIndex = index
 				this.fileList[index].previewLoading = true
 				
 				try {
-					// 获取文件扩展名
-					const fileExt = this.getFileExtension(file.name || file.path)
-					
-					console.log('📄 开始预览文件:', {
-						path: file.path,
-						ext: fileExt,
-						type: file.fileType
-					})
-					
-					// 如果是图片，直接预览
-					if (file.fileType === 'image') {
-						await this.previewImageFile(file.path)
-					} 
-					// 如果是支持的文档类型（PDF、Word、Excel、PPT）
-					else if (WECHAT_FILE_TYPES[fileExt]) {
-						await this.previewDocumentFile(file.path, fileExt, file.name)
-					}
-					// 其他文件类型，提示下载
-					else {
-						await this.handleOtherFile(file, fileExt)
-					}
-					
-				} catch (error) {
-					console.error('❌ 预览文件失败:', error)
-					this.showError(this.getErrorMessage(error))
-				} finally {
-					// 重置加载状态
-					if (this.currentPreviewIndex === index) {
-						this.fileList[index].previewLoading = false
-						this.currentPreviewIndex = -1
-					}
-				}
-			},
-			
-			// 预览图片文件
-			async previewImageFile(filePath) {
-				return new Promise((resolve, reject) => {
-					uni.previewImage({
-						urls: [filePath],
-						current: 0,
-						success: () => {
-							console.log('✅ 图片预览成功')
-							resolve()
-						},
-						fail: (error) => {
-							console.error('❌ 图片预览失败:', error)
-							reject(new Error('图片预览失败'))
-						}
-					})
-				})
-			},
-			
-			// 预览文档文件（PDF、Word、Excel、PPT）
-			async previewDocumentFile(filePath, fileExt, fileName) {
-				return new Promise((resolve, reject) => {
 					// 显示加载提示
 					uni.showLoading({
 						title: '加载文件中...',
@@ -592,7 +530,7 @@
 					
 					// 下载文件
 					uni.downloadFile({
-						url: filePath,
+						url: file.path,
 						header: {
 							'Content-Type': 'application/octet-stream'
 						},
@@ -601,129 +539,54 @@
 							console.log('✅ 文件下载成功:', res)
 							
 							if (res.statusCode === 200) {
-								// 获取对应的文件类型
-								const fileType = WECHAT_FILE_TYPES[fileExt] || 'pdf'
-								
-								// 打开文档
+								// 打开PDF文档
 								uni.openDocument({
 									filePath: res.tempFilePath,
-									fileType: fileType,
-									showMenu: true, // 显示菜单，用户可以保存
+									fileType: 'pdf',
+									showMenu: true,
 									success: () => {
-										console.log('✅ 文档打开成功')
-										resolve()
+										console.log('✅ PDF文档打开成功')
+										this.fileList[index].previewLoading = false
+										this.currentPreviewIndex = -1
 									},
 									fail: (err) => {
-										console.error('❌ 文档打开失败:', err)
-										reject(new Error(`${fileExt.toUpperCase()}文件打开失败`))
+										console.error('❌ PDF打开失败:', err)
+										uni.showToast({
+											title: 'PDF文件打开失败',
+											icon: 'none'
+										})
+										this.fileList[index].previewLoading = false
+										this.currentPreviewIndex = -1
 									}
 								})
 							} else {
-								reject(new Error(`下载失败，状态码: ${res.statusCode}`))
+								uni.showToast({
+									title: `下载失败，状态码: ${res.statusCode}`,
+									icon: 'none'
+								})
+								this.fileList[index].previewLoading = false
+								this.currentPreviewIndex = -1
 							}
 						},
 						fail: (err) => {
 							uni.hideLoading()
 							console.error('❌ 下载失败:', err)
-							reject(new Error(`下载请求失败: ${err.errMsg}`))
+							uni.showToast({
+								title: '下载请求失败',
+								icon: 'none'
+							})
+							this.fileList[index].previewLoading = false
+							this.currentPreviewIndex = -1
 						}
 					})
-				})
-			},
-			
-			// 处理其他文件类型
-			async handleOtherFile(file, fileExt) {
-				return new Promise((resolve, reject) => {
-					uni.showModal({
-						title: '文件预览',
-						content: `${fileExt.toUpperCase()}文件无法在线预览，是否下载文件？`,
-						confirmText: '下载',
-						cancelText: '取消',
-						success: (res) => {
-							if (res.confirm) {
-								this.downloadOtherFile(file.path, file.name)
-								resolve()
-							} else {
-								reject(new Error('用户取消操作'))
-							}
-						},
-						fail: () => {
-							reject(new Error('操作失败'))
-						}
-					})
-				})
-			},
-			
-			// 下载其他文件
-			downloadOtherFile(filePath, fileName) {
-				uni.showLoading({
-					title: '下载中...',
-					mask: true
-				})
-				
-				// 对于本地文件，直接保存
-				if (filePath.startsWith('wxfile://')) {
-					uni.saveFile({
-						tempFilePath: filePath,
-						success: (res) => {
-							uni.hideLoading()
-							uni.showToast({
-								title: '文件已保存',
-								icon: 'success',
-								duration: 2000
-							})
-							console.log('✅ 文件保存成功:', res.savedFilePath)
-						},
-						fail: (err) => {
-							uni.hideLoading()
-							uni.showToast({
-								title: '保存失败',
-								icon: 'none',
-								duration: 2000
-							})
-							console.error('❌ 文件保存失败:', err)
-						}
-					})
-				} else {
-					// 对于网络文件，需要先下载
-					uni.downloadFile({
-						url: filePath,
-						success: (downloadRes) => {
-							uni.hideLoading()
-							if (downloadRes.statusCode === 200) {
-								uni.saveFile({
-									tempFilePath: downloadRes.tempFilePath,
-									success: (saveRes) => {
-										uni.showToast({
-											title: '文件已保存',
-											icon: 'success',
-											duration: 2000
-										})
-									},
-									fail: (saveErr) => {
-										uni.showToast({
-											title: '保存失败',
-											icon: 'none',
-											duration: 2000
-										})
-									}
-								})
-							} else {
-								uni.showToast({
-									title: '下载失败',
-									icon: 'none',
-									duration: 2000
-								})
-							}
-						},
-						fail: (downloadErr) => {
-							uni.hideLoading()
-							uni.showToast({
-								title: '下载失败',
-								icon: 'none',
-								duration: 2000
-							})
-						}
+					
+				} catch (error) {
+					console.error('❌ 预览文件失败:', error)
+					this.fileList[index].previewLoading = false
+					this.currentPreviewIndex = -1
+					uni.showToast({
+						title: '预览失败',
+						icon: 'none'
 					})
 				}
 			},
@@ -761,9 +624,10 @@
 					confirmColor: '#FF4757',
 					success: (res) => {
 						if (res.confirm) {
+							const fileName = this.fileList[index].name
 							this.fileList.splice(index, 1)
 							uni.showToast({
-								title: '删除成功',
+								title: `"${this.getFileName(fileName)}"已删除`,
 								icon: 'success',
 								duration: 1500
 							})
@@ -888,7 +752,7 @@
 					
 					if (failedUploads.length > 0) {
 						console.error('❌ 文件上传失败:', failedUploads)
-						throw new Error('文件上传失败')
+						throw new Error(`${failedUploads.length}个文件上传失败`)
 					}
 					
 					return successfulUploads
@@ -926,7 +790,7 @@
 				
 				if (this.fileList.length === 0) {
 					uni.showToast({
-						title: '请上传文件',
+						title: '请上传至少一个文件',
 						icon: 'none'
 					})
 					return
@@ -938,20 +802,25 @@
 					// 1. 上传所有文件
 					const uploadResults = await this.uploadAllFiles()
 					
-					// 2. 获取成功上传的文件URL
+					// 2. 获取所有成功上传的文件URL
 					const fileUrls = uploadResults.map(result => result.fileUrl).filter(url => url)
 					
 					if (fileUrls.length === 0) {
 						throw new Error('文件上传失败')
 					}
 					
-					// 3. 使用上传的文件URL
-					const mainFileUrl = fileUrls[0]
+					// 3. 将多个URL合并为一个字符串（逗号分隔）
+					const fileUrlStr = fileUrls.join(',')
 					
-					// 4. 更新设计方案信息
+					// 4. 检查URL总长度（2000字符限制）
+					if (fileUrlStr.length > 1950) { // 留50字符余量
+						throw new Error(`文件URL总长度超出数据库限制(${fileUrlStr.length}/2000)，请减少文件数量`)
+					}
+					
+					// 5. 更新设计方案信息
 					const updateData = {
 						designSchemeId: this.schemeId,
-						fileUrl: mainFileUrl,
+						fileUrl: fileUrlStr,  // 逗号分隔的URL字符串
 						description: this.description,
 						orderId: this.orderId,
 						schemeType: this.fileTypeValue
@@ -960,33 +829,39 @@
 					console.log('📤 更新设计方案数据:', {
 						...updateData,
 						schemeTypeText: this.schemeTypeText,
-						originalSchemeType: this.schemeType
+						originalSchemeType: this.schemeType,
+						fileCount: fileUrls.length,
+						fileUrlLength: fileUrlStr.length,
+						maxLength: 2000
 					})
 					
-					// 5. 先更新方案信息
+					// 6. 先更新方案信息
 					const updateResult = await updateDesignScheme(updateData)
 					
 					if (updateResult.code === 200) {
 						console.log('✅ 方案信息更新成功')
 						
-						// 6. 再更新方案状态为1（已提交）
+						// 7. 再更新方案状态为1（已提交）
 						const statusResult = await updateDesignSchemeStatus(
 							this.schemeId,
 							1, // 状态码1
-							`${this.schemeTypeText}方案已提交`
+							`${this.schemeTypeText}方案已提交，包含${fileUrls.length}个文件`
 						)
 						
 						if (statusResult.code === 200) {
 							console.log('✅ 方案状态更新成功:', statusResult)
+							this.successFileCount = fileUrls.length
+							
+							// 显示成功消息
 							uni.showToast({
-								title: `${this.schemeTypeText}提交成功`,
+								title: `${this.schemeTypeText}提交成功（${fileUrls.length}个文件）`,
 								icon: 'success',
-								duration: 2000
+								duration: 3000
 							})
 							
 							setTimeout(() => {
 								this.refreshOrderPage()
-							}, 1500)
+							}, 2000)
 							
 						} else {
 							throw new Error(statusResult.msg || '更新方案状态失败')
@@ -1001,7 +876,7 @@
 					uni.showToast({
 						title: error.message || '提交方案失败',
 						icon: 'none',
-						duration: 3000
+						duration: 4000
 					})
 				} finally {
 					this.submitting = false
