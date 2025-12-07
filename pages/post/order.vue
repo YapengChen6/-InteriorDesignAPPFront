@@ -59,28 +59,40 @@
           <view class="service-type-container">
             <view 
               class="service-option" 
-              :class="{ 'selected': formData.serviceType === 'designer' }"
-              @click="selectServiceType('designer')"
+              :class="{ 
+                'selected': formData.selectedServiceTypes.includes('designer') || formData.serviceType === 'both',
+                'both-selected': formData.serviceType === 'both'
+              }"
+              @click="toggleServiceType('designer')"
             >
               <text class="service-icon">🎨</text>
               <text class="service-text">需要设计师</text>
+              <text v-if="formData.selectedServiceTypes.includes('designer')" class="checkmark">✓</text>
             </view>
             <view 
               class="service-option" 
-              :class="{ 'selected': formData.serviceType === 'supervisor' }"
-              @click="selectServiceType('supervisor')"
+              :class="{ 
+                'selected': formData.selectedServiceTypes.includes('supervisor') || formData.serviceType === 'both',
+                'both-selected': formData.serviceType === 'both'
+              }"
+              @click="toggleServiceType('supervisor')"
             >
               <text class="service-icon">📋</text>
               <text class="service-text">需要监理</text>
+              <text v-if="formData.selectedServiceTypes.includes('supervisor')" class="checkmark">✓</text>
             </view>
             <view 
               class="service-option" 
               :class="{ 'selected': formData.serviceType === 'both' }"
-              @click="selectServiceType('both')"
+              @click="selectBothServiceType"
             >
               <text class="service-icon">🎨📋</text>
               <text class="service-text">两者都需要</text>
+              <text v-if="formData.serviceType === 'both'" class="checkmark">✓</text>
             </view>
+          </view>
+          <view class="hint-text" v-if="formData.serviceType === 'both'">
+            <text>✓ 已同时选择设计师和监理</text>
           </view>
           <text v-if="errors.serviceType" class="error-message">{{ errors.serviceType }}</text>
         </view>
@@ -156,7 +168,8 @@ export default {
     return {
       formData: {
         projectName: '',
-        serviceType: '',
+        serviceType: '',                // 用于提交的最终服务类型
+        selectedServiceTypes: [],       // 用户选择的多个服务类型（新增）
         area: '',
         address: '',
         budget: '',
@@ -180,16 +193,58 @@ export default {
       // 提交状态
       isSubmitting: false,
       // Editor placeholder 内容
-      editorPlaceholder: '请输入您的具体需求，例如：需要3D效果图、现代简约风格、需要全屋定制、预算包含主材和辅材'
+      editorPlaceholder: '请输入您的具体需求，例如：现代简约风格、需要全屋定制、预算包含主材和辅材'
     }
   },
   methods: {
-    // 选择服务类型
-    selectServiceType(type) {
-      this.formData.serviceType = type
+    // 修改：选择/取消选择服务类型
+    toggleServiceType(type) {
+      const index = this.formData.selectedServiceTypes.indexOf(type)
+      
+      if (index === -1) {
+        // 添加选择
+        this.formData.selectedServiceTypes.push(type)
+      } else {
+        // 取消选择
+        this.formData.selectedServiceTypes.splice(index, 1)
+      }
+      
+      // 更新最终的服务类型
+      this.updateFinalServiceType()
+      
       // 清除错误信息
       if (this.errors.serviceType) {
         this.errors.serviceType = ''
+      }
+    },
+    
+    // 新增：直接选择"两者都需要"
+    selectBothServiceType() {
+      // 设置服务类型数组包含两个选项
+      this.formData.selectedServiceTypes = ['designer', 'supervisor']
+      // 设置最终服务类型为both
+      this.formData.serviceType = 'both'
+      
+      // 清除错误信息
+      if (this.errors.serviceType) {
+        this.errors.serviceType = ''
+      }
+    },
+    
+    // 新增：更新最终的服务类型
+    updateFinalServiceType() {
+      const hasDesigner = this.formData.selectedServiceTypes.includes('designer')
+      const hasSupervisor = this.formData.selectedServiceTypes.includes('supervisor')
+      
+      if (hasDesigner && hasSupervisor) {
+        // 同时选择了前两个，等效于选择了第三个
+        this.formData.serviceType = 'both'
+      } else if (hasDesigner) {
+        this.formData.serviceType = 'designer'
+      } else if (hasSupervisor) {
+        this.formData.serviceType = 'supervisor'
+      } else {
+        this.formData.serviceType = ''
       }
     },
     
@@ -238,7 +293,7 @@ export default {
         isValid = false
       }
       
-      // 验证服务类型
+      // 验证服务类型（使用最终的服务类型）
       if (!this.formData.serviceType) {
         this.errors.serviceType = '请选择至少一项服务类型'
         isValid = false
@@ -301,7 +356,7 @@ export default {
       return submitData
     },
     
-    // 提交表单
+    // 提交表单 - 修改为跳转到首页
     async submitForm() {
       if (this.isSubmitting) return
       
@@ -327,28 +382,25 @@ export default {
         console.log('提交数据:', JSON.stringify(submitData, null, 2))
         
         // 调用API提交数据
-        const result = await projectService.createProject(submitData)
+        await projectService.createProject(submitData)
         
         // 提交成功
         uni.hideLoading()
         this.isSubmitting = false
         
-        uni.showModal({
+        // 成功提示
+        uni.showToast({
           title: '提交成功',
-          content: this.getSuccessMessage(submitData.requiredRoles),
-          showCancel: false,
-          confirmText: '知道了',
-          success: (res) => {
-            if (res.confirm) {
-              // 重置表单数据
-              this.resetFormData()
-              // 返回上一页
-              uni.navigateBack({
-                delta: 1
-              })
-            }
-          }
+          icon: 'success'
         })
+        
+        // 延迟跳转到首页（tabbar页面）
+        setTimeout(() => {
+          // 使用 switchTab 跳转到tabbar页面
+          uni.switchTab({
+            url: '/pages/index'
+          })
+        }, 1500)
         
       } catch (error) {
         console.error('提交失败:', error)
@@ -375,21 +427,12 @@ export default {
       }
     },
     
-    // 根据角色类型获取成功消息
-    getSuccessMessage(requiredRoles) {
-      const messages = {
-        1: '您的设计需求已提交成功！我们将尽快为您匹配合适的设计师。',
-        2: '您的监理需求已提交成功！我们将尽快为您匹配合适的监理。',
-        3: '您的装修需求已提交成功！我们将尽快为您同时匹配合适的设计师和监理。'
-      }
-      return messages[requiredRoles] || '需求提交成功！我们将尽快为您服务。'
-    },
-    
     // 重置表单数据
     resetFormData() {
       this.formData = {
         projectName: '',
         serviceType: '',
+        selectedServiceTypes: [],  // 重置为数组
         area: '',
         address: '',
         budget: '',
@@ -409,9 +452,14 @@ export default {
     // 重置表单（带确认）
     resetForm() {
       // 检查表单是否有数据
-      const hasData = Object.values(this.formData).some(value => 
-        value && value.toString().trim() !== ''
-      )
+      const hasData = Object.values(this.formData).some(value => {
+        if (Array.isArray(value)) {
+          return value.length > 0
+        } else if (value && typeof value === 'object') {
+          return Object.keys(value).length > 0
+        }
+        return value && value.toString().trim() !== ''
+      })
       
       if (!hasData) {
         this.resetFormData()
@@ -458,7 +506,348 @@ export default {
   }
 }
 </script>
+import { projectService } from '@/api/project.js'
 
+export default {
+  data() {
+    return {
+      formData: {
+        projectName: '',
+        serviceType: '',                // 用于提交的最终服务类型
+        selectedServiceTypes: [],       // 用户选择的多个服务类型（新增）
+        area: '',
+        address: '',
+        budget: '',
+        deadline: '',
+        requirement: ''
+      },
+      errors: {
+        projectName: '',
+        serviceType: '',
+        budget: ''
+      },
+      editorCtx: null,
+      // uni-easyinput 样式配置
+      inputStyles: {
+        color: '#333',
+        backgroundColor: '#fff',
+        borderColor: '#ddd',
+        borderWidth: '2rpx',
+        borderRadius: '10rpx'
+      },
+      // 提交状态
+      isSubmitting: false,
+      // Editor placeholder 内容
+      editorPlaceholder: '请输入您的具体需求，例如：现代简约风格、需要全屋定制、预算包含主材和辅材'
+    }
+  },
+  methods: {
+    // 修改：选择/取消选择服务类型
+    toggleServiceType(type) {
+      const index = this.formData.selectedServiceTypes.indexOf(type)
+      
+      if (index === -1) {
+        // 添加选择
+        this.formData.selectedServiceTypes.push(type)
+      } else {
+        // 取消选择
+        this.formData.selectedServiceTypes.splice(index, 1)
+      }
+      
+      // 更新最终的服务类型
+      this.updateFinalServiceType()
+      
+      // 清除错误信息
+      if (this.errors.serviceType) {
+        this.errors.serviceType = ''
+      }
+    },
+    
+    // 新增：直接选择"两者都需要"
+    selectBothServiceType() {
+      // 设置服务类型数组包含两个选项
+      this.formData.selectedServiceTypes = ['designer', 'supervisor']
+      // 设置最终服务类型为both
+      this.formData.serviceType = 'both'
+      
+      // 清除错误信息
+      if (this.errors.serviceType) {
+        this.errors.serviceType = ''
+      }
+    },
+    
+    // 新增：更新最终的服务类型
+    updateFinalServiceType() {
+      const hasDesigner = this.formData.selectedServiceTypes.includes('designer')
+      const hasSupervisor = this.formData.selectedServiceTypes.includes('supervisor')
+      
+      if (hasDesigner && hasSupervisor) {
+        // 同时选择了前两个，等效于选择了第三个
+        this.formData.serviceType = 'both'
+      } else if (hasDesigner) {
+        this.formData.serviceType = 'designer'
+      } else if (hasSupervisor) {
+        this.formData.serviceType = 'supervisor'
+      } else {
+        this.formData.serviceType = ''
+      }
+    },
+    
+    // 富文本编辑器准备完成
+    onEditorReady() {
+      uni.createSelectorQuery().select('.rich-text-editor').context((res) => {
+        this.editorCtx = res.context
+      }).exec()
+    },
+    
+    // 编辑器输入
+    onEditorInput(e) {
+      this.formData.requirement = e.detail.html
+    },
+    
+    // 获取纯文本内容（用于description字段）
+    getPlainText(html) {
+      if (!html) return ''
+      // 简单的HTML标签去除
+      return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
+    },
+    
+    // 日期选择变化
+    onDateChange(e) {
+      this.formData.deadline = e.detail.value
+    },
+    
+    // 表单验证
+    validateForm() {
+      let isValid = true
+      this.errors = {
+        projectName: '',
+        serviceType: '',
+        budget: ''
+      }
+      
+      // 验证项目名称
+      if (!this.formData.projectName.trim()) {
+        this.errors.projectName = '请输入项目名称'
+        isValid = false
+      } else if (this.formData.projectName.trim().length < 2) {
+        this.errors.projectName = '项目名称至少2个字符'
+        isValid = false
+      } else if (this.formData.projectName.trim().length > 100) {
+        this.errors.projectName = '项目名称不能超过100个字符'
+        isValid = false
+      }
+      
+      // 验证服务类型（使用最终的服务类型）
+      if (!this.formData.serviceType) {
+        this.errors.serviceType = '请选择至少一项服务类型'
+        isValid = false
+      }
+      
+      // 验证预算
+      if (!this.formData.budget || this.formData.budget <= 0) {
+        this.errors.budget = '请输入有效的预算金额'
+        isValid = false
+      } else if (this.formData.budget < 1000) {
+        this.errors.budget = '预算金额不能低于1000元'
+        isValid = false
+      } else if (this.formData.budget > 10000000) {
+        this.errors.budget = '预算金额不能超过1000万元'
+        isValid = false
+      }
+      
+      // 验证面积（如果填写了）
+      if (this.formData.area && this.formData.area < 1) {
+        uni.showToast({
+          title: '房屋面积不能小于1平方米',
+          icon: 'none'
+        })
+        isValid = false
+      }
+      
+      return isValid
+    },
+    
+    // 构建提交数据
+    buildSubmitData() {
+      // 根据数据库注释映射角色类型
+      // 1-设计师，2-监理，3-设计师和监理
+      const roleMap = {
+        'designer': 1,    // 设计师
+        'supervisor': 2,  // 监理
+        'both': 3         // 设计师和监理
+      }
+      
+      const submitData = {
+        title: this.formData.projectName.trim(),
+        description: this.getPlainText(this.formData.requirement) || '暂无详细描述',
+        requiredRoles: roleMap[this.formData.serviceType] || 1,
+        budget: parseFloat(this.formData.budget)
+      }
+      
+      // 可选字段处理
+      if (this.formData.area) {
+        submitData.area = parseFloat(this.formData.area)
+      }
+      
+      if (this.formData.address && this.formData.address.trim()) {
+        submitData.address = this.formData.address.trim()
+      }
+      
+      if (this.formData.deadline) {
+        submitData.deadline = this.formData.deadline
+      }
+      
+      return submitData
+    },
+    
+    // 提交表单 - 修改后的方法
+    async submitForm() {
+      if (this.isSubmitting) return
+      
+      if (!this.validateForm()) {
+        uni.showToast({
+          title: '请完善表单信息',
+          icon: 'none'
+        })
+        return
+      }
+      
+      this.isSubmitting = true
+      
+      try {
+        // 显示加载中
+        uni.showLoading({
+          title: '提交中...',
+          mask: true
+        })
+        
+        // 构建提交数据
+        const submitData = this.buildSubmitData()
+        console.log('提交数据:', JSON.stringify(submitData, null, 2))
+        
+        // 调用API提交数据
+        await projectService.createProject(submitData)
+        
+        // 提交成功
+        uni.hideLoading()
+        this.isSubmitting = false
+        
+        // 成功提示
+        uni.showToast({
+          title: '提交成功',
+          icon: 'success'
+        })
+        
+        // 延迟返回上一页
+        setTimeout(() => {
+          uni.navigateBack()
+        }, 1500)
+        
+      } catch (error) {
+        console.error('提交失败:', error)
+        uni.hideLoading()
+        this.isSubmitting = false
+        
+        let errorMessage = '网络异常，请稍后重试'
+        if (error.message) {
+          if (error.message.includes('网络连接失败')) {
+            errorMessage = '网络连接失败，请检查网络设置'
+          } else if (error.message.includes('用户取消')) {
+            return // 用户取消操作，不显示错误
+          } else {
+            errorMessage = error.message
+          }
+        }
+        
+        uni.showModal({
+          title: '提交失败',
+          content: errorMessage,
+          showCancel: false,
+          confirmText: '确定'
+        })
+      }
+    },
+    
+    // 重置表单数据
+    resetFormData() {
+      this.formData = {
+        projectName: '',
+        serviceType: '',
+        selectedServiceTypes: [],  // 重置为数组
+        area: '',
+        address: '',
+        budget: '',
+        deadline: '',
+        requirement: ''
+      }
+      this.errors = {
+        projectName: '',
+        serviceType: '',
+        budget: ''
+      }
+      if (this.editorCtx) {
+        this.editorCtx.clear()
+      }
+    },
+    
+    // 重置表单（带确认）
+    resetForm() {
+      // 检查表单是否有数据
+      const hasData = Object.values(this.formData).some(value => {
+        if (Array.isArray(value)) {
+          return value.length > 0
+        } else if (value && typeof value === 'object') {
+          return Object.keys(value).length > 0
+        }
+        return value && value.toString().trim() !== ''
+      })
+      
+      if (!hasData) {
+        this.resetFormData()
+        uni.showToast({
+          title: '表单已重置',
+          icon: 'success'
+        })
+        return
+      }
+      
+      uni.showModal({
+        title: '提示',
+        content: '确定要重置表单吗？所有填写的内容将被清空。',
+        success: (res) => {
+          if (res.confirm) {
+            this.resetFormData()
+            uni.showToast({
+              title: '表单已重置',
+              icon: 'success'
+            })
+          }
+        }
+      })
+    }
+  },
+  
+  onLoad(options) {
+    // 页面加载时的初始化操作
+    console.log('装修需求表单页面加载')
+    
+    // 从URL参数获取预填数据（如果有）
+    if (options.projectName) {
+      this.formData.projectName = decodeURIComponent(options.projectName)
+    }
+  },
+  
+  onShow() {
+    // 页面显示时的操作
+  },
+  
+  onUnload() {
+    // 页面卸载时的清理操作
+    this.isSubmitting = false
+  }
+}
+</script>
 <style scoped>
 .container {
   background-color: #f0f2f5;
@@ -548,12 +937,23 @@ export default {
   text-align: center;
   background-color: #fff;
   transition: all 0.3s;
+  position: relative;
 }
 
 .service-option.selected {
   border-color: #4a6fa5;
   background-color: #f0f7ff;
   box-shadow: 0 4rpx 12rpx rgba(74, 111, 165, 0.2);
+}
+
+.service-option.both-selected {
+  border-color: #4a6fa5;
+  background-color: #f0f7ff;
+}
+
+.service-option.selected.both-selected {
+  border-color: #ff7e5f;
+  background-color: #fff0ed;
 }
 
 .service-icon {
@@ -565,6 +965,33 @@ export default {
 .service-text {
   font-size: 28rpx;
   color: #333;
+}
+
+.checkmark {
+  position: absolute;
+  top: 10rpx;
+  right: 10rpx;
+  color: #4a6fa5;
+  font-weight: bold;
+  font-size: 28rpx;
+}
+
+.service-option.selected.both-selected .checkmark {
+  color: #ff7e5f;
+}
+
+.hint-text {
+  margin-top: 15rpx;
+  padding: 10rpx 15rpx;
+  background-color: #f0f7ff;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  color: #4a6fa5;
+}
+
+.hint-text text {
+  display: flex;
+  align-items: center;
 }
 
 .rich-text-editor {
@@ -666,7 +1093,4 @@ export default {
     width: 100%;
   }
 }
-
-/* 移除所有 :deep() 选择器，使用全局样式类替代 */
-/* 注意：这些样式可能需要放在全局样式文件中，因为小程序不支持深度选择器 */
 </style>

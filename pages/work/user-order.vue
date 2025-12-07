@@ -73,8 +73,11 @@
 				<text class="loading-text">加载中...</text>
 			</view>
 			
-			<!-- 订单项 -->
-			<view class="order-item" v-for="order in orderList" :key="order.orderId">
+			<!-- 订单项 - 修改：在根元素添加点击事件 -->
+			<view class="order-item" 
+				v-for="order in orderList" 
+				:key="order.orderId"
+				@click="goToFinishedDetail(order)">
 				<view class="order-header">
 					<view class="order-info">
 						<text class="order-number">订单号：DD{{ order.orderId }}</text>
@@ -90,8 +93,8 @@
 					</view>
 				</view>
 				
-				<!-- 修改：移除了点击事件，只保留内容展示 -->
-				<view class="order-content">
+				<!-- 修改：添加 stop 阻止事件冒泡 -->
+				<view class="order-content" @click.stop>
 					<view class="project-info">
 						<view class="project-title">{{ order.projectInfo ? order.projectInfo.title : '监理项目' }}</view>
 						<view class="project-desc">{{ order.projectInfo ? order.projectInfo.description : (order.remark || '暂无描述') }}</view>
@@ -134,16 +137,17 @@
 						<text class="amount-label">订单金额：</text>
 						<text class="amount-value">¥{{ order.totalAmount || 0 }}</text>
 					</view>
-					<view class="order-actions">
+					<view class="order-actions" @click.stop>
 						<!-- 状态0：待确认 -->
 						<template v-if="order.status === 0">
-							<button class="btn secondary" @click="cancelOrder(order.orderId)">
+							<button class="btn secondary" @click.stop="cancelOrder(order.orderId)">
 								取消订单
 							</button>
-							<button class="btn primary" @click="confirmOrder(order.orderId)">
+							<button class="btn primary" @click.stop="confirmOrder(order.orderId)">
 								确认订单
 							</button>
-							<button class="btn secondary" @click="viewOrderDetail(order.orderId)">
+							<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+							<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
 								查看详情
 							</button>
 						</template>
@@ -152,53 +156,68 @@
 						<template v-else-if="order.status === 1">
 							<!-- 合同状态0：待上传 -->
 							<template v-if="order.contractStatus === 0">
-								<button class="btn secondary" @click="cancelOrder(order.orderId)">
+								<button class="btn secondary" @click.stop="cancelOrder(order.orderId)">
 									取消订单
 								</button>
-								<button class="btn secondary" @click="viewOrderDetail(order.orderId)">
+								<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+								<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
 									查看详情
 								</button>
 							</template>
 							
 							<!-- 合同状态1：合同待确认 -->
 							<template v-else-if="order.contractStatus === 1">
-								<button class="btn secondary" @click="viewContract(order)">
+								<button class="btn secondary" @click.stop="viewContract(order)">
 									查看合同
 								</button>
-								<button class="btn secondary" @click="rejectContract(order.orderId)">
+								<button class="btn secondary" @click.stop="rejectContract(order.orderId)">
 									拒绝合同
 								</button>
-								<button class="btn primary" @click="confirmContract(order.orderId)">
+								<button class="btn primary" @click.stop="confirmContract(order.orderId)">
 									确认合同
+								</button>
+								<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+								<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
+									查看详情
 								</button>
 							</template>
 							
 							<!-- 合同状态2：合同已确认 -->
 							<template v-else-if="order.contractStatus === 2">
-								<!-- 设计师订单：保持原有逻辑 -->
+								<!-- 设计师订单：方案状态逻辑 -->
 								<template v-if="String(order.type) === '1'">
-									<!-- 效果图未完成时显示确认效果图按钮 -->
-									<button v-if="order.effectDrawingStatus !== '2'" 
-											class="btn primary" 
-											@click="confirmEffectDrawing(order.orderId)">
-										确认效果图
-									</button>
+									<!-- 效果图状态：0/null/undefined 为待上传 -->
+									<template v-if="order.effectDrawingStatus === '0' || order.effectDrawingStatus === null || order.effectDrawingStatus === undefined">
+										<text class="status-text">待上传效果图</text>
+									</template>
+									<!-- 效果图状态：1 为待确认 -->
+									<template v-else-if="order.effectDrawingStatus === '1'">
+										<button class="btn primary" @click.stop="confirmEffectDrawing(order.orderId)">
+											确认效果图
+										</button>
+									</template>
+									<!-- 效果图状态：2 为已确认，检查施工设计图 -->
+									<template v-else-if="order.effectDrawingStatus === '2'">
+										<!-- 施工设计图状态：0/null/undefined 为待上传 -->
+										<template v-if="order.constructionDrawingStatus === '0' || order.constructionDrawingStatus === null || order.constructionDrawingStatus === undefined">
+											<text class="status-text">待上传施工设计图</text>
+										</template>
+										<!-- 施工设计图状态：1 为待确认 -->
+										<template v-else-if="order.constructionDrawingStatus === '1'">
+											<button class="btn primary" @click.stop="confirmConstructionDrawing(order.orderId)">
+												确认施工设计图
+											</button>
+										</template>
+										<!-- 施工设计图状态：2 为已确认，显示付款按钮 -->
+										<template v-else-if="order.constructionDrawingStatus === '2'">
+											<button class="btn primary" @click.stop="payOrder(order.orderId)">
+												立即付款
+											</button>
+										</template>
+									</template>
 									
-									<!-- 效果图已完成但施工设计图未完成时显示确认施工设计图按钮 -->
-									<button v-if="order.effectDrawingStatus === '2' && order.constructionDrawingStatus !== '2'" 
-											class="btn primary" 
-											@click="confirmConstructionDrawing(order.orderId)">
-										确认施工设计图
-									</button>
-									
-									<!-- 效果图和施工设计图都已完成时显示付款按钮 -->
-									<button v-if="order.effectDrawingStatus === '2' && order.constructionDrawingStatus === '2'" 
-											class="btn primary" 
-											@click="payOrder(order.orderId)">
-										立即付款
-									</button>
-									
-									<button class="btn secondary" @click="viewOrderDetail(order.orderId)">
+									<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+									<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
 										查看详情
 									</button>
 								</template>
@@ -207,33 +226,39 @@
 								<template v-else-if="String(order.type) === '2'">
 									<!-- 新增：所有阶段status=4时显示"待付款"按钮 -->
 									<template v-if="order.allStagesCompleted">
-										<button class="btn primary" @click="paySupervisorOrder(order.orderId)">
+										<button class="btn primary" @click.stop="paySupervisorOrder(order.orderId)">
 											待付款
 										</button>
 									</template>
 									
-									<!-- 没有施工阶段或有待确认的施工阶段 -->
-									<template v-else-if="!order.hasStages || order.hasUnconfirmedStages">
-										<button class="btn primary" @click="confirmConstructionStages(order.orderId)">
+									<!-- 没有施工阶段 - 显示等待监理上传 -->
+									<template v-else-if="!order.hasStages">
+										<text class="status-text">等待监理上传</text>
+									</template>
+									
+									<!-- 有待确认的施工阶段 -->
+									<template v-else-if="order.hasUnconfirmedStages">
+										<button class="btn primary" @click.stop="confirmConstructionStages(order.orderId)">
 											确认施工阶段
 										</button>
 									</template>
 									
 									<!-- 有已确认的施工阶段 -->
 									<template v-else-if="order.hasStages && !order.hasUnconfirmedStages">
-										<button class="btn primary" @click="goToConstructionStage(order.orderId)">
-											施工阶段
+										<button class="btn primary" @click.stop="goToConstructionStage(order.orderId)">
+											查看施工阶段
 										</button>
 									</template>
 									
 									<!-- 默认按钮（备用） -->
 									<template v-else>
-										<button class="btn primary" @click="goToConstructionStage(order.orderId)">
+										<button class="btn primary" @click.stop="goToConstructionStage(order.orderId)">
 											施工阶段
 										</button>
 									</template>
 									
-									<button class="btn secondary" @click="viewOrderDetail(order.orderId)">
+									<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+									<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
 										查看详情
 									</button>
 								</template>
@@ -242,17 +267,26 @@
 						
 						<!-- 状态2：已完成 -->
 						<template v-else-if="order.status === 2">
-							<button class="btn secondary" @click="viewOrderDetail(order.orderId)">
+							<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+							<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
 								查看详情
 							</button>
 							<!-- 显示评价按钮，根据是否有评价决定是否显示 -->
-							<button v-if="!order.hasReview" class="btn primary" @click="goToReview(order.orderId)">
+							<button v-if="!order.hasReview" class="btn primary" @click.stop="goToReview(order.orderId)">
 								评价订单
 							</button>
 							<!-- 如果已有评价，显示已评价状态 -->
 							<text v-if="order.hasReview" class="status-text">
 								已评价
 							</text>
+						</template>
+						
+						<!-- 状态3：已取消 -->
+						<template v-else-if="order.status === 3">
+							<!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+							<button class="btn secondary" @click.stop="goToFinishedDetail(order)">
+								查看详情
+							</button>
 						</template>
 					</view>
 				</view>
@@ -374,6 +408,24 @@
 			}
 		},
 		methods: {
+			// 新增方法：点击订单卡片跳转到已完成订单详情
+			goToFinishedDetail(order) {
+				if (!order || !order.orderId) {
+					uni.showToast({
+						title: '订单信息无效',
+						icon: 'none'
+					});
+					return;
+				}
+				
+				console.log('📋 点击订单卡片，跳转到已完成订单详情，订单ID:', order.orderId, '订单类型:', order.type);
+				
+				// 无论订单当前状态如何，都跳转到已完成订单详情页面
+				uni.navigateTo({
+					url: `/pages/finishedorder-detail/finishedorder-detail?orderId=${order.orderId}&userId=${this.userInfo.userId}&orderType=${order.type}`
+				});
+			},
+			
 			// 返回首页
 			goBack() {
 				console.log('🔙 返回首页');
@@ -552,43 +604,6 @@
 				uni.navigateTo({
 					url: `/pages/review/review?orderId=${orderId}&userId=${this.userInfo.userId}`
 				});
-			},
-
-			// 查看订单详情（修改：只处理已完成状态的跳转）
-			viewOrderDetail(orderId) {
-				const order = this.orderList.find(item => item.orderId === orderId);
-				if (!order) {
-					uni.showToast({
-						title: '订单信息不存在',
-						icon: 'none'
-					});
-					return;
-				}
-				
-				console.log('📋 查看订单详情，订单ID:', orderId, '订单类型:', order.type, '订单状态:', order.status);
-				
-				// 根据订单类型和状态跳转到不同的详情页面
-				if (order.status === 2) { // 状态2：已完成
-					console.log('✅ 跳转到已完成订单详情页面');
-					uni.navigateTo({
-						url: `/pages/finishedorder-detail/finishedorder-detail?orderId=${orderId}&userId=${this.userInfo.userId}&orderType=${order.type}`
-					});
-				} else {
-					// 根据订单类型跳转到不同的详情页面
-					if (String(order.type) === '1') {
-						// 设计师订单跳转到设计订单详情
-						console.log('🎨 跳转到设计师订单详情页面');
-						uni.navigateTo({
-							url: `/pages/order-hall/order-detail?id=${orderId}&type=design`
-						});
-					} else if (String(order.type) === '2') {
-						// 监理订单跳转到监理订单详情
-						console.log('🏗️ 跳转到监理订单详情页面');
-						uni.navigateTo({
-							url: `/pages/supervisor/supervisor-order-detail?id=${orderId}&type=supervisor`
-						});
-					}
-				}
 			},
 
 			// 统一的错误处理方法
@@ -844,14 +859,14 @@
 				}
 			},
 			
-			// 检查设计方案状态
+			// 检查设计方案状态（修改版：按最新创建时间判断）
 			async checkDesignSchemeStatus(orderId, schemeType) {
 				try {
 					console.log(`🔍 检查设计方案状态，订单ID: ${orderId}, 方案类型: ${schemeType}`);
 					
 					const queryParams = {
 						pageNum: 1,
-						pageSize: 100,
+							pageSize: 100,
 						orderId: orderId
 					};
 					
@@ -880,7 +895,8 @@
 					
 					console.log('📋 解析后的方案列表:', list);
 					
-					const scheme = list.find(scheme => {
+					// 过滤出指定类型的方案
+					const filteredSchemes = list.filter(scheme => {
 						const type = scheme.schemeType || scheme.type;
 						const schemeTypeStr = String(schemeType);
 						const typeStr = String(type);
@@ -890,17 +906,33 @@
 						return schemeTypeStr === typeStr;
 					});
 					
-					if (scheme) {
-						console.log(`✅ 找到方案:`, {
-							schemeId: scheme.designSchemeId,
-							schemeType: scheme.schemeType,
-							status: scheme.status
-						});
-						return String(scheme.status); 
-					} else {
+					console.log(`✅ 过滤后的 ${schemeType === '1' ? '效果图' : '施工设计图'} 方案:`, filteredSchemes);
+					
+					if (filteredSchemes.length === 0) {
 						console.log(`❌ 未找到类型为 ${schemeType} 的方案`);
 						return null;
 					}
+					
+					// 按 createTime 倒序排序（最新的在前面）
+					filteredSchemes.sort((a, b) => {
+						const timeA = new Date(a.createTime || a.uploadTime || 0).getTime();
+						const timeB = new Date(b.createTime || b.uploadTime || 0).getTime();
+						
+						// 降序排列，最新的在前
+						return timeB - timeA;
+					});
+					
+					console.log('📊 排序后的方案列表:', filteredSchemes);
+					
+					// 取第一个（最新的）方案的状态
+					const latestScheme = filteredSchemes[0];
+					console.log(`✅ 使用最新方案判断状态:`, {
+						schemeId: latestScheme.designSchemeId,
+						createTime: latestScheme.createTime,
+						status: latestScheme.status
+					});
+					
+					return String(latestScheme.status); 
 					
 				} catch (error) {
 					console.error(`❌ 检查设计方案状态失败:`, error);
@@ -1030,24 +1062,75 @@
 				}
 			},
 
-			// 查看合同
+			// 查看合同 - 修改为预览PDF
 			async viewContract(order) {
 				try {
 					console.log('📄 查看合同，订单ID:', order.orderId);
 					console.log('📄 合同URL:', order.contractUrl);
 					
 					if (order.contractUrl) {
-						uni.previewImage({
-							urls: [order.contractUrl],
-							current: order.contractUrl,
-							success: () => {
-								console.log('✅ 合同预览成功');
-							},
-							fail: (error) => {
-								console.error('❌ 合同预览失败:', error);
-								this.handleApiError(error, '合同预览失败');
-							}
+						// 显示加载提示
+						uni.showLoading({
+							title: '加载合同中...',
+							mask: true
 						});
+						
+						try {
+							// 下载PDF文件
+							uni.downloadFile({
+								url: order.contractUrl,
+								header: {
+									'Content-Type': 'application/octet-stream'
+								},
+								success: (res) => {
+									uni.hideLoading();
+									console.log('✅ 合同文件下载成功:', res);
+									
+									if (res.statusCode === 200) {
+										// 打开PDF文档预览
+										uni.openDocument({
+											filePath: res.tempFilePath,
+											fileType: 'pdf',
+											showMenu: true, // 显示菜单，用户可以保存
+											success: () => {
+												console.log('✅ PDF合同预览成功');
+											},
+											fail: (error) => {
+												console.error('❌ PDF合同打开失败:', error);
+												
+												// 如果打开失败，尝试使用图片预览（兼容旧格式）
+												uni.previewImage({
+													urls: [order.contractUrl],
+													current: order.contractUrl,
+													fail: (imgError) => {
+														this.handleApiError(imgError, '合同预览失败');
+													}
+												});
+											}
+										});
+									} else {
+										throw new Error(`下载失败，状态码: ${res.statusCode}`);
+									}
+								},
+								fail: (error) => {
+									uni.hideLoading();
+									console.error('❌ 合同文件下载失败:', error);
+									
+									// 如果下载失败，尝试直接预览（可能是图片格式）
+									uni.previewImage({
+										urls: [order.contractUrl],
+										current: order.contractUrl,
+										fail: (previewError) => {
+											this.handleApiError(previewError, '合同预览失败');
+										}
+									});
+								}
+							});
+						} catch (downloadError) {
+							uni.hideLoading();
+							console.error('❌ 合同预览异常:', downloadError);
+							this.handleApiError(downloadError, '合同预览失败');
+						}
 					} else {
 						uni.showToast({
 							title: '合同文件不存在',
@@ -1501,6 +1584,86 @@
 				}
 			},
 			
+			// 取消订单 - 修改：添加项目状态更新功能
+			async cancelOrder(orderId) {
+				try {
+					uni.showModal({
+						title: '确认取消',
+						content: '确定要取消这个订单吗？',
+						success: async (res) => {
+							if (res.confirm) {
+								uni.showLoading({ title: '取消中...' })
+								
+								try {
+									// 1. 查找订单详情以获取项目ID
+									const order = this.orderList.find(item => item.orderId === orderId);
+									let projectId = null;
+									
+									// 从不同位置获取项目ID
+									if (order) {
+										if (order.projectId) {
+											projectId = order.projectId;
+										} else if (order.projectInfo && order.projectInfo.projectId) {
+											projectId = order.projectInfo.projectId;
+										}
+									}
+									
+									console.log('🔍 准备取消订单，订单ID:', orderId, '项目ID:', projectId);
+									
+									// 2. 调用取消订单的API
+									await orderService.cancelOrder(orderId);
+									console.log('✅ 订单取消成功');
+									
+									// 3. 如果有关联项目，更新项目状态为5（已取消）
+									if (projectId) {
+										try {
+											console.log('🔄 开始更新项目状态，项目ID:', projectId, '状态: 5（已取消）');
+											
+											// 使用现有的 projectService 更新项目状态
+											const projectResult = await projectService.updateProjectStatus(projectId, 5);
+											
+											console.log('✅ 项目状态更新成功:', projectResult);
+											
+											uni.showToast({
+												title: '订单已取消，项目状态已更新',
+												icon: 'success'
+											});
+											
+										} catch (projectError) {
+											console.error('❌ 项目状态更新失败:', projectError);
+											// 即使项目状态更新失败，订单仍然成功取消
+											uni.showToast({
+												title: '订单已取消，但项目状态更新失败',
+												icon: 'none'
+											});
+										}
+									} else {
+										// 没有关联项目，只显示订单取消成功
+										uni.showToast({
+											title: '订单已取消',
+											icon: 'success'
+										});
+									}
+									
+									// 4. 刷新订单列表
+									this.pagination.pageNum = 1;
+									this.loadOrderList();
+									
+								} catch (orderError) {
+									console.error('❌ 取消订单失败:', orderError);
+									this.handleApiError(orderError, '取消订单失败');
+								} finally {
+									uni.hideLoading();
+								}
+							}
+						}
+					})
+				} catch (error) {
+					uni.hideLoading();
+					this.handleApiError(error, '取消订单失败');
+				}
+			},
+			
 			// 确认订单
 			async confirmOrder(orderId) {
 				try {
@@ -1524,32 +1687,6 @@
 				} catch (error) {
 					uni.hideLoading()
 					this.handleApiError(error, '确认订单失败')
-				}
-			},
-			
-			// 取消订单
-			async cancelOrder(orderId) {
-				try {
-					uni.showModal({
-						title: '确认取消',
-						content: '确定要取消这个订单吗？',
-						success: async (res) => {
-							if (res.confirm) {
-								uni.showLoading({ title: '取消中...' })
-								await orderService.cancelOrder(orderId)
-								uni.hideLoading()
-								uni.showToast({
-									title: '订单已取消',
-									icon: 'success'
-								})
-								this.pagination.pageNum = 1
-								this.loadOrderList()
-							}
-						}
-					})
-				} catch (error) {
-					uni.hideLoading()
-					this.handleApiError(error, '取消订单失败')
 				}
 			},
 			
@@ -1733,12 +1870,20 @@
 		color: #999;
 	}
 	
+	/* 修改：添加订单卡片点击效果 */
 	.order-item {
 		background: white;
 		border-radius: 16rpx;
 		margin-bottom: 20rpx;
 		padding: 30rpx;
 		box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05);
+		cursor: pointer;
+		transition: transform 0.2s ease, box-shadow 0.2s ease;
+	}
+	
+	.order-item:active {
+		transform: scale(0.99);
+		box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.1);
 	}
 	
 	.order-header {

@@ -69,8 +69,8 @@
         <text class="loading-text">加载中...</text>
       </view>
       
-      <!-- 订单项 -->
-      <view class="order-item" v-for="order in filteredOrders" :key="order.orderId">
+      <!-- 订单项 - 修改：在根元素添加点击事件 -->
+      <view class="order-item" v-for="order in filteredOrders" :key="order.orderId" @click="goToFinishedOrderDetail(order)">
         <view class="order-header">
           <view class="order-info">
             <text class="order-number">订单号：DD{{ order.orderId }}</text>
@@ -82,7 +82,8 @@
           </view>
         </view>
         
-        <view class="order-content" @click="viewOrderDetail(order.orderId)">
+        <!-- 修改：添加 stop 阻止事件冒泡 -->
+        <view class="order-content" @click.stop>
           <view class="project-info">
             <view class="project-title">{{ order.projectInfo ? order.projectInfo.title : '设计项目' }}</view>
             <view class="project-desc">{{ order.projectInfo ? order.projectInfo.description : (order.remark || '暂无描述') }}</view>
@@ -126,11 +127,15 @@
             <text class="amount-label">订单金额：</text>
             <text class="amount-value">¥{{ order.totalAmount || 0 }}</text>
           </view>
-          <view class="order-actions">
+          <view class="order-actions" @click.stop>
             <!-- 状态0：待确认 -->
             <template v-if="order.status === 0">
               <button class="btn secondary" @click="cancelOrder(order.orderId)">
                 取消订单
+              </button>
+              <!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+              <button class="btn secondary" @click="goToFinishedOrderDetail(order)">
+                查看详情
               </button>
             </template>
             
@@ -144,11 +149,15 @@
                 <button class="btn primary" @click="uploadContract(order.orderId)">
                   上传合同
                 </button>
+                <!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+                <button class="btn secondary" @click="goToFinishedOrderDetail(order)">
+                  查看详情
+                </button>
               </template>
               
               <!-- 合同状态1：合同待确认 -->
               <template v-else-if="order.contractStatus === 1">
-                <button class="btn secondary" @click="viewContract(order)">
+                <button class="btn secondary" @click.stop="viewContract(order)">
                   查看合同
                 </button>
                 <button class="btn secondary" @click="cancelOrder(order.orderId)">
@@ -156,6 +165,10 @@
                 </button>
                 <button class="btn primary" @click="uploadContract(order.orderId, true)">
                   修改合同
+                </button>
+                <!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+                <button class="btn secondary" @click="goToFinishedOrderDetail(order)">
+                  查看详情
                 </button>
               </template>
               
@@ -166,47 +179,59 @@
                   <!-- 没有施工阶段：上传施工阶段 -->
                   <button v-if="!order.hasStages" 
                       class="btn primary" 
-                      @click="uploadConstructionStage(order.orderId)">
+                      @click.stop="uploadConstructionStage(order.orderId)">
                     上传施工阶段
                   </button>
                   
                   <!-- 有施工阶段且状态为0：修改施工阶段 -->
                   <button v-else-if="order.hasStages && order.stageStatus === 0" 
                       class="btn primary" 
-                      @click="modifyConstructionStage(order.orderId)">
+                      @click.stop="modifyConstructionStage(order.orderId)">
                     修改施工阶段
                   </button>
                   
                   <!-- 情况6：有施工阶段且不是所有阶段都待验收或已完成 -->
                   <button v-else-if="order.hasStages && !(order.allStagesCompleted && (order.allStagesStatus === 3 || order.allStagesStatus === 4))" 
                       class="btn primary" 
-                      @click="viewConstructionStage(order.orderId)">
+                      @click.stop="viewConstructionStage(order.orderId)">
                     施工阶段
                   </button>
                   
                   <!-- 所有阶段status=3：待验收 -->
                   <button v-else-if="order.allStagesCompleted && order.allStagesStatus === 3" 
                       class="btn primary waiting-inspection"
-                      @click="viewConstructionStage(order.orderId)">
+                      @click.stop="viewConstructionStage(order.orderId)">
                     待验收
                   </button>
                   
                   <!-- 所有阶段status=4且订单status=1：待付款 -->
                   <button v-else-if="order.allStagesCompleted && order.allStagesStatus === 4 && order.status === 1" 
                       class="btn primary waiting-payment"
-                      @click="handleWaitingPayment(order)">
+                      @click.stop="handleWaitingPayment(order)">
                     待付款
                   </button>
                   
-                  
+                  <!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+                  <button class="btn secondary" @click="goToFinishedOrderDetail(order)">
+                    查看详情
+                  </button>
                 </template>
               </template>
             </template>
             
             <!-- 状态2：已完成 -->
             <template v-else-if="order.status === 2">
+              <!-- 修改：查看详情按钮跳转到已完成订单详情 -->
               <button class="btn primary" @click="goToFinishedOrderDetail(order)">
-                订单详情
+                查看详情
+              </button>
+            </template>
+            
+            <!-- 状态3：已取消 -->
+            <template v-else-if="order.status === 3">
+              <!-- 修改：查看详情按钮跳转到已完成订单详情 -->
+              <button class="btn secondary" @click="goToFinishedOrderDetail(order)">
+                查看详情
               </button>
             </template>
           </view>
@@ -228,1091 +253,1187 @@
 </template>
 
 <script>
-  import { orderService } from '@/api/order.js'
-  import { projectService } from '@/api/project.js'
-  import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'
-  // 新增：导入施工阶段API
-  import { orderStageService } from '@/api/orderStage.js'
-  // 新增：导入对话辅助工具
-  import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
-  
-  export default {
-    data() {
-      return {
-        // 订单状态筛选
-        activeStatus: '',
-        loading: false,
-        refreshing: false,
-        hasMore: true,
-        
-        // 用户信息
-        userInfo: {
-          userId: null,
-          phone: '',
-          name: '',
-          avatar: '',
-          address: '',
-          role: '', // 用户角色：customer/designer/supervisor
-          roleName: '' // 角色名称
-        },
-        
-        // 分页参数
-        pagination: {
-          pageNum: 1,
-          pageSize: 10,
-          total: 0
-        },
-        
-        // 订单列表数据
-        orderList: [],
-        
-        // 订单状态数量统计
-        statusCount: {
-          '0': 0,
-          '1': 0,
-          '2': 0,
-          '3': 0
-        },
-        
-        // 修复：添加状态类映射表
-        statusClassMap: {
-          0: 'status-pending',
-          1: 'status-progress',
-          2: 'status-completed',
-          3: 'status-canceled'
-        },
-        
-        // 新增：状态文本映射表
-        statusTextMap: {
-          0: '待确认',
-          1: '进行中',
-          2: '已完成',
-          3: '已取消'
-        },
-        
-        // 新增：订单类型文本映射表
-        orderTypeTextMap: {
-          '0': '设计订单',
-          '1': '设计师订单',
-          '2': '监理订单'
-        }
-      }
-    },
-    computed: {
-      // 过滤后的订单列表 - 只显示contractorId与当前用户相同的订单
-      filteredOrders() {
-        // 首先过滤出contractorId与当前用户ID相同的订单
-        const myOrders = this.orderList.filter(order => {
-          const currentUserIdStr = String(this.userInfo.userId);
-          const contractorIdStr = String(order.contractorId);
-          
-          console.log('🔍 订单过滤比较:', {
-            orderId: order.orderId,
-            currentUserId: currentUserIdStr,
-            contractorId: contractorIdStr,
-            是否匹配: contractorIdStr === currentUserIdStr
-          });
-          
-          return contractorIdStr === currentUserIdStr;
-        });
-        
-        // 然后根据状态筛选
-        if (this.activeStatus === '') {
-          return myOrders;
-        }
-        
-        // 根据状态筛选订单
-        return myOrders.filter(order => {
-          return String(order.status) === this.activeStatus;
-        });
-      }
-    },
-    onLoad() {
-      console.log('🚀 监理师订单页面加载');
-      this.loadCurrentUserInfo();
-    },
-    onShow() {
-      console.log('🔄 监理师订单页面显示，刷新数据');
-      if (this.userInfo.userId) {
-        this.pagination.pageNum = 1;
-        this.loadOrderList();
-      }
-    },
-    methods: {
-      // 返回首页
-      goBack() {
-        console.log('🔙 返回首页');
-        uni.switchTab({
-          url: '/pages/index'
-        });
-      },
+import { orderService } from '@/api/order.js'
+import { projectService } from '@/api/project.js'
+import { getUserProfile, getCurrentRole, getUserById } from '@/api/users.js'
+// 新增：导入施工阶段API
+import { orderStageService } from '@/api/orderStage.js'
+// 新增：导入对话辅助工具
+import { createConversationAndNavigate, isUserLoggedIn, handleNotLoggedIn } from "@/utils/conversationHelper.js"
+// 关键：导入文档上传接口（与设计师页面相同）
+import { uploadDocument } from '@/api/join.js'
 
-      // 检查订单施工阶段状态
-      async checkConstructionStagesStatus(orderId) {
-        try {
-          console.log('🔍 检查施工阶段状态，订单ID:', orderId);
-          
-          const response = await orderStageService.list({ orderId: orderId });
-          console.log('📋 施工阶段查询结果:', response);
-          
-          let stages = [];
-          
-          // 解析施工阶段列表
-          if (response && response.code === 200) {
-            if (Array.isArray(response.data)) {
-              stages = response.data;
-            } else if (response.data && Array.isArray(response.data.records)) {
-              stages = response.data.records;
-            } else if (response.data && Array.isArray(response.data.list)) {
-              stages = response.data.list;
-            }
-          } else if (Array.isArray(response)) {
-            stages = response;
+export default {
+  data() {
+    return {
+      // 订单状态筛选
+      activeStatus: '',
+      loading: false,
+      refreshing: false,
+      hasMore: true,
+      
+      // 用户信息
+      userInfo: {
+        userId: null,
+        phone: '',
+        name: '',
+        avatar: '',
+        address: '',
+        role: '', // 用户角色：customer/designer/supervisor
+        roleName: '' // 角色名称
+      },
+      
+      // 分页参数
+      pagination: {
+        pageNum: 1,
+        pageSize: 10,
+        total: 0
+      },
+      
+      // 订单列表数据
+      orderList: [],
+      
+      // 订单状态数量统计
+      statusCount: {
+        '0': 0,
+        '1': 0,
+        '2': 0,
+        '3': 0
+      },
+      
+      // 状态类映射表
+      statusClassMap: {
+        0: 'status-pending',
+        1: 'status-progress',
+        2: 'status-completed',
+        3: 'status-canceled'
+      },
+      
+      // 状态文本映射表
+      statusTextMap: {
+        0: '待确认',
+        1: '进行中',
+        2: '已完成',
+        3: '已取消'
+      },
+      
+      // 订单类型文本映射表
+      orderTypeTextMap: {
+        '0': '设计订单',
+        '1': '设计师订单',
+        '2': '监理订单'
+      }
+    }
+  },
+  computed: {
+    // 过滤后的订单列表 - 只显示contractorId与当前用户相同的订单
+    filteredOrders() {
+      // 首先过滤出contractorId与当前用户ID相同的订单
+      const myOrders = this.orderList.filter(order => {
+        const currentUserIdStr = String(this.userInfo.userId);
+        const contractorIdStr = String(order.contractorId);
+        
+        console.log('🔍 订单过滤比较:', {
+          orderId: order.orderId,
+          currentUserId: currentUserIdStr,
+          contractorId: contractorIdStr,
+          是否匹配: contractorIdStr === currentUserIdStr
+        });
+        
+        return contractorIdStr === currentUserIdStr;
+      });
+      
+      // 然后根据状态筛选
+      if (this.activeStatus === '') {
+        return myOrders;
+      }
+      
+      // 根据状态筛选订单
+      return myOrders.filter(order => {
+        return String(order.status) === this.activeStatus;
+      });
+    }
+  },
+  onLoad() {
+    console.log('🚀 监理师订单页面加载');
+    this.loadCurrentUserInfo();
+  },
+  onShow() {
+    console.log('🔄 监理师订单页面显示，刷新数据');
+    if (this.userInfo.userId) {
+      this.pagination.pageNum = 1;
+      this.loadOrderList();
+    }
+  },
+  methods: {
+    // 返回首页
+    goBack() {
+      console.log('🔙 返回首页');
+      uni.switchTab({
+        url: '/pages/index'
+      });
+    },
+
+    // 检查订单施工阶段状态
+    async checkConstructionStagesStatus(orderId) {
+      try {
+        console.log('🔍 检查施工阶段状态，订单ID:', orderId);
+        
+        const response = await orderStageService.list({ orderId: orderId });
+        console.log('📋 施工阶段查询结果:', response);
+        
+        let stages = [];
+        
+        // 解析施工阶段列表
+        if (response && response.code === 200) {
+          if (Array.isArray(response.data)) {
+            stages = response.data;
+          } else if (response.data && Array.isArray(response.data.records)) {
+            stages = response.data.records;
+          } else if (response.data && Array.isArray(response.data.list)) {
+            stages = response.data.list;
           }
-          
-          console.log('📝 施工阶段列表:', stages);
-          
-          // 检查阶段状态：如果没有阶段或有阶段但都已完成
-          const hasActiveStages = stages.some(stage => {
-            const status = Number(stage.status) || 0;
-            return status >= 1 && status <= 3; // 状态1-3为活跃状态
-          });
-          
-          // 如果有阶段，获取第一个阶段的状态作为代表
-          const firstStageStatus = stages.length > 0 ? Number(stages[0].status) : null;
-          
-          // 检查所有阶段的状态
-          let allStagesCompleted = false;
-          let allStagesStatus = null;
-          
-          if (stages.length > 0) {
-            // 检查是否所有阶段的状态都相同
-            const uniqueStatuses = [...new Set(stages.map(stage => Number(stage.status) || 0))];
-            if (uniqueStatuses.length === 1) {
+        } else if (Array.isArray(response)) {
+          stages = response;
+        }
+        
+        console.log('📝 施工阶段列表:', stages);
+        
+        // 检查阶段状态：如果没有阶段或有阶段但都已完成
+        const hasActiveStages = stages.some(stage => {
+          const status = Number(stage.status) || 0;
+          return status >= 1 && status <= 3; // 状态1-3为活跃状态
+        });
+      
+        // 如果有阶段，获取第一个阶段的状态作为代表
+        const firstStageStatus = stages.length > 0 ? Number(stages[0].status) : null;
+        
+        // 检查所有阶段的状态
+        let allStagesCompleted = false;
+        let allStagesStatus = null;
+        
+        if (stages.length > 0) {
+          // 检查是否所有阶段的状态都相同
+          const uniqueStatuses = [...new Set(stages.map(stage => Number(stage.status) || 0))];
+          if (uniqueStatuses.length === 1) {
+            allStagesCompleted = true;
+            allStagesStatus = uniqueStatuses[0];
+          } else {
+            // 检查是否所有阶段都已完成（状态为4）
+            const allCompleted = stages.every(stage => (Number(stage.status) || 0) === 4);
+            if (allCompleted) {
               allStagesCompleted = true;
-              allStagesStatus = uniqueStatuses[0];
+              allStagesStatus = 4;
             } else {
-              // 检查是否所有阶段都已完成（状态为4）
-              const allCompleted = stages.every(stage => (Number(stage.status) || 0) === 4);
-              if (allCompleted) {
+              // 检查是否所有阶段都为待验收（状态为3）
+              const allWaitingInspection = stages.every(stage => (Number(stage.status) || 0) === 3);
+              if (allWaitingInspection) {
                 allStagesCompleted = true;
-                allStagesStatus = 4;
-              } else {
-                // 检查是否所有阶段都为待验收（状态为3）
-                const allWaitingInspection = stages.every(stage => (Number(stage.status) || 0) === 3);
-                if (allWaitingInspection) {
-                  allStagesCompleted = true;
-                  allStagesStatus = 3;
-                }
+                allStagesStatus = 3;
               }
             }
           }
-          
-          // 返回施工阶段状态信息
-          return {
-            hasStages: stages.length > 0,
-            stageStatus: firstStageStatus,
-            totalStages: stages.length,
-            hasActiveStages: hasActiveStages,
-            allStages: stages,
-            allStagesCompleted: allStagesCompleted,
-            allStagesStatus: allStagesStatus
-          };
-          
-        } catch (error) {
-          console.error('❌ 检查施工阶段状态失败:', error);
-          return {
-            hasStages: false,
-            stageStatus: null,
-            totalStages: 0,
-            hasActiveStages: false,
-            allStages: [],
-            allStagesCompleted: false,
-            allStagesStatus: null
-          };
         }
-      },
+        
+        // 返回施工阶段状态信息
+        return {
+          hasStages: stages.length > 0,
+          stageStatus: firstStageStatus,
+          totalStages: stages.length,
+          hasActiveStages: hasActiveStages,
+          allStages: stages,
+          allStagesCompleted: allStagesCompleted,
+          allStagesStatus: allStagesStatus
+        };
+        
+      } catch (error) {
+        console.error('❌ 检查施工阶段状态失败:', error);
+        return {
+          hasStages: false,
+          stageStatus: null,
+          totalStages: 0,
+          hasActiveStages: false,
+          allStages: [],
+          allStagesCompleted: false,
+          allStagesStatus: null
+        };
+      }
+    },
 
-      // 上传施工阶段
-      async uploadConstructionStage(orderId) {
-        try {
-          console.log('📤 上传施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
-          
-          // 跳转到design-update页面
-          uni.navigateTo({
-            url: `/pages/order-hall/design-update?orderId=${orderId}&userId=${this.userInfo.userId}`
-          });
-          
-        } catch (error) {
-          console.error('❌ 跳转上传施工阶段页面失败:', error);
-          this.handleApiError(error, '跳转失败');
-        }
-      },
-
-      // 修改施工阶段
-      async modifyConstructionStage(orderId) {
-        try {
-          console.log('✏️ 修改施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
-          
-          // 跳转到design-gx页面（修改施工阶段）
-          uni.navigateTo({
-            url: `/pages/order-hall/design-gx?orderId=${orderId}&userId=${this.userInfo.userId}`
-          });
-          
-        } catch (error) {
-          console.error('❌ 跳转修改施工阶段页面失败:', error);
-          this.handleApiError(error, '跳转失败');
-        }
-      },
-
-      // 查看施工阶段 - 修改为跳转到designorder-work页面
-      async viewConstructionStage(orderId) {
-        try {
-          console.log('👀 查看施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
-          
-          // 关键修改：监理订单跳转到designorder-work页面
-          uni.navigateTo({
-            url: `/pages/order-hall/designorder-work?orderId=${orderId}&userId=${this.userInfo.userId}`
-          });
-          
-        } catch (error) {
-          console.error('❌ 跳转施工阶段页面失败:', error);
-          this.handleApiError(error, '跳转失败');
-        }
-      },
-
-      // 跳转到已完成订单详情
-      goToFinishedOrderDetail(order) {
-        try {
-          console.log('📋 跳转到已完成订单详情，订单ID:', order.orderId, '用户ID:', this.userInfo.userId, '订单类型:', order.type);
-          
-          uni.navigateTo({
-            url: `/pages/finishedorder-detail/finishedorder-detail?orderId=${order.orderId}&userId=${this.userInfo.userId}&orderType=${order.type}`
-          });
-          
-        } catch (error) {
-          console.error('❌ 跳转已完成订单详情失败:', error);
-          this.handleApiError(error, '跳转失败');
-        }
-      },
-
-      // 处理待付款订单
-      handleWaitingPayment(order) {
-        console.log('💰 待付款订单，订单ID:', order.orderId);
-        uni.showToast({
-          title: '等待客户付款',
-          icon: 'none',
-          duration: 2000
+    // 上传施工阶段
+    async uploadConstructionStage(orderId) {
+      try {
+        console.log('📤 上传施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+        
+        // 跳转到design-update页面
+        uni.navigateTo({
+          url: `/pages/order-hall/design-update?orderId=${orderId}&userId=${this.userInfo.userId}`
         });
         
-        // 可以跳转到订单详情页面查看付款状态
-        this.viewOrderDetail(order.orderId);
-      },
+      } catch (error) {
+        console.error('❌ 跳转上传施工阶段页面失败:', error);
+        this.handleApiError(error, '跳转失败');
+      }
+    },
 
-      // 查看订单详情（根据订单状态跳转不同页面）
-      viewOrderDetail(orderId) {
-        const order = this.orderList.find(item => item.orderId === orderId);
-        if (!order) {
+    // 修改施工阶段
+    async modifyConstructionStage(orderId) {
+      try {
+        console.log('✏️ 修改施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+        
+        // 跳转到design-gx页面（修改施工阶段）
+        uni.navigateTo({
+          url: `/pages/order-hall/design-gx?orderId=${orderId}&userId=${this.userInfo.userId}`
+        });
+        
+      } catch (error) {
+        console.error('❌ 跳转修改施工阶段页面失败:', error);
+        this.handleApiError(error, '跳转失败');
+      }
+    },
+
+    // 查看施工阶段 - 修改为跳转到designorder-work页面
+    async viewConstructionStage(orderId) {
+      try {
+        console.log('👀 查看施工阶段，订单ID:', orderId, '用户ID:', this.userInfo.userId);
+        
+        // 关键修改：监理订单跳转到designorder-work页面
+        uni.navigateTo({
+          url: `/pages/order-hall/designorder-work?orderId=${orderId}&userId=${this.userInfo.userId}`
+        });
+        
+      } catch (error) {
+        console.error('❌ 跳转施工阶段页面失败:', error);
+        this.handleApiError(error, '跳转失败');
+      }
+    },
+
+    // 跳转到已完成订单详情
+    goToFinishedOrderDetail(order) {
+      try {
+        console.log('📋 跳转到已完成订单详情，订单ID:', order.orderId, '用户ID:', this.userInfo.userId, '订单类型:', order.type);
+        
+        uni.navigateTo({
+          url: `/pages/finishedorder-detail/finishedorder-detail?orderId=${order.orderId}&userId=${this.userInfo.userId}&orderType=${order.type}`
+        });
+        
+      } catch (error) {
+        console.error('❌ 跳转已完成订单详情失败:', error);
+        this.handleApiError(error, '跳转失败');
+      }
+    },
+
+    // 处理待付款订单
+    handleWaitingPayment(order) {
+      console.log('💰 待付款订单，订单ID:', order.orderId);
+      uni.showToast({
+        title: '等待客户付款',
+        icon: 'none',
+        duration: 2000
+      });
+      
+      // 可以跳转到订单详情页面查看付款状态
+      this.goToFinishedOrderDetail(order);
+    },
+
+    // 统一的错误处理方法
+    handleApiError(error, defaultMessage = '操作失败') {
+      console.error('API Error:', error);
+      
+      let message = defaultMessage;
+      if (error && error.errMsg) {
+        message = error.errMsg;
+      } else if (error && error.message) {
+        message = error.message;
+      } else if (typeof error === 'string') {
+        message = error;
+      }
+      
+      uni.showToast({
+        title: message,
+        icon: 'none',
+        duration: 3000
+      });
+      
+      return message;
+    },
+
+    // 加载当前用户信息
+    async loadCurrentUserInfo() {
+      try {
+        console.log('👤 开始获取当前用户信息（使用 getUserProfile）...');
+        
+        // 同时获取用户基本信息和角色信息
+        const [userRes, roleRes] = await Promise.all([
+          getUserProfile(),
+          getCurrentRole()
+        ]);
+        
+        if (userRes.code === 200) {
+          this.userInfo = userRes.data;
+          
+          // 添加角色信息
+          if (roleRes.code === 200 && roleRes.data) {
+            this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'supervisor';
+            this.userInfo.roleName = roleRes.data.roleName || '监理师';
+          } else {
+            this.userInfo.role = 'supervisor'; // 默认角色为监理师
+            this.userInfo.roleName = '监理师';
+          }
+          
+          console.log('👤 当前用户信息加载完成:', {
+            userId: this.userInfo.userId,
+            name: this.userInfo.name,
+            role: this.userInfo.role,
+            roleName: this.userInfo.roleName
+          });
+          
+          // 确保用户信息存储到缓存
+          this.ensureUserInfoInStorage();
+          
+          this.loadOrderList();
+        } else {
+          console.error('获取当前用户信息失败:', userRes.msg);
+          this.handleApiError(userRes.msg, '获取用户信息失败');
+        }
+      } catch (error) {
+        console.error('❌ 获取当前用户信息失败:', error);
+        this.handleApiError(error, '获取用户信息失败');
+      }
+    },
+    
+    // 确保用户信息存储到缓存
+    ensureUserInfoInStorage() {
+      try {
+        // 如果用户信息存在，存储到缓存
+        if (this.userInfo && this.userInfo.userId) {
+          // 存储完整用户信息
+          uni.setStorageSync('userInfo', this.userInfo);
+          
+          // 单独存储用户ID（确保是字符串）
+          if (this.userInfo.userId) {
+            const userIdStr = String(this.userInfo.userId);
+            uni.setStorageSync('userId', userIdStr);
+            console.log('✅ 存储用户ID到缓存:', userIdStr);
+          }
+          
+          // 存储到全局数据
+          if (getApp().globalData) {
+            getApp().globalData.userInfo = this.userInfo;
+          }
+          
+          console.log('✅ 用户信息已更新到缓存:', {
+            userId: this.userInfo.userId,
+            name: this.userInfo.name
+          });
+          
+          return true;
+        }
+        
+        // 检查缓存是否存在
+        const cachedUserInfo = uni.getStorageSync('userInfo');
+        const cachedUserId = uni.getStorageSync('userId');
+        
+        if (!cachedUserInfo || !cachedUserId) {
+          console.warn('⚠️ 缓存中用户信息不完整');
+          return false;
+        }
+        
+        return true;
+        
+      } catch (storageError) {
+        console.error('❌ 存储用户信息失败:', storageError);
+        return false;
+      }
+    },
+    
+    // 加载订单列表 - 使用 getOrderListByContractorId 方法
+    async loadOrderList() {
+      if (this.loading || !this.userInfo.userId) return
+      
+      try {
+        this.loading = true
+        
+        const queryParams = {
+          pageNum: this.pagination.pageNum,
+          pageSize: this.pagination.pageSize,
+          type: '2'  // 关键修改：指定获取监理订单
+        }
+        
+        if (this.activeStatus !== '') {
+          queryParams.status = this.activeStatus
+        }
+        
+        console.log('📋 加载监理师订单列表 - 监理师ID:', this.userInfo.userId, '查询参数:', queryParams)
+        
+        // 使用 getOrderListByContractorId 方法，将当前用户ID作为 contractorId
+        const result = await orderService.getOrderListByContractorId(
+          this.userInfo.userId,  // contractorId 参数
+          queryParams            // 其他查询参数
+        )
+        
+        console.log('✅ 监理师订单列表响应:', result)
+        
+        let list = []
+        let total = 0
+        
+        if (Array.isArray(result)) {
+          list = result
+          total = result.length
+        } else if (result && result.records) {
+          list = result.records
+          total = result.total
+        } else if (result && result.list) {
+          list = result.list
+          total = result.total
+        } else if (result && result.data) {
+          list = result.data.records || result.data.list || []
+          total = result.data.total || 0
+        }
+        
+        console.log('🔄 开始获取订单对应的详细信息...')
+        const ordersWithDetails = []
+        for (const order of list) {
+          let projectInfo = {}
+          let publisherInfo = {}
+          
+          if (order.projectId) {
+            try {
+              projectInfo = await this.getProjectDetail(order.projectId) || {}
+            } catch (error) {
+              console.error(`获取订单 ${order.orderId} 的项目详情失败:`, error)
+            }
+          }
+          
+          if (order.userId) {
+            try {
+              // 使用 getUserById 方法获取其他用户信息
+              publisherInfo = await this.getUserInfoById(order.userId) || {}
+            } catch (error) {
+              console.error(`获取订单 ${order.orderId} 的发布人信息失败:`, error)
+            }
+          }
+          
+          const orderWithDetails = {
+            ...order,
+            projectInfo,
+            publisherInfo,
+            // 新增施工阶段状态字段
+            hasStages: false,
+            stageStatus: null,
+            allStagesCompleted: false,
+            allStagesStatus: null
+          }
+          
+          // 只有合同已确认的订单才需要检查施工阶段状态
+          if (order.contractStatus === 2) {
+            const stagesStatus = await this.checkConstructionStagesStatus(order.orderId);
+            orderWithDetails.hasStages = stagesStatus.hasStages;
+            orderWithDetails.stageStatus = stagesStatus.stageStatus;
+            orderWithDetails.allStagesCompleted = stagesStatus.allStagesCompleted;
+            orderWithDetails.allStagesStatus = stagesStatus.allStagesStatus;
+            
+            console.log(`🏗️ 订单 ${order.orderId} 施工阶段状态:`, {
+              是否有阶段: stagesStatus.hasStages,
+              阶段状态: stagesStatus.stageStatus,
+              所有阶段完成状态: stagesStatus.allStagesCompleted,
+              所有阶段状态: stagesStatus.allStagesStatus,
+              总阶段数: stagesStatus.totalStages,
+              有活跃阶段: stagesStatus.hasActiveStages
+            });
+          }
+          
+          ordersWithDetails.push(orderWithDetails)
+        }
+        console.log('✅ 监理师订单数据整合完成:', ordersWithDetails)
+        
+        if (this.pagination.pageNum === 1) {
+          this.orderList = ordersWithDetails
+        } else {
+          this.orderList = [...this.orderList, ...ordersWithDetails]
+        }
+        
+        this.pagination.total = total
+        this.hasMore = this.orderList.length < total
+        
+        this.updateStatusCount()
+        
+      } catch (error) {
+        console.error('❌ 加载订单列表失败:', error)
+        this.handleApiError(error, '加载订单列表失败')
+      } finally {
+        this.loading = false
+        this.refreshing = false
+      }
+    },
+    
+    // 获取其他用户信息的方法 - 只能使用 getUserById(userId)
+    async getUserInfoById(userId) {
+      if (!userId) {
+        console.warn('用户ID为空');
+        return {
+          name: '',
+          phone: '',
+          avatar: '/static/images/default-avatar.png',
+          role: ''
+        };
+      }
+      
+      try {
+        console.log('👤 使用 getUserById 获取用户信息，用户ID:', userId);
+        
+        const result = await getUserById(userId);
+        console.log('✅ getUserById 原始结果:', result);
+        
+        // 解析API响应
+        let userData = null;
+        
+        if (result && typeof result === 'object') {
+          if (result.code === 200) {
+            userData = result.data || {};
+          }
+          else if (!result.code && (result.name || result.phone || result.avatar)) {
+            userData = result;
+          }
+          else if (result.data) {
+            userData = result.data;
+          }
+        }
+        
+        if (!userData) {
+          console.warn('⚠️ 无法从响应中解析用户数据，使用默认值');
+          userData = {};
+        }
+        
+        console.log('✅ 解析后的用户数据:', userData);
+        
+        return {
+          name: userData.nickName || userData.name || userData.nickname || userData.username || '',
+          phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '',
+          avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png',
+          role: userData.role || userData.userType || ''
+        };
+        
+      } catch (error) {
+        console.error('❌ 使用 getUserById 获取用户信息失败:', error);
+        return {
+          name: '',
+          phone: '',
+          avatar: '/static/images/default-avatar.png',
+          role: ''
+        };
+      }
+    },
+    
+    // 查看合同 - 修改为预览PDF
+    async viewContract(order) {
+      try {
+        console.log('📄 查看合同，订单ID:', order.orderId);
+        console.log('📄 合同URL:', order.contractUrl);
+        
+        if (order.contractUrl) {
+          // 显示加载提示
+          uni.showLoading({
+            title: '加载合同中...',
+            mask: true
+          });
+          
+          try {
+            // 下载PDF文件
+            uni.downloadFile({
+              url: order.contractUrl,
+              header: {
+                'Content-Type': 'application/octet-stream'
+              },
+              success: (res) => {
+                uni.hideLoading();
+                console.log('✅ 合同文件下载成功:', res);
+                
+                if (res.statusCode === 200) {
+                  // 打开PDF文档预览
+                  uni.openDocument({
+                    filePath: res.tempFilePath,
+                    fileType: 'pdf',
+                    showMenu: true, // 显示菜单，用户可以保存
+                    success: () => {
+                      console.log('✅ PDF合同预览成功');
+                    },
+                    fail: (error) => {
+                      console.error('❌ PDF合同打开失败:', error);
+                      
+                      // 如果打开失败，尝试使用图片预览（兼容旧格式）
+                      uni.previewImage({
+                        urls: [order.contractUrl],
+                        current: order.contractUrl,
+                        fail: (imgError) => {
+                          this.handleApiError(imgError, '合同预览失败');
+                        }
+                      });
+                    }
+                  });
+                } else {
+                  throw new Error(`下载失败，状态码: ${res.statusCode}`);
+                }
+              },
+              fail: (error) => {
+                uni.hideLoading();
+                console.error('❌ 合同文件下载失败:', error);
+                
+                // 如果下载失败，尝试直接预览（可能是图片格式）
+                uni.previewImage({
+                  urls: [order.contractUrl],
+                  current: order.contractUrl,
+                  fail: (previewError) => {
+                    this.handleApiError(previewError, '合同预览失败');
+                  }
+                });
+              }
+            });
+          } catch (downloadError) {
+            uni.hideLoading();
+            console.error('❌ 合同预览异常:', downloadError);
+            this.handleApiError(downloadError, '合同预览失败');
+          }
+        } else {
           uni.showToast({
-            title: '订单信息不存在',
+            title: '合同文件不存在',
+            icon: 'none'
+          });
+        }
+      } catch (error) {
+        console.error('❌ 查看合同失败:', error);
+        this.handleApiError(error, '查看合同失败');
+      }
+    },
+
+    // 🆕 监理师上传/修改合同 - 使用已验证的PDF上传方法（与设计师页面相同）
+    async uploadContract(orderId, isModify = false) {
+      try {
+        console.log(`📄 开始${isModify ? '修改' : '上传'}合同文件，订单ID:`, orderId);
+        
+        // 调用选择文件方法
+        const fileInfo = await this.chooseContractFile();
+        if (!fileInfo) {
+          console.log('❌ 用户取消选择文件');
+          return;
+        }
+
+        console.log('📄 选择的文件信息:', fileInfo);
+
+        // 验证文件类型为PDF
+        if (fileInfo.fileExt.toLowerCase() !== 'pdf') {
+          uni.showToast({
+            title: '合同文件必须为PDF格式',
             icon: 'none'
           });
           return;
         }
-        
-        console.log('📋 查看订单详情，订单ID:', orderId, '订单类型:', order.type, '订单状态:', order.status);
-        
-        // 订单状态为2（已完成）：跳转到已完成订单详情页面
-        if (order.status === 2) {
-          console.log('✅ 订单已完成，跳转到已完成订单详情页面');
-          this.goToFinishedOrderDetail(order);
-        } else {
-          // 其他状态订单：跳转到设计师订单详情页面
-          console.log('🎨 订单进行中，跳转到设计师订单详情页面');
-          uni.navigateTo({
-            url: `/pages/order-hall/order-detail?id=${orderId}`
-          });
-        }
-      },
 
-      // 统一的错误处理方法
-      handleApiError(error, defaultMessage = '操作失败') {
-        console.error('API Error:', error);
-        
-        let message = defaultMessage;
-        if (error && error.errMsg) {
-          message = error.errMsg;
-        } else if (error && error.message) {
-          message = error.message;
-        } else if (typeof error === 'string') {
-          message = error;
-        }
-        
-        uni.showToast({
-          title: message,
-          icon: 'none',
-          duration: 3000
-        });
-        
-        return message;
-      },
-
-      // 加载当前用户信息 - 使用原来的 getUserProfile() 方法
-      async loadCurrentUserInfo() {
-        try {
-          console.log('👤 开始获取当前用户信息（使用 getUserProfile）...');
-          
-          // 同时获取用户基本信息和角色信息
-          const [userRes, roleRes] = await Promise.all([
-            getUserProfile(),
-            getCurrentRole()
-          ]);
-          
-          if (userRes.code === 200) {
-            this.userInfo = userRes.data;
-            
-            // 添加角色信息
-            if (roleRes.code === 200 && roleRes.data) {
-              this.userInfo.role = roleRes.data.role || roleRes.data.roleType || 'supervisor';
-              this.userInfo.roleName = roleRes.data.roleName || '监理师';
-            } else {
-              this.userInfo.role = 'supervisor'; // 默认角色为监理师
-              this.userInfo.roleName = '监理师';
-            }
-            
-            console.log('👤 当前用户信息加载完成:', {
-              userId: this.userInfo.userId,
-              name: this.userInfo.name,
-              role: this.userInfo.role,
-              roleName: this.userInfo.roleName
-            });
-            
-            // 确保用户信息存储到缓存
-            this.ensureUserInfoInStorage();
-            
-            this.loadOrderList();
-          } else {
-            console.error('获取当前用户信息失败:', userRes.msg);
-            this.handleApiError(userRes.msg, '获取用户信息失败');
-          }
-        } catch (error) {
-          console.error('❌ 获取当前用户信息失败:', error);
-          this.handleApiError(error, '获取用户信息失败');
-        }
-      },
-      
-      // 确保用户信息存储到缓存
-      ensureUserInfoInStorage() {
-        try {
-          // 如果用户信息存在，存储到缓存
-          if (this.userInfo && this.userInfo.userId) {
-            // 存储完整用户信息
-            uni.setStorageSync('userInfo', this.userInfo);
-            
-            // 单独存储用户ID（确保是字符串）
-            if (this.userInfo.userId) {
-              const userIdStr = String(this.userInfo.userId);
-              uni.setStorageSync('userId', userIdStr);
-              console.log('✅ 存储用户ID到缓存:', userIdStr);
-            }
-            
-            // 存储到全局数据
-            if (getApp().globalData) {
-              getApp().globalData.userInfo = this.userInfo;
-            }
-            
-            console.log('✅ 用户信息已更新到缓存:', {
-              userId: this.userInfo.userId,
-              name: this.userInfo.name
-            });
-            
-            return true;
-          }
-          
-          // 检查缓存是否存在
-          const cachedUserInfo = uni.getStorageSync('userInfo');
-          const cachedUserId = uni.getStorageSync('userId');
-          
-          if (!cachedUserInfo || !cachedUserId) {
-            console.warn('⚠️ 缓存中用户信息不完整');
-            return false;
-          }
-          
-          return true;
-          
-        } catch (storageError) {
-          console.error('❌ 存储用户信息失败:', storageError);
-          return false;
-        }
-      },
-      
-      // 加载订单列表 - 关键修改：使用 getOrderListByContractorId 方法
-      async loadOrderList() {
-        if (this.loading || !this.userInfo.userId) return
-        
-        try {
-          this.loading = true
-          
-          const queryParams = {
-            pageNum: this.pagination.pageNum,
-            pageSize: this.pagination.pageSize,
-            type: '2'  // 关键修改：指定获取监理订单
-          }
-          
-          if (this.activeStatus !== '') {
-            queryParams.status = this.activeStatus
-          }
-          
-          console.log('📋 加载监理师订单列表 - 监理师ID:', this.userInfo.userId, '查询参数:', queryParams)
-          
-          // 关键修改：使用 getOrderListByContractorId 方法，将当前用户ID作为 contractorId
-          const result = await orderService.getOrderListByContractorId(
-            this.userInfo.userId,  // contractorId 参数
-            queryParams            // 其他查询参数
-          )
-          
-          console.log('✅ 监理师订单列表响应:', result)
-          
-          let list = []
-          let total = 0
-          
-          if (Array.isArray(result)) {
-            list = result
-            total = result.length
-          } else if (result && result.records) {
-            list = result.records
-            total = result.total
-          } else if (result && result.list) {
-            list = result.list
-            total = result.total
-          } else if (result && result.data) {
-            list = result.data.records || result.data.list || []
-            total = result.data.total || 0
-          }
-          
-          console.log('🔄 开始获取订单对应的详细信息...')
-          const ordersWithDetails = []
-          for (const order of list) {
-            let projectInfo = {}
-            let publisherInfo = {}
-            
-            if (order.projectId) {
-              try {
-                projectInfo = await this.getProjectDetail(order.projectId) || {}
-              } catch (error) {
-                console.error(`获取订单 ${order.orderId} 的项目详情失败:`, error)
-              }
-            }
-            
-            if (order.userId) {
-              try {
-                // 使用 getUserById 方法获取其他用户信息
-                publisherInfo = await this.getUserInfoById(order.userId) || {}
-              } catch (error) {
-                console.error(`获取订单 ${order.orderId} 的发布人信息失败:`, error)
-              }
-            }
-            
-            const orderWithDetails = {
-              ...order,
-              projectInfo,
-              publisherInfo,
-              // 新增施工阶段状态字段
-              hasStages: false,
-              stageStatus: null,
-              allStagesCompleted: false,
-              allStagesStatus: null
-            }
-            
-            // 只有合同已确认的订单才需要检查施工阶段状态
-            if (order.contractStatus === 2) {
-              const stagesStatus = await this.checkConstructionStagesStatus(order.orderId);
-              orderWithDetails.hasStages = stagesStatus.hasStages;
-              orderWithDetails.stageStatus = stagesStatus.stageStatus;
-              orderWithDetails.allStagesCompleted = stagesStatus.allStagesCompleted;
-              orderWithDetails.allStagesStatus = stagesStatus.allStagesStatus;
-              
-              console.log(`🏗️ 订单 ${order.orderId} 施工阶段状态:`, {
-                是否有阶段: stagesStatus.hasStages,
-                阶段状态: stagesStatus.stageStatus,
-                所有阶段完成状态: stagesStatus.allStagesCompleted,
-                所有阶段状态: stagesStatus.allStagesStatus,
-                总阶段数: stagesStatus.totalStages,
-                有活跃阶段: stagesStatus.hasActiveStages
-              });
-            }
-            
-            ordersWithDetails.push(orderWithDetails)
-          }
-          console.log('✅ 监理师订单数据整合完成:', ordersWithDetails)
-          
-          if (this.pagination.pageNum === 1) {
-            this.orderList = ordersWithDetails
-          } else {
-            this.orderList = [...this.orderList, ...ordersWithDetails]
-          }
-          
-          this.pagination.total = total
-          this.hasMore = this.orderList.length < total
-          
-          this.updateStatusCount()
-          
-        } catch (error) {
-          console.error('❌ 加载订单列表失败:', error)
-          this.handleApiError(error, '加载订单列表失败')
-        } finally {
-          this.loading = false
-          this.refreshing = false
-        }
-      },
-      
-      // 获取其他用户信息的方法 - 只能使用 getUserById(userId)
-      async getUserInfoById(userId) {
-        if (!userId) {
-          console.warn('用户ID为空');
-          return {
-            name: '',
-            phone: '',
-            avatar: '/static/images/default-avatar.png',
-            role: ''
-          };
-        }
-        
-        try {
-          console.log('👤 使用 getUserById 获取用户信息，用户ID:', userId);
-          
-          const result = await getUserById(userId);
-          console.log('✅ getUserById 原始结果:', result);
-          
-          // 解析API响应
-          let userData = null;
-          
-          if (result && typeof result === 'object') {
-            if (result.code === 200) {
-              userData = result.data || {};
-            }
-            else if (!result.code && (result.name || result.phone || result.avatar)) {
-              userData = result;
-            }
-            else if (result.data) {
-              userData = result.data;
-            }
-          }
-          
-          if (!userData) {
-            console.warn('⚠️ 无法从响应中解析用户数据，使用默认值');
-            userData = {};
-          }
-          
-          console.log('✅ 解析后的用户数据:', userData);
-          
-          return {
-            name: userData.nickName || userData.name || userData.nickname || userData.username || '',
-            phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '',
-            avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png',
-            role: userData.role || userData.userType || ''
-          };
-          
-        } catch (error) {
-          console.error('❌ 使用 getUserById 获取用户信息失败:', error);
-          return {
-            name: '',
-            phone: '',
-            avatar: '/static/images/default-avatar.png',
-            role: ''
-          };
-        }
-      },
-      
-      // 查看合同
-      async viewContract(order) {
-        try {
-          console.log('📄 查看合同，订单ID:', order.orderId);
-          console.log('📄 合同URL:', order.contractUrl);
-          
-          if (order.contractUrl) {
-            uni.previewImage({
-              urls: [order.contractUrl],
-              current: order.contractUrl,
-              success: () => {
-                console.log('✅ 合同预览成功');
-              },
-              fail: (error) => {
-                console.error('❌ 合同预览失败:', error);
-                this.handleApiError(error, '合同预览失败');
-              }
-            });
-          } else {
-            uni.showToast({
-              title: '合同文件不存在',
-              icon: 'none'
-            });
-          }
-        } catch (error) {
-          console.error('❌ 查看合同失败:', error);
-          this.handleApiError(error, '查看合同失败');
-        }
-      },
-
-      // 监理师上传/修改合同图片
-      async uploadContract(orderId, isModify = false) {
-        try {
-          console.log(`📄 开始${isModify ? '修改' : '上传'}合同图片，订单ID:`, orderId);
-          
-          const imageRes = await this.chooseContractImage();
-          if (!imageRes.tempFilePaths || imageRes.tempFilePaths.length === 0) {
-            console.log('❌ 用户取消选择图片');
-            return;
-          }
-
-          const imagePath = imageRes.tempFilePaths[0];
-          const imageFile = imageRes.tempFiles[0];
-
-          console.log('🖼️ 选择的图片信息:', {
-            path: imagePath,
-            size: imageFile.size,
-            type: imageFile.type,
-            name: imageFile.name
-          });
-
-          const maxSize = 10 * 1024 * 1024;
-          if (imageFile.size > maxSize) {
-            uni.showToast({
-              title: '图片大小不能超过10MB',
-              icon: 'none'
-            });
-            return;
-          }
-
-          uni.showLoading({ 
-            title: `${isModify ? '修改' : '上传'}合同中...`,
-            mask: true
-          });
-
-          const uploadResult = await this.uploadContractImageDirect(orderId, imagePath);
-          
-          if (uploadResult && uploadResult.code === 200) {
-            console.log(`✅ 合同图片${isModify ? '修改' : '上传'}成功:`, uploadResult);
-            
-            const contractUrl = uploadResult.data?.url || uploadResult.data?.fileUrl;
-            console.log('📸 合同图片URL:', contractUrl);
-            
-            if (contractUrl) {
-              uni.showLoading({ title: '更新合同信息...' });
-              
-              try {
-                const updateResult = await orderService.updateContractUrlAndContractStatus(
-                  orderId, 
-                  contractUrl, 
-                  1
-                );
-                
-                console.log('✅ 合同URL和状态更新成功:', updateResult);
-                
-                uni.hideLoading();
-                
-                uni.showToast({
-                  title: `合同${isModify ? '修改' : '上传'}成功`,
-                  icon: 'success',
-                  duration: 2000
-                });
-                
-                this.pagination.pageNum = 1;
-                this.loadOrderList();
-                
-              } catch (updateError) {
-                uni.hideLoading();
-                console.error('❌ 更新合同URL和状态失败:', updateError);
-                this.handleApiError(updateError, '更新合同信息失败');
-              }
-            } else {
-              throw new Error('未获取到合同图片URL');
-            }
-            
-          } else {
-            throw new Error(uploadResult?.msg || `${isModify ? '修改' : '上传'}失败`);
-          }
-          
-        } catch (error) {
-          uni.hideLoading();
-          console.error(`❌ 合同${isModify ? '修改' : '上传'}失败:`, error);
-          this.handleApiError(error, `${isModify ? '修改' : '上传'}失败`);
-        }
-      },
-
-      // 选择合同图片
-      chooseContractImage() {
-        return new Promise((resolve, reject) => {
-          uni.chooseImage({
-            count: 1,
-            sizeType: ['compressed', 'original'],
-            sourceType: ['album', 'camera'],
-            success: (res) => {
-              console.log('🖼️ 选择的合同图片:', res);
-              resolve(res);
-            },
-            fail: (error) => {
-              console.error('❌ 选择图片失败:', error);
-              reject(new Error('选择图片失败: ' + error.errMsg));
-            }
-          });
-        });
-      },
-
-      // 上传合同图片
-      async uploadContractImageDirect(orderId, filePath) {
-        return new Promise((resolve, reject) => {
-          const token = uni.getStorageSync('token');
-          if (!token) {
-            reject(new Error('用户未登录'));
-            return;
-          }
-
-          const formData = {
-            relatedType: 9,
-            relatedId: orderId,
-            description: '订单合同图片',
-            stage: 'CONTRACT',
-            sequence: 0
-          };
-
-          console.log('📤 上传合同图片到8081端口:', { 
-            orderId, 
-            filePath, 
-            formData,
-            baseURL: 'http://localhost:8081'
-          });
-
-          const uploadTask = uni.uploadFile({
-            url: 'http://localhost:8081/api/media/upload',
-            filePath: filePath,
-            name: 'file',
-            formData: formData,
-            header: {
-              'Authorization': 'Bearer ' + token,
-            },
-            success: (res) => {
-              console.log('📡 上传响应状态码:', res.statusCode);
-              console.log('📡 上传响应数据:', res.data);
-              
-              if (res.statusCode === 200) {
-                try {
-                  const data = JSON.parse(res.data);
-                  console.log('📡 解析后的响应:', data);
-                  if (data.code === 200) {
-                    resolve(data);
-                  } else {
-                    reject(new Error(data.msg || '上传失败'));
-                  }
-                } catch (e) {
-                  console.error('❌ JSON解析错误:', e, '原始响应:', res.data);
-                  reject(new Error('服务器响应格式错误'));
-                }
-              } else {
-                reject(new Error(`上传失败，状态码: ${res.statusCode}`));
-              }
-            },
-            fail: (error) => {
-              console.error('❌ 上传请求失败:', error);
-              reject(new Error('网络请求失败: ' + error.errMsg));
-            }
-          });
-
-          uploadTask.onProgressUpdate((res) => {
-            console.log('📊 上传进度:', res.progress + '%');
-            if (res.progress < 100) {
-              uni.showLoading({
-                title: `上传中 ${res.progress}%`,
-                mask: true
-              });
-            } else {
-              uni.hideLoading();
-            }
-          });
-        });
-      },
-      
-      // 切换订单状态
-      changeStatus(status) {
-        this.activeStatus = status
-        this.pagination.pageNum = 1
-        this.hasMore = true
-        this.orderList = []
-        this.loadOrderList()
-      },
-      
-      // 格式化时间
-      formatTime(timeStr) {
-        if (!timeStr) return ''
-        if (typeof timeStr === 'number') {
-          const date = new Date(timeStr)
-          return date.toLocaleDateString()
-        }
-        return timeStr.split(' ')[0]
-      },
-      
-      // 格式化日期
-      formatDate(dateStr) {
-        if (!dateStr) return ''
-        if (dateStr.includes('T')) {
-          return dateStr.split('T')[0]
-        }
-        return dateStr.split(' ')[0]
-      },
-      
-      // 根据项目ID获取项目详情
-      async getProjectDetail(projectId) {
-        if (!projectId) {
-          console.warn('项目ID为空')
-          return null
-        }
-        
-        try {
-          console.log('📋 获取项目详情，项目ID:', projectId)
-          const projectDetail = await projectService.getProjectDetail(projectId)
-          console.log('✅ 项目详情获取成功:', projectDetail)
-          return projectDetail
-        } catch (error) {
-          console.error('❌ 获取项目详情失败:', error)
-          return null
-        }
-      },
-      
-      // 更新状态统计（只统计contractorId与当前用户相同的订单）
-      updateStatusCount() {
-        // 重置统计
-        this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0 }
-        
-        // 只统计contractorId与当前用户ID相同的订单
-        const currentUserIdStr = String(this.userInfo.userId);
-        const myOrders = this.orderList.filter(order => {
-          const contractorIdStr = String(order.contractorId);
-          return contractorIdStr === currentUserIdStr;
-        });
-        
-        myOrders.forEach(order => {
-          const status = order.status.toString()
-          if (this.statusCount[status] !== undefined) {
-            this.statusCount[status]++
-          }
-        })
-        
-        console.log('📊 监理师订单状态统计（我的订单）:', this.statusCount)
-      },
-      
-      // 加载更多
-      loadMore() {
-        if (this.loading || !this.hasMore) return
-        this.pagination.pageNum++
-        this.loadOrderList()
-      },
-      
-      // 下拉刷新
-      onRefresh() {
-        if (this.refreshing) return
-        this.refreshing = true
-        this.pagination.pageNum = 1
-        this.hasMore = true
-        this.loadOrderList()
-      },
-      
-      // 联系订单相关方（监理师 -> 客户）- 完善版
-      async contactOrderParty(order) {
-        console.log('👷 监理师开始联系客户，订单信息:', order);
-        
-        try {
-          // 1. 检查登录状态
-          if (!isUserLoggedIn()) {
-            handleNotLoggedIn();
-            return;
-          }
-          
-          // 2. 检查订单信息完整性
-          if (!order || !order.userId) {
-            console.error('❌ 订单信息不完整:', order);
-            uni.showToast({
-              title: '订单信息无效',
-              icon: 'error',
-              duration: 2000
-            });
-            return;
-          }
-          
-          // 3. 确认当前用户身份
-          const currentUserId = String(this.userInfo.userId || '');
-          const contractorId = String(order.contractorId || '');
-          const customerId = String(order.userId || '');
-          
-          console.log('👤 身份确认:', {
-            当前用户ID: currentUserId,
-            订单客户ID: customerId,
-            承接方ID: contractorId,
-            当前用户角色: this.userInfo.role,
-            当前用户角色名称: this.userInfo.roleName,
-            页面类型: '监理师订单页面'
-          });
-          
-          // 4. 验证当前用户是否是订单承接方（监理师）
-          if (currentUserId !== contractorId) {
-            console.warn('⚠️ 当前用户不是订单承接方，权限验证失败');
-            uni.showToast({
-              title: '权限不足，只能联系自己承接的订单',
-              icon: 'none',
-              duration: 2000
-            });
-            return;
-          }
-          
-          // 5. 确定联系对象：监理师联系客户
-          let targetUserId = customerId;
-          let targetUserName = '';
-          let targetUserAvatar = '';
-          
-          // 6. 防止联系自己
-          if (String(targetUserId) === String(currentUserId)) {
-            console.warn('⚠️ 尝试联系自己:', {
-              当前用户ID: currentUserId,
-              目标用户ID: targetUserId
-            });
-            uni.showToast({
-              title: '不能联系自己',
-              icon: 'none',
-              duration: 2000
-            });
-            return;
-          }
-          
-          // 7. 获取客户信息
-          try {
-            const customerInfo = await this.getUserInfoById(targetUserId);
-            targetUserName = customerInfo.name || '客户';
-            targetUserAvatar = customerInfo.avatar || '';
-          } catch (error) {
-            console.warn('⚠️ 获取客户信息失败:', error);
-            // 使用默认值
-            targetUserName = '客户';
-            targetUserAvatar = '';
-          }
-          
-          console.log('📞 监理师准备联系客户:', {
-            客户ID: targetUserId,
-            客户姓名: targetUserName,
-            监理师ID: currentUserId,
-            订单ID: order.orderId,
-            订单类型: order.type
-          });
-          
-          // 8. 显示加载状态
-          uni.showLoading({
-            title: '创建对话中...',
-            mask: true
-          });
-          
-          try {
-            // 9. 创建对话并跳转
-            await createConversationAndNavigate(
-              targetUserId,
-              targetUserName,
-              targetUserAvatar || ''
-            );
-            
-            console.log('✅ 对话创建成功，跳转聊天页面');
-            
-          } catch (conversationError) {
-            console.error('❌ 创建对话失败:', conversationError);
-            
-            // 错误处理
-            let errorMessage = '创建对话失败';
-            if (conversationError.message) {
-              if (conversationError.message.includes('请先登录')) {
-                errorMessage = '请先登录';
-              } else if (conversationError.message.includes('不能与自己')) {
-                errorMessage = '不能联系自己';
-              } else if (conversationError.message.includes('权限')) {
-                errorMessage = '没有权限联系该用户';
-              } else if (conversationError.message.includes('对方不存在')) {
-                errorMessage = '对方用户不存在';
-              } else {
-                errorMessage = conversationError.message;
-              }
-            }
-            
-            uni.showToast({
-              title: errorMessage,
-              icon: 'none',
-              duration: 3000
-            });
-            
-            // 如果是因为对话不存在，尝试直接跳转到聊天页面
-            if (conversationError.message && conversationError.message.includes('对话不存在')) {
-              console.log('⚠️ 尝试直接跳转到聊天页面');
-              setTimeout(() => {
-                uni.navigateTo({
-                  url: `/pages/chat/chat?otherUserId=${targetUserId}&otherUserName=${encodeURIComponent(targetUserName)}`
-                });
-              }, 1000);
-            }
-          } finally {
-            // 10. 隐藏加载状态
-            uni.hideLoading();
-          }
-          
-        } catch (error) {
-          console.error('❌ 联系客户失败:', error);
-          
+        // 验证文件大小（限制20MB）
+        const maxSize = 20 * 1024 * 1024;
+        if (fileInfo.size > maxSize) {
           uni.showToast({
-            title: '联系失败，请稍后重试',
-            icon: 'none',
-            duration: 3000
+            title: '文件大小不能超过20MB',
+            icon: 'none'
           });
+          return;
         }
-      },
-      
-      // 取消订单
-      async cancelOrder(orderId) {
-        try {
-          uni.showModal({
-            title: '确认取消',
-            content: '确定要取消这个订单吗？',
-            success: async (res) => {
-              if (res.confirm) {
-                uni.showLoading({ title: '取消中...' })
-                await orderService.cancelOrder(orderId)
-                uni.hideLoading()
-                uni.showToast({
-                  title: '订单已取消',
-                  icon: 'success'
-                })
-                this.pagination.pageNum = 1
-                this.loadOrderList()
-              }
+
+        uni.showLoading({ 
+          title: `${isModify ? '修改' : '上传'}合同中...`,
+          mask: true
+        });
+
+        // 1. 上传合同文件到文档服务（使用已验证的uploadDocument接口）
+        const uploadResult = await this.uploadContractFileDirect(
+          orderId, 
+          fileInfo.path, 
+          fileInfo.name
+        );
+        
+        if (uploadResult && uploadResult.code === 200) {
+          console.log(`✅ 合同文件${isModify ? '修改' : '上传'}成功:`, uploadResult);
+            
+          // 2. 获取上传成功的文件URL
+          const contractUrl = uploadResult.data?.url || uploadResult.data?.fileUrl || uploadResult.url;
+          console.log('📄 合同文件URL:', contractUrl);
+            
+          if (contractUrl) {
+            // 3. 使用专用接口同时更新合同URL和状态
+            uni.showLoading({ title: '更新合同信息...' });
+              
+            try {
+              // 合同状态设为1（待确认）
+              const updateResult = await orderService.updateContractUrlAndContractStatus(
+                orderId, 
+                contractUrl, 
+                1  // contractStatus = 1 (合同待确认)
+              );
+                
+              console.log('✅ 合同URL和状态更新成功:', updateResult);
+                
+              uni.hideLoading();
+                
+              uni.showToast({
+                title: `合同${isModify ? '修改' : '上传'}成功`,
+                icon: 'success',
+                duration: 2000
+              });
+                
+              // 刷新列表
+              this.pagination.pageNum = 1;
+              this.loadOrderList();
+              
+            } catch (updateError) {
+              uni.hideLoading();
+              console.error('❌ 更新合同URL和状态失败:', updateError);
+              this.handleApiError(updateError, '更新合同信息失败');
             }
-          })
-        } catch (error) {
-          uni.hideLoading()
-          this.handleApiError(error, '取消订单失败')
+          } else {
+            throw new Error('未获取到合同文件URL');
+          }
+          
+        } else {
+          throw new Error(uploadResult?.msg || `${isModify ? '修改' : '上传'}失败`);
         }
-      },
-      
-      // 跳转到消息页面
-      goToMessage() {
-        uni.navigateTo({
-          url: '/pages/message/message'
-        })
+          
+      } catch (error) {
+        uni.hideLoading();
+        console.error(`❌ 合同${isModify ? '修改' : '上传'}失败:`, error);
+        this.handleApiError(error, `${isModify ? '修改' : '上传'}失败`);
+      }
+    },
+
+    // 选择合同文件（使用微信小程序的 chooseMessageFile）- 与设计师页面相同
+    chooseContractFile() {
+      return new Promise((resolve, reject) => {
+        uni.chooseMessageFile({
+          count: 1,
+          type: 'file',
+          extension: ['pdf'], // 只允许选择PDF文件
+          success: (res) => {
+            console.log('📄 选择的合同文件:', res);
+            const tempFile = res.tempFiles[0];
+            
+            // 获取文件扩展名
+            const fileExt = this.getFileExtension(tempFile.name || tempFile.path);
+            
+            // 验证文件类型
+            if (fileExt.toLowerCase() !== 'pdf') {
+              uni.showToast({
+                title: '请选择PDF格式的合同文件',
+                icon: 'none'
+              });
+              reject(new Error('文件格式不支持'));
+              return;
+            }
+            
+            resolve({
+              path: tempFile.path,
+              name: tempFile.name || `合同文件.${fileExt}`,
+              size: tempFile.size,
+              fileExt: fileExt
+            });
+          },
+          fail: (error) => {
+            console.error('❌ 选择文件失败:', error);
+            reject(new Error('选择文件失败: ' + error.errMsg));
+          }
+        });
+      });
+    },
+
+    // 获取文件扩展名 - 与设计师页面相同
+    getFileExtension(filePath) {
+      const parts = filePath.split('.');
+      return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+    },
+
+    // 🆕 上传合同文件到文档服务 - 使用已验证的uploadDocument接口（与设计师页面相同）
+    async uploadContractFileDirect(orderId, filePath, fileName) {
+      try {
+        console.log('📤 使用文档上传接口上传合同文件:', { 
+          orderId, 
+          filePath, 
+          fileName
+        });
+
+        // 显示上传进度
+        uni.showLoading({
+          title: '上传中...',
+          mask: true
+        });
+
+        // ✅ 使用已验证的uploadDocument接口（与设计师页面相同）
+        const result = await uploadDocument(
+          filePath,           // file
+          9,                  // relatedType: 合同类型 (9)
+          orderId,            // relatedId: 订单ID
+          `监理订单${orderId}的合同文件 - ${fileName}`,  // description
+          'CONTRACT',         // stage: 合同阶段
+          0                   // sequence: 顺序号
+        );
+
+        console.log('✅ 合同文件上传结果:', result);
+
+        // 检查上传结果
+        if (result && result.code === 200) {
+          uni.hideLoading();
+          return result;
+        } else {
+          throw new Error(result?.msg || '上传失败');
+        }
+
+      } catch (error) {
+        uni.hideLoading();
+        console.error('❌ 合同文件上传失败:', error);
+        
+        // 返回详细的错误信息
+        let errorMessage = '上传失败';
+        if (error && error.message) {
+          errorMessage = error.message;
+        } else if (error && error.errMsg) {
+          errorMessage = error.errMsg;
+        }
+        
+        throw new Error(errorMessage);
       }
     },
     
-    onPullDownRefresh() {
-      this.onRefresh()
-      uni.stopPullDownRefresh()
+    // 切换订单状态
+    changeStatus(status) {
+      this.activeStatus = status
+      this.pagination.pageNum = 1
+      this.hasMore = true
+      this.orderList = []
+      this.loadOrderList()
     },
     
-    onReachBottom() {
-      this.loadMore()
+    // 格式化时间
+    formatTime(timeStr) {
+      if (!timeStr) return ''
+      if (typeof timeStr === 'number') {
+        const date = new Date(timeStr)
+        return date.toLocaleDateString()
+      }
+      return timeStr.split(' ')[0]
+    },
+    
+    // 格式化日期
+    formatDate(dateStr) {
+      if (!dateStr) return ''
+      if (dateStr.includes('T')) {
+        return dateStr.split('T')[0]
+      }
+      return dateStr.split(' ')[0]
+    },
+    
+    // 根据项目ID获取项目详情
+    async getProjectDetail(projectId) {
+      if (!projectId) {
+        console.warn('项目ID为空')
+        return null
+      }
+      
+      try {
+        console.log('📋 获取项目详情，项目ID:', projectId)
+        const projectDetail = await projectService.getProjectDetail(projectId)
+        console.log('✅ 项目详情获取成功:', projectDetail)
+        return projectDetail
+      } catch (error) {
+        console.error('❌ 获取项目详情失败:', error)
+        return null
+      }
+    },
+    
+    // 更新状态统计（只统计contractorId与当前用户相同的订单）
+    updateStatusCount() {
+      // 重置统计
+      this.statusCount = { '0': 0, '1': 0, '2': 0, '3': 0 }
+      
+      // 只统计contractorId与当前用户ID相同的订单
+      const currentUserIdStr = String(this.userInfo.userId);
+      const myOrders = this.orderList.filter(order => {
+        const contractorIdStr = String(order.contractorId);
+        return contractorIdStr === currentUserIdStr;
+      });
+      
+      myOrders.forEach(order => {
+        const status = order.status.toString()
+        if (this.statusCount[status] !== undefined) {
+          this.statusCount[status]++
+        }
+      })
+      
+      console.log('📊 监理师订单状态统计（我的订单）:', this.statusCount)
+    },
+    
+    // 加载更多
+    loadMore() {
+      if (this.loading || !this.hasMore) return
+      this.pagination.pageNum++
+      this.loadOrderList()
+    },
+    
+    // 下拉刷新
+    onRefresh() {
+      if (this.refreshing) return
+      this.refreshing = true
+      this.pagination.pageNum = 1
+      this.hasMore = true
+      this.loadOrderList()
+    },
+    
+    // 联系订单相关方（监理师 -> 客户）
+    async contactOrderParty(order) {
+      console.log('👷 监理师开始联系客户，订单信息:', order);
+      
+      try {
+        // 1. 检查登录状态
+        if (!isUserLoggedIn()) {
+          handleNotLoggedIn();
+          return;
+        }
+        
+        // 2. 检查订单信息完整性
+        if (!order || !order.userId) {
+          console.error('❌ 订单信息不完整:', order);
+          uni.showToast({
+            title: '订单信息无效',
+            icon: 'error',
+            duration: 2000
+          });
+          return;
+        }
+        
+        // 3. 确认当前用户身份
+        const currentUserId = String(this.userInfo.userId || '');
+        const contractorId = String(order.contractorId || '');
+        const customerId = String(order.userId || '');
+        
+        console.log('👤 身份确认:', {
+          当前用户ID: currentUserId,
+          订单客户ID: customerId,
+          承接方ID: contractorId,
+          当前用户角色: this.userInfo.role,
+          当前用户角色名称: this.userInfo.roleName,
+          页面类型: '监理师订单页面'
+        });
+        
+        // 4. 验证当前用户是否是订单承接方（监理师）
+        if (currentUserId !== contractorId) {
+          console.warn('⚠️ 当前用户不是订单承接方，权限验证失败');
+          uni.showToast({
+            title: '权限不足，只能联系自己承接的订单',
+            icon: 'none',
+            duration: 2000
+          });
+          return;
+        }
+        
+        // 5. 确定联系对象：监理师联系客户
+        let targetUserId = customerId;
+        let targetUserName = '';
+        let targetUserAvatar = '';
+        
+        // 6. 防止联系自己
+        if (String(targetUserId) === String(currentUserId)) {
+          console.warn('⚠️ 尝试联系自己:', {
+            当前用户ID: currentUserId,
+            目标用户ID: targetUserId
+          });
+          uni.showToast({
+            title: '不能联系自己',
+            icon: 'none',
+            duration: 2000
+          });
+          return;
+        }
+        
+        // 7. 获取客户信息
+        try {
+          const customerInfo = await this.getUserInfoById(targetUserId);
+          targetUserName = customerInfo.name || '客户';
+          targetUserAvatar = customerInfo.avatar || '';
+        } catch (error) {
+          console.warn('⚠️ 获取客户信息失败:', error);
+          // 使用默认值
+          targetUserName = '客户';
+          targetUserAvatar = '';
+        }
+        
+        console.log('📞 监理师准备联系客户:', {
+          客户ID: targetUserId,
+          客户姓名: targetUserName,
+          监理师ID: currentUserId,
+          订单ID: order.orderId,
+          订单类型: order.type
+        });
+        
+        // 8. 显示加载状态
+        uni.showLoading({
+          title: '创建对话中...',
+          mask: true
+        });
+        
+        try {
+          // 9. 创建对话并跳转
+          await createConversationAndNavigate(
+            targetUserId,
+            targetUserName,
+            targetUserAvatar || ''
+          );
+          
+          console.log('✅ 对话创建成功，跳转聊天页面');
+          
+        } catch (conversationError) {
+          console.error('❌ 创建对话失败:', conversationError);
+          
+          // 错误处理
+          let errorMessage = '创建对话失败';
+          if (conversationError.message) {
+            if (conversationError.message.includes('请先登录')) {
+              errorMessage = '请先登录';
+            } else if (conversationError.message.includes('不能与自己')) {
+              errorMessage = '不能联系自己';
+            } else if (conversationError.message.includes('权限')) {
+              errorMessage = '没有权限联系该用户';
+            } else if (conversationError.message.includes('对方不存在')) {
+              errorMessage = '对方用户不存在';
+            } else {
+              errorMessage = conversationError.message;
+            }
+          }
+          
+          uni.showToast({
+            title: errorMessage,
+            icon: 'none',
+            duration: 3000
+          });
+          
+          // 如果是因为对话不存在，尝试直接跳转到聊天页面
+          if (conversationError.message && conversationError.message.includes('对话不存在')) {
+            console.log('⚠️ 尝试直接跳转到聊天页面');
+            setTimeout(() => {
+              uni.navigateTo({
+                url: `/pages/chat/chat?otherUserId=${targetUserId}&otherUserName=${encodeURIComponent(targetUserName)}`
+              });
+            }, 1000);
+          }
+        } finally {
+          // 10. 隐藏加载状态
+          uni.hideLoading();
+        }
+        
+      } catch (error) {
+        console.error('❌ 联系客户失败:', error);
+        
+        uni.showToast({
+          title: '联系失败，请稍后重试',
+          icon: 'none',
+          duration: 3000
+        });
+      }
+    },
+    
+    // 取消订单 - 添加项目状态更新功能
+    async cancelOrder(orderId) {
+      try {
+        uni.showModal({
+          title: '确认取消',
+          content: '确定要取消这个订单吗？',
+          success: async (res) => {
+            if (res.confirm) {
+              uni.showLoading({ title: '取消中...' })
+              
+              try {
+                // 1. 查找订单详情以获取项目ID
+                const order = this.orderList.find(item => item.orderId === orderId);
+                let projectId = null;
+                
+                // 从不同位置获取项目ID
+                if (order) {
+                  if (order.projectId) {
+                    projectId = order.projectId;
+                  } else if (order.projectInfo && order.projectInfo.projectId) {
+                    projectId = order.projectInfo.projectId;
+                  }
+                }
+                
+                console.log('🔍 准备取消订单，订单ID:', orderId, '项目ID:', projectId);
+                
+                // 2. 调用取消订单的API
+                await orderService.cancelOrder(orderId);
+                console.log('✅ 订单取消成功');
+                
+                // 3. 如果有关联项目，更新项目状态为5（已取消）
+                if (projectId) {
+                  try {
+                    console.log('🔄 开始更新项目状态，项目ID:', projectId, '状态: 5（已取消）');
+                    
+                    // 使用现有的 projectService 更新项目状态
+                    const projectResult = await projectService.updateProjectStatus(projectId, 5);
+                    
+                    console.log('✅ 项目状态更新成功:', projectResult);
+                    
+                    uni.showToast({
+                      title: '订单已取消，项目状态已更新',
+                      icon: 'success'
+                    });
+                    
+                  } catch (projectError) {
+                    console.error('❌ 项目状态更新失败:', projectError);
+                    // 即使项目状态更新失败，订单仍然成功取消
+                    uni.showToast({
+                      title: '订单已取消，但项目状态更新失败',
+                      icon: 'none'
+                    });
+                  }
+                } else {
+                  // 没有关联项目，只显示订单取消成功
+                  uni.showToast({
+                    title: '订单已取消',
+                    icon: 'success'
+                  });
+                }
+                
+                // 4. 刷新订单列表
+                this.pagination.pageNum = 1;
+                this.loadOrderList();
+                
+              } catch (orderError) {
+                console.error('❌ 取消订单失败:', orderError);
+                this.handleApiError(orderError, '取消订单失败');
+              } finally {
+                uni.hideLoading();
+              }
+            }
+          }
+        })
+      } catch (error) {
+        uni.hideLoading();
+        this.handleApiError(error, '取消订单失败');
+      }
+    },
+    
+    // 跳转到消息页面
+    goToMessage() {
+      uni.navigateTo({
+        url: '/pages/message/message'
+      })
     }
+  },
+  
+  onPullDownRefresh() {
+    this.onRefresh()
+    uni.stopPullDownRefresh()
+  },
+  
+  onReachBottom() {
+    this.loadMore()
   }
+}
 </script>
-
 <style scoped>
   /* 样式保持不变 */
   .back-btn {
@@ -1458,12 +1579,20 @@
     color: #999;
   }
   
+  /* 修改：添加订单卡片点击效果 */
   .order-item {
     background: white;
     border-radius: 16rpx;
     margin-bottom: 20rpx;
     padding: 30rpx;
     box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  
+  .order-item:active {
+    transform: scale(0.99);
+    box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.1);
   }
   
   .order-header {

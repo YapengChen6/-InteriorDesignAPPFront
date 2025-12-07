@@ -69,6 +69,16 @@
 								</view>
 							</view>
 						</view>
+						
+						<!-- 新增：文件数量信息 -->
+						<view class="info-row" v-if="fileList.length > 0">
+							<view class="info-item full-width">
+								<view class="info-label">文件数量</view>
+								<view class="info-value">
+									<text class="file-count-badge">{{ fileList.length }} 个文件</text>
+								</view>
+							</view>
+						</view>
 					</view>
 				</view>
 
@@ -83,14 +93,15 @@
 						<!-- 文件列表区域 -->
 						<view class="file-list" v-if="fileList.length > 0">
 							<view class="file-item" v-for="(file, index) in fileList" :key="index">
-								<view class="file-icon" :class="'file-type-' + file.type">
-									<text class="file-type-icon">{{ getFileTypeIcon(file.type) }}</text>
+								<view class="file-icon" :class="file.type === 'pdf' ? 'file-type-pdf' : 'file-type-other'">
+									<text class="file-type-icon">{{ file.type === 'pdf' ? '📄' : '📎' }}</text>
 								</view>
 								<view class="file-info">
 									<view class="file-name">{{ file.name }}</view>
 									<view class="file-meta">
-										<text class="file-size">{{ file.size }}</text>
+										<text class="file-index">文件{{ index + 1 }}</text>
 										<text class="file-format">{{ file.format }}</text>
+										<text class="file-size">{{ file.size }}</text>
 									</view>
 									<view class="file-status" v-if="file.previewLoading">
 										<view class="status-badge loading">
@@ -152,23 +163,7 @@
 					</view>
 				</view>
 
-				<!-- 联系设计师卡片 -->
-				<view class="card" v-if="designerInfo.name && designerInfo.name !== '未知设计师'">
-					<view class="card-header">
-						<view class="card-icon">💬</view>
-						<text class="card-title">联系设计师</text>
-					</view>
-					<view class="card-body">
-						<view class="contact-content">
-							<text class="contact-desc">对方案有疑问？直接联系设计师沟通</text>
-							<button class="contact-btn" @click="contactDesigner">
-								<text class="contact-icon">💬</text>
-								<text class="contact-text">在线联系设计师</text>
-							</button>
-						</view>
-					</view>
-				</view>
-
+				
 				<!-- 底部操作区域 - 始终显示，无限制条件 -->
 				<view class="bottom-actions" v-if="schemeData">
 					<view class="action-buttons">
@@ -237,21 +232,9 @@
 		CONSTRUCTION_DRAWING: 2
 	}
 	
-	// 文件类型常量
-	const FILE_TYPES = {
-		EFFECT: 1,
-		CONSTRUCTION: 2
-	}
-	
 	// 微信小程序支持的文档类型映射
 	const WECHAT_FILE_TYPES = {
-		'pdf': 'pdf',
-		'doc': 'doc',
-		'docx': 'doc',
-		'xls': 'xls',
-		'xlsx': 'xls',
-		'ppt': 'ppt',
-		'pptx': 'ppt'
+		'pdf': 'pdf'
 	}
 
 	export default {
@@ -513,7 +496,7 @@
 					
 					const queryParams = {
 						pageNum: 1,
-						pageSize: 10,
+						pageSize: 100,
 						orderId: this.orderId,
 						schemeType: this.schemeType
 					}
@@ -535,8 +518,21 @@
 						}
 						
 						if (schemeList.length > 0) {
-							this.schemeData = schemeList[0]
-							console.log('✅ 找到效果图方案:', this.schemeData)
+							// 按 createTime 倒序排序（最新的在前面）
+							schemeList.sort((a, b) => {
+								const timeA = new Date(a.createTime || a.uploadTime || 0).getTime();
+								const timeB = new Date(b.createTime || b.uploadTime || 0).getTime();
+								
+								// 降序排列，最新的在前
+								return timeB - timeA;
+							});
+							
+							console.log('📊 排序后的方案列表:', schemeList);
+							
+							// 取第一个（最新的）方案
+							this.schemeData = schemeList[0];
+							
+							console.log('✅ 找到最新效果图方案:', this.schemeData)
 							
 							// 如果设计师信息不完整，尝试通过ID获取
 							if (!this.designerInfo.name && this.schemeData.contractorId) {
@@ -571,52 +567,132 @@
 				}
 			},
 			
+			// 构建文件列表 - 支持多个文件
 			buildFileList() {
 				this.fileList = []
 				
-				if (this.schemeData.fileUrl) {
-					this.fileList.push({
-						url: this.schemeData.fileUrl,
-						name: '效果图设计方案',
-						type: this.getFileType(this.schemeData.fileUrl),
-						format: this.getFileFormat(this.schemeData.fileUrl),
-						size: this.getFileSize(this.schemeData.fileSize),
-						previewLoading: false
-					})
-				}
+				console.log('🔍 开始构建文件列表，原始数据:')
+				console.log('fileUrl:', this.schemeData.fileUrl)
+				console.log('fileUrls:', this.schemeData.fileUrls)
 				
-				if (this.schemeData.fileUrls && Array.isArray(this.schemeData.fileUrls)) {
-					this.schemeData.fileUrls.forEach((url, index) => {
-						this.fileList.push({
-							url: url,
-							name: `效果图文件 ${index + 1}`,
-							type: this.getFileType(url),
-							format: this.getFileFormat(url),
-							size: '--',
-							previewLoading: false
+				// 情况1：fileUrl字段是逗号分隔的字符串（新格式）
+				if (this.schemeData.fileUrl && typeof this.schemeData.fileUrl === 'string') {
+					// 检查是否是逗号分隔的多个URL
+					if (this.schemeData.fileUrl.includes(',')) {
+						const urls = this.schemeData.fileUrl.split(',').filter(url => url && url.trim())
+						
+						console.log('📁 检测到逗号分隔的多个文件URL，数量:', urls.length)
+						
+						urls.forEach((url, index) => {
+							const cleanUrl = url.trim()
+							if (cleanUrl) {
+								const fileName = this.getFileNameFromUrl(cleanUrl)
+								const fileType = this.getFileType(cleanUrl)
+								
+								this.fileList.push({
+									url: cleanUrl,
+									name: fileName || `${this.schemeTypeText}_${index + 1}`,
+									type: fileType,
+									format: this.getFileFormat(cleanUrl),
+									size: this.getFileSize(this.schemeData.fileSize),
+									previewLoading: false,
+									index: index + 1
+								})
+							}
 						})
+					} else {
+						// 单个文件的情况
+						const cleanUrl = this.schemeData.fileUrl.trim()
+						const fileName = this.getFileNameFromUrl(cleanUrl)
+						const fileType = this.getFileType(cleanUrl)
+						
+						this.fileList.push({
+							url: cleanUrl,
+							name: fileName || `${this.schemeTypeText}方案`,
+							type: fileType,
+							format: this.getFileFormat(cleanUrl),
+							size: this.getFileSize(this.schemeData.fileSize),
+							previewLoading: false,
+							index: 1
+						})
+					}
+				}
+				// 情况2：fileUrls字段是数组
+				else if (this.schemeData.fileUrls && Array.isArray(this.schemeData.fileUrls)) {
+					console.log('📁 检测到fileUrls数组，数量:', this.schemeData.fileUrls.length)
+					
+					this.schemeData.fileUrls.forEach((url, index) => {
+						if (url && typeof url === 'string') {
+							const cleanUrl = url.trim()
+							const fileName = this.getFileNameFromUrl(cleanUrl)
+							const fileType = this.getFileType(cleanUrl)
+							
+							this.fileList.push({
+								url: cleanUrl,
+								name: fileName || `${this.schemeTypeText}_${index + 1}`,
+								type: fileType,
+								format: this.getFileFormat(cleanUrl),
+								size: this.getFileSize(this.schemeData.fileSize),
+								previewLoading: false,
+								index: index + 1
+							})
+						}
 					})
 				}
+				// 情况3：没有文件的情况
+				else {
+					console.log('⚠️ 没有找到有效的文件URL')
+				}
 				
-				console.log('📁 构建的文件列表:', this.fileList)
+				console.log('📁 构建完成的文件列表:', this.fileList)
+				console.log('📊 文件总数量:', this.fileList.length)
+			},
+			
+			// 从URL中提取文件名
+			getFileNameFromUrl(url) {
+				if (!url) return ''
+				try {
+					// 先去掉查询参数
+					const cleanUrl = url.split('?')[0]
+					// 获取路径的最后一部分
+					const pathParts = cleanUrl.split('/')
+					let fileName = pathParts[pathParts.length - 1]
+					
+					// 解码URL编码的文件名
+					try {
+						fileName = decodeURIComponent(fileName)
+					} catch (e) {
+						console.warn('解码文件名失败:', e)
+					}
+					
+					// 如果文件名是空的或者看起来像是时间戳，返回更好的名字
+					if (!fileName || fileName.match(/^\d+$/)) {
+						return `${this.schemeTypeText}_${Date.now().toString().slice(-4)}.pdf`
+					}
+					
+					return fileName
+				} catch (error) {
+					console.error('提取文件名失败:', error)
+					return `${this.schemeTypeText}_文件`
+				}
 			},
 			
 			getFileType(url) {
-				if (!url) return 'unknown'
+				if (!url) return 'pdf' // 默认为PDF
 				const cleanUrl = url.split('?')[0]
 				const ext = cleanUrl.split('.').pop().toLowerCase()
 				
 				const typeMap = {
+					'pdf': 'pdf',
 					'jpg': 'image', 'jpeg': 'image', 'png': 'image', 
 					'gif': 'image', 'bmp': 'image', 'webp': 'image', 'svg': 'image',
-					'pdf': 'pdf',
 					'doc': 'doc', 'docx': 'doc',
 					'xls': 'excel', 'xlsx': 'excel',
 					'ppt': 'ppt', 'pptx': 'ppt',
 					'txt': 'text',
 					'zip': 'archive', 'rar': 'archive', '7z': 'archive', 'tar': 'archive'
 				}
-				return typeMap[ext] || 'other'
+				return typeMap[ext] || 'pdf' // 默认为PDF
 			},
 			
 			getFileTypeIcon(fileType) {
@@ -630,11 +706,11 @@
 					'archive': '📦',
 					'other': '📎'
 				}
-				return iconMap[fileType] || '📎'
+				return iconMap[fileType] || '📄' // 默认显示PDF图标
 			},
 			
 			getFileFormat(url) {
-				if (!url) return '未知格式'
+				if (!url) return 'PDF'
 				const ext = url.split('.').pop().toLowerCase()
 				const formatMap = {
 					'jpg': 'JPG',
@@ -653,7 +729,7 @@
 					'rar': 'RAR',
 					'7z': '7Z'
 				}
-				return formatMap[ext] || ext.toUpperCase()
+				return formatMap[ext] || 'PDF' // 默认PDF
 			},
 			
 			getFileSize(size) {
@@ -689,7 +765,8 @@
 					console.log('📄 开始预览文件:', {
 						url: file.url,
 						ext: fileExt,
-						type: file.type
+						type: file.type,
+						name: file.name
 					})
 					
 					// 如果是图片，直接预览
@@ -721,7 +798,7 @@
 			getFileExtension(url) {
 				const cleanUrl = url.split('?')[0]
 				const parts = cleanUrl.split('.')
-				return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+				return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'pdf'
 			},
 			
 			// 预览图片文件
@@ -944,6 +1021,54 @@
 						throw new Error('方案ID不存在，无法更新状态')
 					}
 					
+					// 重新查询确保我们更新的是最新方案
+					const queryParams = {
+						pageNum: 1,
+						pageSize: 100,
+						orderId: this.orderId,
+						schemeType: this.schemeType
+					}
+					
+					const checkResult = await getDesignSchemeList(queryParams)
+					let latestScheme = null
+					
+					if (checkResult.code === 200 && checkResult.data) {
+						let schemeList = []
+						
+						if (checkResult.data.records) {
+							schemeList = checkResult.data.records
+						} else if (checkResult.data.list) {
+							schemeList = checkResult.data.list
+						} else if (Array.isArray(checkResult.data)) {
+							schemeList = checkResult.data
+						} else if (Array.isArray(checkResult)) {
+							schemeList = checkResult
+						}
+						
+						if (schemeList.length > 0) {
+							// 按 createTime 倒序排序
+							schemeList.sort((a, b) => {
+								const timeA = new Date(a.createTime || a.uploadTime || 0).getTime();
+								const timeB = new Date(b.createTime || b.uploadTime || 0).getTime();
+								return timeB - timeA;
+							});
+							
+							// 取第一个（最新的）方案
+							latestScheme = schemeList[0];
+						}
+					}
+					
+					// 验证是否在更新最新方案
+					if (!latestScheme || latestScheme.designSchemeId !== this.schemeData.designSchemeId) {
+						console.warn('⚠️ 当前方案不是最新方案，不能更新状态')
+						uni.showToast({
+							title: '只能更新最新方案的状态',
+							icon: 'none',
+							duration: 3000
+						});
+						return;
+					}
+					
 					const result = await updateDesignSchemeStatus(
 						this.schemeData.designSchemeId, 
 						status
@@ -1080,7 +1205,6 @@
 		}
 	}
 </script>
-
 <style scoped>
 	.container {
 		min-height: 100vh;
@@ -1216,8 +1340,12 @@
 	
 	.card-subtitle {
 		font-size: 24rpx;
-		color: #999;
+		color: #1890ff;
 		margin-left: auto;
+		background: rgba(24, 144, 255, 0.1);
+		padding: 4rpx 12rpx;
+		border-radius: 12rpx;
+		font-weight: 500;
 	}
 	
 	.card-body {
@@ -1240,6 +1368,11 @@
 		flex: 1;
 	}
 	
+	.info-item.full-width {
+		flex: none;
+		width: 100%;
+	}
+	
 	.info-label {
 		font-size: 28rpx;
 		color: #8f959e;
@@ -1257,6 +1390,17 @@
 		padding: 8rpx 16rpx;
 		border-radius: 8rpx;
 		font-size: 24rpx;
+	}
+	
+	/* 文件数量徽章 */
+	.file-count-badge {
+		display: inline-block;
+		padding: 6rpx 12rpx;
+		background: linear-gradient(135deg, #1890ff, #36cfc9);
+		color: #fff;
+		border-radius: 6rpx;
+		font-size: 22rpx;
+		font-weight: 500;
 	}
 	
 	.status-pending {
@@ -1291,6 +1435,7 @@
 		background: #f8f9fa;
 		border-radius: 12rpx;
 		margin-bottom: 16rpx;
+		border: 1rpx solid rgba(225, 228, 232, 0.6);
 	}
 	
 	.file-item:last-child {
@@ -1306,47 +1451,21 @@
 		justify-content: center;
 		margin-right: 20rpx;
 		flex-shrink: 0;
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
 	}
 	
 	/* 文件类型图标样式 */
-	.file-type-image {
-		background: linear-gradient(135deg, #ff4d4f, #ff7875);
-	}
-	
 	.file-type-pdf {
 		background: linear-gradient(135deg, #1890ff, #36cfc9);
 	}
 	
-	.file-type-doc {
-		background: linear-gradient(135deg, #1890ff, #36cfc9);
-	}
-	
-	.file-type-excel {
-		background: linear-gradient(135deg, #52c41a, #73d13d);
-	}
-	
-	.file-type-ppt {
+	.file-type-other {
 		background: linear-gradient(135deg, #722ed1, #9254de);
 	}
 	
-	.file-type-text {
-		background: linear-gradient(135deg, #fa8c16, #ffa940);
-	}
-	
-	.file-type-archive {
-		background: linear-gradient(135deg, #fa541c, #ff7a45);
-	}
-	
-	.file-type-other {
-		background: linear-gradient(135deg, #8c8c8c, #bfbfbf);
-	}
-	
-	.file-type-unknown {
-		background: linear-gradient(135deg, #8c8c8c, #bfbfbf);
-	}
-	
 	.file-type-icon {
-		font-size: 40rpx;
+		font-size: 36rpx;
+		color: #fff;
 	}
 	
 	.file-info {
@@ -1366,8 +1485,19 @@
 	
 	.file-meta {
 		display: flex;
+		align-items: center;
 		gap: 16rpx;
 		margin-bottom: 8rpx;
+		flex-wrap: wrap;
+	}
+	
+	.file-index {
+		font-size: 24rpx;
+		color: #1890ff;
+		background: rgba(24, 144, 255, 0.1);
+		padding: 2rpx 8rpx;
+		border-radius: 6rpx;
+		font-weight: 500;
 	}
 	
 	.file-size, .file-format {
@@ -1376,10 +1506,12 @@
 	}
 	
 	.file-format {
-		background: rgba(24, 144, 255, 0.1);
+		background: rgba(82, 196, 26, 0.1);
+		color: #52c41a;
 		padding: 2rpx 8rpx;
 		border-radius: 6rpx;
 		font-size: 22rpx;
+		font-weight: 500;
 	}
 	
 	.file-status {
