@@ -25,7 +25,7 @@
       >
         <view class="shop-header">
           <text class="shop-name">
-            {{ group.shopName || '店铺' }}（共 {{ group.items.length }} 件）
+            {{ group.shopName || '店铺' }}(共 {{ group.items.length }} 件)
           </text>
         </view>
 
@@ -59,13 +59,77 @@
         <text class="label">合计：</text>
         <text class="amount">￥{{ totalAmount }}</text>
       </view>
-      <button
-        class="pay-btn"
-        :disabled="!canPay || loading"
-        @click="handleVirtualPay"
-      >
-        使用微信支付（模拟）
-      </button>
+      <view class="footer-buttons">
+        <button
+          class="link-order-btn"
+          @click="openOrderListModal"
+        >
+          关联设计师订单
+        </button>
+        <button
+          class="pay-btn"
+          :disabled="!canPay || loading"
+          @click="handleVirtualPay"
+        >
+          使用微信支付（模拟）
+        </button>
+      </view>
+    </view>
+
+    <!-- 订单列表弹窗 -->
+    <view v-if="showOrderListModal" class="order-modal" @touchmove.stop.prevent>
+      <view class="modal-mask" @click="showOrderListModal = false"></view>
+      <view class="modal-content" @touchmove.stop.prevent>
+        <view class="modal-header">
+          <text class="modal-title">选择设计师订单</text>
+          <text class="modal-close" @click="showOrderListModal = false">×</text>
+        </view>
+        <scroll-view scroll-y class="order-list" v-if="!orderListLoading">
+          <view v-if="orderList.length === 0" class="empty-orders">
+            <text>暂无订单</text>
+          </view>
+          <view
+            v-for="order in orderList"
+            :key="order.orderId"
+            class="order-item"
+            @click="selectOrder(order)"
+          >
+            <view class="order-header">
+              <text class="order-id">订单号：{{ order.orderNumber || order.orderId }}</text>
+              <text class="order-status" :style="{ color: getOrderStatusColor(order.status) }">
+                {{ getOrderStatusText(order.status) }}
+              </text>
+            </view>
+            <view class="order-items">
+              <view
+                v-for="(item, index) in order.orderItems"
+                :key="index"
+                class="order-item-row"
+              >
+                <image
+                  class="order-item-image"
+                  :src="getOrderItemImage(item)"
+                  mode="aspectFill"
+                />
+                <view class="order-item-info">
+                  <text class="order-item-name">{{ item.productName || '商品' }}</text>
+                  <text class="order-item-sku" v-if="item.skuDetail">{{ formatSkuDetail(item.skuDetail) }}</text>
+                  <view class="order-item-bottom">
+                    <text class="order-item-price">￥{{ formatPrice(item.salePrice || item.price || 0) }}</text>
+                    <text class="order-item-qty">x{{ item.quantity }}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+            <view class="order-footer">
+              <text class="order-total">共 {{ (order.orderItems && order.orderItems.length) || 0 }} 件商品，合计：￥{{ formatPrice(order.totalAmount || order.totalPrice || 0) }}</text>
+            </view>
+          </view>
+        </scroll-view>
+        <view v-if="orderListLoading" class="order-loading">
+          <text>加载中...</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -73,6 +137,7 @@
 <script>
 import * as cartApi from '@/api/cart.js'
 import * as orderApi from '@/api/product-order.js'
+import * as productApi from '@/api/product.js'
 import { getDefaultAddress, getAddressList } from '@/api/address.js'
 
 export default {
@@ -83,7 +148,16 @@ export default {
       address: null,
       cartItems: [],
       shopGroups: [],
-      addressList: []
+      addressList: [],
+      // 直接购买模式参数
+      directBuy: false,
+      directBuySpuId: null,
+      directBuySkuId: null,
+      directBuyQuantity: 1,
+      // 订单列表相关
+      showOrderListModal: false,
+      orderList: [],
+      orderListLoading: false
     }
   },
   computed: {
@@ -99,12 +173,23 @@ export default {
       return this.formatPrice(sum)
     }
   },
-  async onLoad() {
+  async onLoad(options) {
+    // 检查是否是直接购买模式
+    if (options && options.directBuy === '1') {
+      this.directBuy = true
+      this.directBuySpuId = options.spuId || null
+      this.directBuySkuId = options.skuId || null
+      this.directBuyQuantity = Number(options.quantity) || 1
+    }
     await this.initData()
   },
   onShow() {
-    // 从地址管理页返回时，重新加载默认地址，保证“设为默认”的结果能立刻体现在结算页
+    // 从地址管理页返回时，重新加载默认地址，保证"设为默认"的结果能立刻体现在结算页
     this.loadAddress()
+    // 如果订单列表弹窗打开，重新加载订单列表
+    if (this.showOrderListModal) {
+      this.loadOrderList()
+    }
   },
   methods: {
     async initData() {
@@ -112,7 +197,7 @@ export default {
       try {
         await Promise.all([
           this.loadAddress(),
-          this.loadSelectedItems()
+          this.directBuy ? this.loadDirectBuyItem() : this.loadSelectedItems()
         ])
       } catch (e) {
         console.error('初始化结算页失败:', e)
@@ -120,6 +205,12 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+    
+    // 打开订单列表弹窗
+    async openOrderListModal() {
+      this.showOrderListModal = true
+      await this.loadOrderList()
     },
     async loadAddress() {
       try {
@@ -147,6 +238,83 @@ export default {
       }
       this.cartItems = items
       this.shopGroups = this.groupByShop(items)
+    },
+    
+    // 加载直接购买的商品
+    async loadDirectBuyItem() {
+      if (!this.directBuySpuId) {
+        uni.showToast({ title: '缺少商品信息', icon: 'none' })
+        return
+      }
+      
+      try {
+        // 并行加载商品SPU详情和SKU列表
+        const [spuRes, skuRes] = await Promise.all([
+          productApi.getProductSpuDetail(this.directBuySpuId),
+          productApi.getProductSkusBySpuId(this.directBuySpuId).catch(() => ({ code: 200, data: [] }))
+        ])
+        
+        if (!spuRes || spuRes.code !== 200 || !spuRes.data) {
+          throw new Error('获取商品信息失败')
+        }
+        
+        const spu = spuRes.data
+        let sku = null
+        
+        // 如果有SKU ID，从SKU列表中查找对应的SKU
+        if (this.directBuySkuId && skuRes && skuRes.code === 200) {
+          const skuList = Array.isArray(skuRes.data) ? skuRes.data : []
+          sku = skuList.find(s => {
+            const skuId = s.productSkuId || s.skuId || s.id
+            return String(skuId) === String(this.directBuySkuId)
+          }) || null
+        }
+        
+        // 构建订单项格式（模拟购物车项格式）
+        const orderItem = {
+          cartId: `direct_${Date.now()}`, // 临时ID
+          productSpu: spu,
+          productSku: sku,
+          quantity: this.directBuyQuantity,
+          unitPrice: sku ? (sku.salePrice || sku.price) : (spu.marketPrice || spu.price),
+          skuText: sku ? this.formatSkuText(sku) : null,
+          imageUrl: sku?.imageUrl || spu.mainImageUrl || spu.coverImage || spu.imageList?.[0]
+        }
+        
+        this.cartItems = [orderItem]
+        this.shopGroups = this.groupByShop([orderItem])
+      } catch (error) {
+        console.error('加载直接购买商品失败:', error)
+        uni.showToast({ 
+          title: error.message || '加载商品信息失败', 
+          icon: 'none' 
+        })
+        // 失败后返回上一页
+        setTimeout(() => {
+          uni.navigateBack()
+        }, 1500)
+      }
+    },
+    
+    // 格式化SKU文本
+    formatSkuText(sku) {
+      if (!sku) return null
+      const detail = sku.skuDetail || sku.detail
+      if (detail) {
+        try {
+          const parsed = typeof detail === 'string' ? JSON.parse(detail) : detail
+          if (parsed?.combination?.length) {
+            return parsed.combination
+              .map(item => `${item.name || item.attrName || ''}${item.value ? ':' : ''}${item.value || item.attrValue || ''}`.trim())
+              .filter(Boolean)
+              .join(' / ')
+          }
+          if (parsed?.description) return parsed.description
+        } catch (error) {
+          // ignore parse error
+        }
+      }
+      return sku.skuName || sku.name || null
     },
     groupByShop(items) {
       const map = new Map()
@@ -220,6 +388,201 @@ export default {
         url: '/pages/mine/address?from=checkout'
       })
     },
+    
+    // 获取当前用户ID
+    async getCurrentUserId() {
+      try {
+        // 尝试从本地存储获取用户信息
+        const userInfo = uni.getStorageSync('userInfo') || uni.getStorageSync('user')
+        if (userInfo && userInfo.userId) {
+          return userInfo.userId
+        }
+        if (userInfo && userInfo.id) {
+          return userInfo.id
+        }
+        
+        // 如果本地存储没有，尝试从token中解析（如果有）
+        // 或者调用API获取当前用户信息
+        const token = uni.getStorageSync('token')
+        if (token) {
+          // 这里可以调用获取用户信息的API
+          // const userRes = await usersApi.getCurrentUser()
+          // return userRes?.data?.userId || userRes?.data?.id
+        }
+        
+        return null
+      } catch (error) {
+        console.error('获取当前用户ID失败:', error)
+        return null
+      }
+    },
+    
+    // 加载设计师订单列表
+    async loadOrderList() {
+      this.orderListLoading = true
+      try {
+        // 获取当前用户ID
+        const currentUserId = await this.getCurrentUserId()
+        if (!currentUserId) {
+          uni.showToast({ title: '请先登录', icon: 'none' })
+          this.orderList = []
+          return
+        }
+        
+        // 获取所有订单
+        const res = await orderApi.getUserOrderList()
+        if (res && res.code === 200) {
+          // 处理响应数据
+          let orders = []
+          if (Array.isArray(res.data)) {
+            orders = res.data
+          } else if (res.data && Array.isArray(res.data.rows)) {
+            orders = res.data.rows
+          } else if (res.data && Array.isArray(res.data.list)) {
+            orders = res.data.list
+          }
+          
+          // 过滤设计师订单：contractorId等于当前用户ID的订单
+          // 或者根据订单类型/服务类型判断
+          this.orderList = orders.filter(order => {
+            // 1. 检查订单状态（只显示未完成/未取消的订单）
+            const status = order.status || order.orderStatus
+            const isValidStatus = status !== 'CANCELLED' && status !== 'COMPLETED' && status !== 5 && status !== 6
+            
+            // 2. 检查是否是设计师订单
+            // 方式1：contractorId等于当前用户ID（当前用户是设计师）
+            const isDesignerOrder = order.contractorId && Number(order.contractorId) === Number(currentUserId)
+            
+            // 方式2：根据订单类型判断（如果有orderType字段）
+            const isDesignerOrderType = order.orderType === 'DESIGNER' || order.orderType === 2 || order.serviceType === 'DESIGNER'
+            
+            // 方式3：根据角色类型判断（如果订单中有roleType字段）
+            const isDesignerRole = order.roleType === 2 || order.userRole === 2
+            
+            return isValidStatus && (isDesignerOrder || isDesignerOrderType || isDesignerRole)
+          })
+          
+          if (this.orderList.length === 0) {
+            uni.showToast({ title: '暂无设计师订单', icon: 'none' })
+          }
+        } else {
+          this.orderList = []
+        }
+      } catch (error) {
+        console.error('加载设计师订单列表失败:', error)
+        uni.showToast({ title: '加载订单失败', icon: 'none' })
+        this.orderList = []
+      } finally {
+        this.orderListLoading = false
+      }
+    },
+    
+    // 选择订单，将订单商品添加到结算列表
+    selectOrder(order) {
+      if (!order || !order.orderItems || order.orderItems.length === 0) {
+        uni.showToast({ title: '订单无商品', icon: 'none' })
+        return
+      }
+      
+      // 将订单项转换为购物车项格式
+      const newItems = order.orderItems.map(item => {
+        return {
+          cartId: `order_${order.orderId}_${item.orderItemId || Date.now()}`,
+          productSpu: {
+            productSpuId: item.productSpuId || item.spuId,
+            productName: item.productName,
+            marketPrice: item.salePrice || item.price,
+            shopName: order.shopName || '店铺',
+            createdBy: order.shopId || order.sellerId
+          },
+          productSku: item.productSkuId ? {
+            productSkuId: item.productSkuId,
+            salePrice: item.salePrice || item.price,
+            skuDetail: item.skuDetail
+          } : null,
+          quantity: item.quantity,
+          unitPrice: item.salePrice || item.price,
+          skuText: item.skuDetail ? this.formatSkuDetail(item.skuDetail) : null,
+          imageUrl: item.imageUrl || item.productImage
+        }
+      })
+      
+      // 合并到现有购物车项
+      this.cartItems = [...this.cartItems, ...newItems]
+      this.shopGroups = this.groupByShop(this.cartItems)
+      
+      // 关闭弹窗
+      this.showOrderListModal = false
+      
+      uni.showToast({
+        title: `已添加 ${newItems.length} 件商品`,
+        icon: 'success'
+      })
+    },
+    
+    // 获取订单项图片
+    getOrderItemImage(item) {
+      if (item.imageUrl) return item.imageUrl
+      if (item.productImage) return item.productImage
+      if (item.coverImage) return item.coverImage
+      return this.getDefaultProductImage()
+    },
+    
+    // 格式化SKU详情
+    formatSkuDetail(skuDetail) {
+      if (!skuDetail) return null
+      try {
+        const parsed = typeof skuDetail === 'string' ? JSON.parse(skuDetail) : skuDetail
+        if (parsed?.combination?.length) {
+          return parsed.combination
+            .map(item => `${item.name || item.attrName || ''}${item.value ? ':' : ''}${item.value || item.attrValue || ''}`.trim())
+            .filter(Boolean)
+            .join(' / ')
+        }
+        if (parsed?.description) return parsed.description
+        return skuDetail
+      } catch (error) {
+        return skuDetail
+      }
+    },
+    
+    // 获取订单状态文本
+    getOrderStatusText(status) {
+      const statusMap = {
+        'PENDING': '待支付',
+        'PAID': '已支付',
+        'SHIPPED': '已发货',
+        'DELIVERED': '已送达',
+        'COMPLETED': '已完成',
+        'CANCELLED': '已取消',
+        0: '待支付',
+        1: '已支付',
+        2: '已发货',
+        3: '已送达',
+        4: '已完成',
+        5: '已取消'
+      }
+      return statusMap[status] || '未知状态'
+    },
+    
+    // 获取订单状态颜色
+    getOrderStatusColor(status) {
+      const colorMap = {
+        'PENDING': '#fa541c',
+        'PAID': '#1890ff',
+        'SHIPPED': '#52c41a',
+        'DELIVERED': '#722ed1',
+        'COMPLETED': '#13c2c2',
+        'CANCELLED': '#999',
+        0: '#fa541c',
+        1: '#1890ff',
+        2: '#52c41a',
+        3: '#722ed1',
+        4: '#13c2c2',
+        5: '#999'
+      }
+      return colorMap[status] || '#666'
+    },
     async handleVirtualPay() {
       if (!this.address) {
         uni.showModal({
@@ -242,17 +605,35 @@ export default {
       try {
         this.loading = true
         uni.showLoading({ title: '提交订单中...' })
-        const cartIds = this.cartItems.map(i => i.cartId)
-
-        // 1. 创建订单（按商家拆单）
-        const orderRes = await orderApi.createOrdersFromCart(cartIds, this.address.addressId)
-        if (!orderRes || orderRes.code !== 200 || !Array.isArray(orderRes.data)) {
-          uni.hideLoading()
-          uni.showToast({ title: (orderRes && orderRes.msg) || '创建订单失败', icon: 'none' })
-          return
+        
+        let orders = []
+        
+        // 直接购买模式：使用 createOrderDirect
+        if (this.directBuy) {
+          const orderRes = await orderApi.createOrderDirect(
+            this.directBuySpuId,
+            this.directBuySkuId,
+            this.directBuyQuantity,
+            this.address.addressId
+          )
+          if (!orderRes || orderRes.code !== 200) {
+            uni.hideLoading()
+            uni.showToast({ title: (orderRes && orderRes.msg) || '创建订单失败', icon: 'none' })
+            return
+          }
+          // createOrderDirect 返回单个订单对象，包装成数组
+          orders = orderRes.data ? [orderRes.data] : []
+        } else {
+          // 购物车模式：使用 createOrdersFromCart
+          const cartIds = this.cartItems.map(i => i.cartId)
+          const orderRes = await orderApi.createOrdersFromCart(cartIds, this.address.addressId)
+          if (!orderRes || orderRes.code !== 200 || !Array.isArray(orderRes.data)) {
+            uni.hideLoading()
+            uni.showToast({ title: (orderRes && orderRes.msg) || '创建订单失败', icon: 'none' })
+            return
+          }
+          orders = orderRes.data
         }
-
-        const orders = orderRes.data
 
         // 2. 模拟微信支付：依次调用支付接口，将订单状态改为已支付
         for (const order of orders) {
@@ -454,9 +835,16 @@ export default {
   padding: 16rpx 24rpx;
   background-color: #fff;
   display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.footer-buttons {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  gap: 12rpx;
 }
 
 .summary {
@@ -476,12 +864,193 @@ export default {
   margin-left: 4rpx;
 }
 
+.link-order-btn {
+  background: #fff;
+  color: #fa541c;
+  font-size: 26rpx;
+  padding: 18rpx 32rpx;
+  border-radius: 999rpx;
+  border: 1px solid #fa541c;
+}
+
 .pay-btn {
   background: linear-gradient(135deg, #07c160, #06ae56);
   color: #fff;
   font-size: 30rpx;
   padding: 18rpx 48rpx;
   border-radius: 999rpx;
+  flex: 1;
+}
+
+/* 订单列表弹窗样式 */
+.order-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+.modal-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #303133;
+}
+
+.modal-close {
+  font-size: 48rpx;
+  color: #909399;
+  line-height: 1;
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.order-list {
+  flex: 1;
+  padding: 24rpx;
+  overflow-y: auto;
+}
+
+.empty-orders {
+  text-align: center;
+  padding: 80rpx 0;
+  color: #909399;
+  font-size: 28rpx;
+}
+
+.order-item {
+  background: #f8f9fa;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.order-id {
+  font-size: 26rpx;
+  color: #606266;
+}
+
+.order-status {
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.order-items {
+  margin-bottom: 16rpx;
+}
+
+.order-item-row {
+  display: flex;
+  margin-bottom: 16rpx;
+}
+
+.order-item-row:last-child {
+  margin-bottom: 0;
+}
+
+.order-item-image {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  background: #f2f3f5;
+  margin-right: 16rpx;
+}
+
+.order-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-item-name {
+  font-size: 28rpx;
+  color: #303133;
+  margin-bottom: 8rpx;
+}
+
+.order-item-sku {
+  font-size: 24rpx;
+  color: #909399;
+  margin-bottom: 8rpx;
+}
+
+.order-item-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+
+.order-item-price {
+  font-size: 28rpx;
+  color: #fa541c;
+  font-weight: 600;
+}
+
+.order-item-qty {
+  font-size: 24rpx;
+  color: #606266;
+}
+
+.order-footer {
+  padding-top: 16rpx;
+  border-top: 1px solid #e5e5e5;
+}
+
+.order-total {
+  font-size: 28rpx;
+  color: #303133;
+  font-weight: 500;
+  text-align: right;
+}
+
+.order-loading {
+  padding: 80rpx 0;
+  text-align: center;
+  color: #909399;
+  font-size: 28rpx;
 }
 </style>
 

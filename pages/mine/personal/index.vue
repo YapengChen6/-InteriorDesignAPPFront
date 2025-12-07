@@ -1,7 +1,7 @@
 <template>
   <view class="container">
     <!-- 头像展示区域 -->
-    <view class="avatar-section" @tap="navigateTo('/pages/mine/avatar/index')">
+    <view class="avatar-section">
       <view class="avatar-wrapper">
         <image 
           :src="displayAvatar" 
@@ -13,7 +13,6 @@
         <view class="avatar-loading" v-if="avatarLoading">
           <view class="loading-spinner"></view>
         </view>
-        <view class="avatar-edit">编辑</view>
       </view>
       <view class="user-name">{{ user.nickName || user.name || '用户' }}</view>
     </view>
@@ -21,6 +20,15 @@
     <!-- 其他代码保持不变 -->
     <view class="user-card">
       <view class="info-list">
+        <view class="info-item" @tap="navigateTo('/pages/mine/avatar/index')">
+          <view class="info-icon">🖼️</view>
+          <view class="info-content">
+            <view class="info-title">头像</view>
+            <view class="info-value">点击编辑</view>
+          </view>
+          <view class="info-arrow">›</view>
+        </view>
+        
         <view class="info-item" @tap="navigateTo('/pages/mine/personal/nickname/index')">
           <view class="info-icon">👤</view>
           <view class="info-content">
@@ -386,12 +394,6 @@
     padding: 60rpx 40rpx;
     text-align: center;
     margin-bottom: 20rpx;
-    transition: all 0.3s ease;
-  }
-  
-  .avatar-section:active {
-    transform: scale(0.98);
-    background: #f8f9fa;
   }
   
   .avatar-wrapper {
@@ -436,22 +438,6 @@
     100% { transform: rotate(360deg); }
   }
   
-  .avatar-edit {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    background: #6a11cb;
-    color: white;
-    padding: 8rpx 20rpx;
-    border-radius: 20rpx;
-    font-size: 24rpx;
-    transition: all 0.3s ease;
-  }
-  
-  .avatar-edit:active {
-    background: #5a0db5;
-    transform: scale(0.95);
-  }
   
   .user-name {
     font-size: 36rpx;

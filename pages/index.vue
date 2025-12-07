@@ -1595,7 +1595,7 @@ export default {
 		position: relative;
 		width: 100%;
 		height: 0;
-		padding-bottom: 133.33%;
+		padding-bottom: 100%; /* 正方形：宽高比 1:1 */
 		overflow: hidden;
 	}
 	

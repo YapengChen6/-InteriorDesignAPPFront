@@ -7,9 +7,6 @@
       <view class="progress-step">2</view>
     </view>
     
-    <view class="title">修改手机号 (1/2)</view>
-    <view class="subtitle">请先验证当前手机号</view>
-    
     <!-- 当前手机号显示 -->
     <view class="current-phone">
       <text class="phone-number">{{ maskedPhone }}</text>
@@ -29,10 +26,10 @@
         />
         <view 
           class="get-code-btn" 
-          :class="{ disabled: countdown > 0 }"
+          :class="{ disabled: countdown > 0 || isSending }"
           @tap="getVerificationCode"
         >
-          {{ countdown > 0 ? `${countdown}s后重新获取` : '获取验证码' }}
+          {{ isSending ? '发送中...' : (countdown > 0 ? `${countdown}s后重新获取` : '获取验证码') }}
         </view>
       </view>
     </view>
@@ -40,10 +37,10 @@
     <!-- 提交按钮 -->
     <view 
       class="submit-btn" 
-      :class="{ active: verificationCode.length === 6 }"
+      :class="{ active: verificationCode.length === 6 && !isVerifying }"
       @tap="verifyCode"
     >
-      提交
+      {{ isVerifying ? '验证中...' : '提交' }}
     </view>
   </view>
 </template>
@@ -57,13 +54,17 @@ export default {
       user: {},
       verificationCode: '',
       countdown: 0,
-      timer: null
+      timer: null,
+      isSending: false,
+      isVerifying: false
     }
   },
   computed: {
     maskedPhone() {
       if (this.user.phone) {
         return this.user.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
+      } else if (this.user.phonenumber) {
+        return this.user.phonenumber.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
       }
       return ''
     }
@@ -80,7 +81,11 @@ export default {
     async getUserInfo() {
       try {
         const response = await getUserProfile()
-        this.user = response.data
+        if (response.code === 200) {
+          this.user = response.data
+        } else {
+          throw new Error(response.msg || '获取用户信息失败')
+        }
       } catch (error) {
         console.error('获取用户信息失败:', error)
         uni.showToast({
@@ -91,9 +96,10 @@ export default {
     },
     
     async getVerificationCode() {
-      if (this.countdown > 0) return
+      if (this.countdown > 0 || this.isSending) return
       
-      if (!this.user.phone) {
+      const currentPhone = this.user.phone || this.user.phonenumber
+      if (!currentPhone) {
         uni.showToast({
           title: '未绑定手机号',
           icon: 'none'
@@ -101,35 +107,45 @@ export default {
         return
       }
       
+      this.isSending = true
       try {
         uni.showLoading({
           title: '发送中...',
           mask: true
         })
         
-        await sendCode(this.user.phone)
+        const result = await sendCode(currentPhone)
+        console.log('验证码发送结果:', result)
         
         uni.hideLoading()
-        uni.showToast({
-          title: '验证码已发送',
-          icon: 'success'
-        })
         
-        // 开始倒计时
-        this.startCountdown()
+        if (result.code === 200 || result.success) {
+          uni.showToast({
+            title: '验证码已发送',
+            icon: 'success'
+          })
+          this.startCountdown()
+        } else {
+          throw new Error(result.msg || result.message || '发送验证码失败')
+        }
         
       } catch (error) {
         uni.hideLoading()
         console.error('发送验证码失败:', error)
         uni.showToast({
-          title: '发送验证码失败',
+          title: error.message || '发送验证码失败',
           icon: 'none'
         })
+      } finally {
+        this.isSending = false
       }
     },
     
     startCountdown() {
       this.countdown = 60
+      if (this.timer) {
+        clearInterval(this.timer)
+      }
       this.timer = setInterval(() => {
         this.countdown--
         if (this.countdown <= 0) {
@@ -148,31 +164,38 @@ export default {
         return
       }
       
+      if (this.isVerifying) return
+      
+      this.isVerifying = true
       try {
         uni.showLoading({
           title: '验证中...',
           mask: true
         })
         
-        // 这里调用验证验证码的API
-        // 假设验证成功后跳转到第二个页面
-        // await verifyOldPhoneCode({ code: this.verificationCode })
+        // 这里调用验证当前手机号验证码的API
+        // 假设后端有验证接口，如果没有，可以暂时跳过验证直接跳转
+        // const result = await verifyOldPhoneCode({ code: this.verificationCode })
         
-        // 模拟验证成功
-        setTimeout(() => {
-          uni.hideLoading()
-          uni.navigateTo({
-            url: '/pages/mine/personal/phone/verify_phone'
-          })
-        }, 1000)
+        // 模拟验证成功，实际应该调用后端API
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        uni.hideLoading()
+        
+        // 验证成功后跳转到第二步
+        uni.navigateTo({
+          url: '/pages/mine/personal/phone/verify_phone'
+        })
         
       } catch (error) {
         uni.hideLoading()
         console.error('验证失败:', error)
         uni.showToast({
-          title: '验证码错误',
+          title: error.message || '验证码错误',
           icon: 'none'
         })
+      } finally {
+        this.isVerifying = false
       }
     }
   }

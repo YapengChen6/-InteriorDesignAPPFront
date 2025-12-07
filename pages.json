@@ -100,12 +100,12 @@
   }, {
     "path": "pages/mine/personal/phone/index",
     "style": {
-      "navigationBarTitleText": "修改号码1"
+      "navigationBarTitleText": "修改号码"
     }
   }, {
     "path": "pages/mine/personal/phone/verify_phone",
     "style": {
-      "navigationBarTitleText": "修改号码2"
+      "navigationBarTitleText": "修改号码"
     }
   }, {
     "path": "pages/mine/personal/address/index",

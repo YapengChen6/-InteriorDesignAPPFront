@@ -7,9 +7,6 @@
       <view class="progress-step active">2</view>
     </view>
     
-    <view class="title">修改手机号 (2/2)</view>
-    <view class="subtitle">请输入新的手机号</view>
-    
     <!-- 手机号输入 -->
     <view class="input-section">
       <view class="input-item">

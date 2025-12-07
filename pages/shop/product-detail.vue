@@ -469,7 +469,20 @@ export default {
     },
 
     handleBuyNow() {
-      this.submitCart(true)
+      // 直接购买：跳转到结算页面
+      if (!this.ensurePurchaseReady()) return
+      
+      const spuId = this.getSpuId()
+      const skuId = this.selectedSkuId
+      const quantity = this.purchaseQuantity
+      
+      // 构建跳转URL，传递商品信息
+      let url = `/pages/shop/checkout?directBuy=1&spuId=${spuId}&quantity=${quantity}`
+      if (skuId) {
+        url += `&skuId=${skuId}`
+      }
+      
+      uni.navigateTo({ url })
     }
   },
   onLoad(options) {
