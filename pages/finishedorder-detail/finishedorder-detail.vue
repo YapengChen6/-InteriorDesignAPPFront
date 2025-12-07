@@ -41,11 +41,11 @@
 						<text class="info-value">{{ getOrderTypeText(orderInfo.type) }}</text>
 					</view>
 					<view class="info-item">
-						<text class="info-label">订单状态</text>
-						<!-- 根据状态显示不同的样式 -->
-						<text class="info-value" :class="getStatusClass(orderInfo.status)">
-							{{ getStatusText(orderInfo.status) }}
-						</text>
+					<text class="info-label">订单状态</text>
+					<!-- 根据状态显示不同的样式 -->
+					<text class="info-value" :class="orderStatusClass">
+						{{ getStatusText(orderInfo.status) }}
+					</text>
 					</view>
 				</view>
 			</view>
@@ -407,6 +407,10 @@ export default {
 	},
 	
 	computed: {
+		// 订单状态样式类
+		orderStatusClass() {
+			return this.getStatusClass(this.orderInfo?.status);
+		},
 		// 按createTime排序的效果图方案（最新的排在最前面）
 		sortedEffectSchemes() {
 			return this.designSchemes

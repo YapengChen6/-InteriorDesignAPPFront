@@ -105,7 +105,7 @@
 					<view class="post-stats">
 						<text class="stat-item">点赞 {{ post.likeCount || 0 }}</text>
 						<text class="stat-item">收藏 {{ post.collectCount || 0 }}</text>
-						<text class="stat-item">评论 {{ post.commentCount || 0 }}</text>
+						<text class="stat-item">评论 {{ mainCommentCount }}</text>
 					</view>
 				</view>
 
@@ -129,8 +129,8 @@
 		<!-- 底部操作栏 -->
 		<view class="bottom-actions">
 			<view class="action-left">
-				<!-- 评论输入框改为绿色按钮样式 -->
-				<button class="comment-btn" @click="onCommentFocus">
+				<!-- 评论输入框改为绿色按钮样式 - 点击后弹出输入框直接发送评论 -->
+				<button class="comment-btn" @click="openCommentInput">
 					<text class="comment-btn-icon">💬</text>
 					<text class="comment-btn-text">说点什么...</text>
 				</button>
@@ -147,6 +147,12 @@
 				<view :class="['action-item', { collected: isCollected }]" @click="handleCollect">
 					<text class="action-icon">{{ isCollected ? '⭐' : '☆' }}</text>
 					<text class="action-count">{{ post ? post.collectCount : 0 }}</text>
+				</view>
+
+				<!-- 查看评论 -->
+				<view class="action-item" @click="openCommentModal">
+					<text class="action-icon">💬</text>
+					<text class="action-count">{{ mainCommentCount }}</text>
 				</view>
 
 				<!-- 分享 -->
@@ -171,44 +177,64 @@
 						<text>暂无评论，快来抢沙发吧~</text>
 					</view>
 
-					<!-- 评论项 - 抖音风格：平铺显示 -->
-					<view v-for="item in comments" :key="item.id" class="comment-item" :class="{ 'is-reply': item.isReply }" :data-comment-id="item.id">
+					<!-- 评论项 - 扁平化结构 -->
+					<view v-for="comment in displayedComments" :key="comment.id" 
+						:class="['comment-item', { 'reply-item': !comment.isMainComment }]" 
+						:data-comment-id="comment.id"
+						:style="{ paddingLeft: comment.isMainComment ? '0px' : '30px' }">
 						<!-- 评论者头像 -->
-						<image :src="item.userAvatar || getDefaultAvatar()" class="comment-avatar" mode="aspectFill"
+						<image :src="comment.userAvatar || getDefaultAvatar()" 
+							:class="comment.isMainComment ? 'comment-avatar' : 'reply-avatar'" 
+							mode="aspectFill"
 							@error="handleAvatarError"></image>
 
 						<!-- 评论内容区域 -->
-						<view class="comment-content">
-							<!-- 评论者信息和内容 -->
-							<view class="comment-main">
-								<!-- 用户名和内容 -->
-								<view class="comment-text-wrapper">
-									<text class="comment-author">{{ item.userName || '匿名用户' }}</text>
-									<text v-if="item.isReply && item.replyToUserName" class="reply-mention">@{{ item.replyToUserName }}</text>
-									<text class="comment-text">{{ item.content }}</text>
+						<view :class="comment.isMainComment ? 'comment-content' : 'reply-content'">
+							<!-- 评论者信息 -->
+							<view :class="comment.isMainComment ? 'comment-header' : 'reply-header'">
+								<text :class="comment.isMainComment ? 'comment-author' : 'reply-author'">
+									{{ comment.userName || '匿名用户' }}
+								</text>
+								<!-- 如果是回复，显示被回复者 -->
+								<text v-if="comment.replyToUserName && !comment.isMainComment" class="reply-to">
+									<text class="reply-to-icon">@</text>
+									<text class="reply-to-target">{{ comment.replyToUserName }}</text>
+								</text>
+								<text :class="comment.isMainComment ? 'comment-time' : 'reply-time'">
+									{{ formatDate(comment.createTime) }}
+								</text>
+							</view>
+							
+							<!-- 评论内容 -->
+							<text :class="comment.isMainComment ? 'comment-text' : 'reply-text'">
+								{{ comment.content }}
+							</text>
+							
+							<!-- 评论操作 -->
+							<view :class="comment.isMainComment ? 'comment-actions' : 'reply-actions'">
+								<view :class="[comment.isMainComment ? 'comment-action-btn' : 'reply-action-btn', { liked: likedComments.has(comment.id) }]" 
+									@click="handleLikeComment(comment)">
+									<text class="action-icon">{{ likedComments.has(comment.id) ? '❤️' : '🤍' }}</text>
+									<text class="action-count" v-if="comment.likeCount > 0">{{ comment.likeCount }}</text>
 								</view>
-								
-								<!-- 时间和操作 -->
-								<view class="comment-footer">
-									<text class="comment-time">{{ formatDate(item.createTime) }}</text>
-									<view class="comment-actions">
-										<view class="comment-action-btn" :class="{ liked: likedComments.has(item.id) }"
-											@click="handleLikeComment(item)">
-											<text class="action-icon">{{ likedComments.has(item.id) ? '❤️' : '🤍' }}</text>
-											<text class="action-count" v-if="item.likeCount > 0">{{ item.likeCount }}</text>
-										</view>
-										<view class="comment-action-btn" @click="startReply(item)">
-											<text class="action-text">回复</text>
-										</view>
-										<!-- 删除按钮（仅作者可见） -->
-										<view v-if="item.canDelete" class="comment-action-btn delete-btn"
-											@click="handleDeleteComment(item)">
-											<text class="action-text">删除</text>
-										</view>
-									</view>
+								<view :class="comment.isMainComment ? 'comment-action-btn' : 'reply-action-btn'" 
+									@click="startReply(comment)">
+									<text class="action-text">回复</text>
+								</view>
+								<!-- 删除按钮（仅作者可见） -->
+								<view v-if="comment.canDelete" 
+									:class="[comment.isMainComment ? 'comment-action-btn' : 'reply-action-btn', 'delete-btn']"
+									@click="handleDeleteComment(comment)">
+									<text class="action-text">删除</text>
 								</view>
 							</view>
 						</view>
+					</view>
+
+					<!-- 展开更多评论按钮 -->
+					<view v-if="hasMoreDisplayedComments()" class="expand-more-comments" @click="loadMoreDisplayedComments">
+						<text>展开更多评论 ({{ comments.length - displayedCount }} 条)</text>
+						<text class="expand-icon">▼</text>
 					</view>
 
 					<!-- 加载更多 -->
@@ -234,6 +260,42 @@
 					<button class="submit-comment-btn" @tap="replyingTo ? submitReply() : submitComment()"
 						:disabled="(!replyingTo && !commentText.trim()) || (replyingTo && !replyText.trim()) || commentLoading"
 						:loading="commentLoading" hover-class="button-hover">
+						{{ commentLoading ? '发送中...' : '发送' }}
+					</button>
+				</view>
+			</view>
+		</view>
+
+		<!-- 评论输入弹窗（绿色按钮点击后弹出） -->
+		<view v-if="showCommentInput" class="comment-input-modal" @touchmove.stop.prevent>
+			<view class="input-modal-mask" @click="closeCommentInput" @touchmove.stop.prevent></view>
+			<view class="input-modal-content" @touchmove.stop.prevent>
+				<view class="input-modal-header">
+					<text class="input-modal-title">评论</text>
+					<text class="input-modal-close" @click="closeCommentInput">×</text>
+				</view>
+				<view class="input-modal-body">
+					<textarea 
+						v-model="commentText" 
+						class="comment-input-textarea"
+						placeholder="写下你的评论..."
+						maxlength="500" 
+						:adjust-position="true" 
+						:show-confirm-bar="false" 
+						:auto-height="true"
+						:hold-keyboard="true" 
+						:fixed="false" 
+						:cursor-spacing="20" 
+						@focus="onTextareaFocus"
+						@blur="onTextareaBlur"
+						@input="onCommentInput"
+						@confirm="submitComment()"></textarea>
+					<button 
+						class="input-submit-btn" 
+						@tap="submitComment()"
+						:disabled="!commentText.trim() || commentLoading"
+						:loading="commentLoading" 
+						hover-class="button-hover">
 						{{ commentLoading ? '发送中...' : '发送' }}
 					</button>
 				</view>
@@ -295,18 +357,22 @@ export default {
 			
 			// UI状态
 			showCommentModal: false,
+			showCommentInput: false, // 评论输入弹窗
 			
 			// 评论相关
 			commentText: '',
-			comments: [],
-				commentPageNum: 1,
-				commentPageSize: 20,
-				hasMoreComments: true,
-				commentLoading: false,
-				replyingTo: null, // 正在回复的评论ID
-				replyText: '', // 回复内容
-				likedComments: new Set(), // 已点赞的评论ID集合
-				textareaFocused: false, // textarea 是否聚焦
+			comments: [], // 所有评论（扁平化）
+			displayedComments: [], // 当前显示的评论（分页）
+			commentPageNum: 1,
+			commentPageSize: 20,
+			displayPageSize: 10, // 每次显示的评论数量
+			displayedCount: 10, // 当前已显示的评论数量
+			hasMoreComments: true,
+			commentLoading: false,
+			replyingTo: null, // 正在回复的评论ID
+			replyText: '', // 回复内容
+			likedComments: new Set(), // 已点赞的评论ID集合
+			textareaFocused: false, // textarea 是否聚焦
 			
 			// 相关推荐
 			relatedPosts: [],
@@ -338,6 +404,16 @@ export default {
 			// 简单判断：只要包含 HTML 标签（如 <p>、<br> 等），就按富文本渲染
 			const content = this.post.content
 			return /<[^>]+>/.test(content)
+		},
+		
+		// 主评论数量（只统计主评论，不包括回复）
+		mainCommentCount() {
+			if (this.comments && this.comments.length > 0) {
+				// 从已加载的评论中统计主评论数量
+				return this.comments.filter(c => c.isMainComment).length
+			}
+			// 如果评论列表为空，使用帖子数据中的评论数（可能是后端返回的主评论数）
+			return this.post ? (this.post.commentCount || 0) : 0
 		}
 	},
 	
@@ -818,21 +894,31 @@ export default {
 							}
 						}
 
-						// 处理评论数据
+						// 调试：打印原始评论数据，查看字段名
+						if (commentList && commentList.length > 0) {
+							console.log('原始评论数据示例:', commentList[0])
+							console.log('评论对象的所有字段:', Object.keys(commentList[0]))
+						}
+
+						// 处理评论数据（扁平化）
 						const processedComments = this.processComments(commentList)
 
 						if (this.commentPageNum === 1) {
 							// 重置评论列表
 							this.comments = processedComments
+							this.displayedCount = this.displayPageSize // 重置显示数量
 						} else {
 							// 追加评论
 							this.comments = [...this.comments, ...processedComments]
 						}
 
+						// 更新显示的评论列表
+						this.updateDisplayedComments()
+
 						// 更新分页信息
 						this.hasMoreComments = commentList.length === this.commentPageSize
 
-						console.log('✅ 评论加载完成，当前评论数:', this.comments.length)
+						console.log('✅ 评论加载完成，总评论数:', this.comments.length, '显示评论数:', this.displayedComments.length)
 						
 						// 强制更新视图
 						this.$nextTick(() => {
@@ -863,51 +949,79 @@ export default {
 				}
 			},
 
-			// 处理评论数据 - 抖音风格：扁平化评论和回复
+			// 处理评论数据 - 扁平化结构：将所有评论（包括回复）展平为一级列表
 			processComments(comments) {
 				if (!Array.isArray(comments)) return []
 
-				const flatList = []
-				
-				comments.forEach(comment => {
-					// 处理主评论
-					const mainComment = {
-						id: comment.id || comment.comment_id,
-						content: comment.content,
-						userName: comment.userName || comment.user_name || comment.author,
-						userAvatar: comment.userAvatar || comment.user_avatar || comment.avatar,
-						likeCount: comment.likeCount || comment.like_count || 0,
-						replyCount: comment.replyCount || comment.reply_count || 0,
-						createTime: comment.createTime || comment.create_time,
-						canDelete: comment.canDelete !== undefined ? comment.canDelete : false,
-						isReply: false, // 标记为主评论
-						parentId: null,
-						replyToUserName: null
-					}
-					flatList.push(mainComment)
+				const flatComments = []
 
-					// 处理回复，扁平化到列表中
-					if (comment.replies && Array.isArray(comment.replies)) {
-						comment.replies.forEach(reply => {
-							flatList.push({
-								id: reply.id || reply.comment_id,
-								content: reply.content,
-								userName: reply.userName || reply.user_name || reply.author,
-								userAvatar: reply.userAvatar || reply.user_avatar || reply.avatar,
-								replyToUserId: reply.replyToUserId || reply.reply_to_user_id,
-								replyToUserName: reply.replyToUserName || reply.reply_to_user_name || mainComment.userName,
-								likeCount: reply.likeCount || reply.like_count || 0,
-								createTime: reply.createTime || reply.create_time,
-								canDelete: reply.canDelete !== undefined ? reply.canDelete : false,
-								isReply: true, // 标记为回复
-								parentId: mainComment.id,
-								parentComment: mainComment // 保存父评论引用，用于回复时定位
-							})
+				// 递归函数：将嵌套的评论结构扁平化
+				const flattenComments = (commentList, level = 0) => {
+					commentList.forEach(comment => {
+						// 兼容多种ID字段名
+						const commentId = comment.id || comment.commentId || comment.comment_id
+						
+						// 如果ID不存在，跳过
+						if (!commentId) {
+							console.warn('评论ID不存在，跳过该评论:', comment)
+							return
+						}
+
+						// 添加到扁平列表
+						flatComments.push({
+							id: commentId,
+							content: comment.content,
+							userName: comment.userName || comment.user_name || comment.author,
+							userAvatar: comment.userAvatar || comment.user_avatar || comment.avatar,
+							likeCount: comment.likeCount || comment.like_count || 0,
+							createTime: comment.createTime || comment.create_time,
+							canDelete: comment.canDelete !== undefined ? comment.canDelete : false,
+							parentId: comment.parentId || null, // 父评论ID
+							replyToUserName: comment.replyToUserName || comment.reply_to_user_name || null, // 被回复者名称
+							level: level, // 评论层级（0=主评论，1=一级回复，2=二级回复...）
+							isMainComment: level === 0 // 是否为主评论
 						})
-					}
-				})
 
-				return flatList
+						// 如果有回复，递归处理
+						if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
+							// 为每个回复设置 parentId
+							const repliesWithParent = comment.replies.map(reply => ({
+								...reply,
+								parentId: commentId
+							}))
+							flattenComments(repliesWithParent, level + 1)
+						}
+					})
+				}
+
+				// 开始扁平化处理
+				flattenComments(comments, 0)
+
+				// 按创建时间排序（保持后端返回的顺序，如果需要的话）
+				// 这里不排序，保持后端返回的原始顺序
+				return flatComments
+			},
+
+			// 更新显示的评论列表（分页）
+			updateDisplayedComments() {
+				// 根据 displayedCount 截取要显示的评论
+				this.displayedComments = this.comments.slice(0, this.displayedCount)
+			},
+
+			// 展开更多评论
+			loadMoreDisplayedComments() {
+				if (this.displayedCount < this.comments.length) {
+					this.displayedCount = Math.min(
+						this.displayedCount + this.displayPageSize,
+						this.comments.length
+					)
+					this.updateDisplayedComments()
+				}
+			},
+
+			// 检查是否还有更多评论可以显示
+			hasMoreDisplayedComments() {
+				return this.displayedCount < this.comments.length
 			},
 
 			// 加载更多评论
@@ -918,74 +1032,108 @@ export default {
 				await this.loadComments()
 			},
 
-			// 加载更多回复
-			async loadMoreReplies(comment) {
-				// TODO: 如果有单独的加载回复接口，可以在这里实现
-				console.log('加载更多回复:', comment.id)
-			},
+
 		
-		// 提交评论
+		// 打开评论输入框（绿色按钮点击）
+		openCommentInput() {
+			this.showCommentInput = true
+			this.commentText = ''
+			this.replyingTo = null
+			// 聚焦到输入框
+			this.$nextTick(() => {
+				this.textareaFocused = true
+			})
+		},
+
+		// 关闭评论输入框
+		closeCommentInput() {
+			this.showCommentInput = false
+			this.commentText = ''
+			this.replyingTo = null
+			this.textareaFocused = false
+		},
+
+		// 打开评论查看弹窗
+		openCommentModal() {
+			this.showCommentModal = true
+			// 如果评论列表为空，加载评论
+			if (this.comments.length === 0 && !this.commentLoading) {
+				this.loadComments()
+			}
+		},
+
+		// 提交评论（给帖子发送评论，parentId为null）
 		async submitComment() {
 				if (!this.commentText.trim() || this.commentLoading || !this.postId) return
 			
 			try {
 				this.commentLoading = true
 				
+					// 给帖子发送评论，parentId为null
 					const response = await submitComment(this.postId, {
-						content: this.commentText.trim()
+						content: this.commentText.trim(),
+						parentId: null
 					})
 				
 					if (response && response.code === 200) {
 						const commentContent = this.commentText.trim()
-				this.commentText = ''
+						this.commentText = ''
 
-						// 先显示成功提示
+						// 关闭输入框
+						this.closeCommentInput()
+
+						// 显示成功提示
 						uni.showToast({
 							title: '评论成功',
 							icon: 'success',
 							duration: 1000
 						})
 
-						// 重新获取帖子详情，确保评论数正确（不自动加载评论，由后续逻辑处理）
-						await this.fetchPostDetail(false)
+						// 从响应中获取新评论数据，如果没有则构建一个
+						const newCommentData = response.data || {}
+						const commentId = newCommentData.id || newCommentData.commentId || newCommentData.comment_id || Date.now()
 						
-						// 清空评论列表，强制刷新
-						this.comments = []
-						this.commentPageNum = 1
-						
-						// 使用重试机制加载评论，确保新评论显示
-						let retryCount = 0
-						const maxRetries = 5
-						let success = false
-						
-						while (retryCount < maxRetries && !success) {
-							// 等待一段时间，确保后端数据已保存
-							await new Promise(resolve => setTimeout(resolve, 500 + retryCount * 200))
-							
-							// 重新加载评论列表
-							await this.loadComments()
-							
-							// 检查是否加载到了新评论（通过评论数量或内容匹配）
-							if (this.comments.length > 0) {
-								// 检查是否有匹配的评论内容
-								const hasNewComment = this.comments.some(comment => 
-									comment.content === commentContent
-								)
-								if (hasNewComment) {
-									success = true
-									break
-								}
+						// 获取当前用户信息
+						let currentUser = null
+						try {
+							const userInfo = uni.getStorageSync('userInfo')
+							if (userInfo) {
+								currentUser = typeof userInfo === 'string' ? JSON.parse(userInfo) : userInfo
 							}
-							
-							retryCount++
+						} catch (e) {
+							console.warn('获取用户信息失败:', e)
 						}
 
-						// 滚动到顶部，显示新评论
-						this.$nextTick(() => {
-							this.scrollToTop()
-							// 强制更新视图
-							this.$forceUpdate()
-						})
+						// 构建新评论对象
+						const newComment = {
+							id: commentId,
+							content: commentContent,
+							userName: newCommentData.userName || newCommentData.user_name || currentUser?.nickName || currentUser?.userName || '我',
+							userAvatar: newCommentData.userAvatar || newCommentData.user_avatar || currentUser?.avatar || '',
+							likeCount: newCommentData.likeCount || newCommentData.like_count || 0,
+							createTime: newCommentData.createTime || newCommentData.create_time || new Date(),
+							canDelete: true, // 自己发的评论可以删除
+							parentId: null, // 主评论没有parentId
+							replyToUserName: null,
+							level: 0, // 主评论level为0
+							isMainComment: true
+						}
+
+						// 直接添加到评论列表（添加到最前面）
+						this.comments.unshift(newComment)
+						
+						// 更新显示的评论列表
+						this.updateDisplayedComments()
+						
+						// 更新帖子评论数
+						this.post.commentCount = (this.post.commentCount || 0) + 1
+
+						// 如果评论弹窗已打开，滚动到顶部显示新评论
+						if (this.showCommentModal) {
+							this.$nextTick(() => {
+								this.scrollToTop()
+							})
+						}
 					} else {
 						throw new Error(response ? response.msg || response.message : '评论失败')
 					}
@@ -1011,25 +1159,30 @@ export default {
 			}
 		},
 
-			// 开始回复
-			startReply(item) {
-				// 抖音风格：如果回复的是回复，则回复给被回复的用户；否则回复给主评论
-				if (item.isReply && item.replyToUserName) {
-					// 回复的是回复，回复给被回复的用户
-					this.replyingTo = {
-						id: item.id,
-						userName: item.userName || '匿名用户',
-						parentId: item.parentId || item.id,
-						replyToUserName: item.replyToUserName
-					}
-				} else {
-					// 回复主评论
-					this.replyingTo = {
-						id: item.id,
-						userName: item.userName || '匿名用户',
-						parentId: item.isReply ? item.parentId : null
-					}
+			// 开始回复（扁平化结构，所有评论都在同一层级）
+			startReply(comment) {
+				// 兼容不同的ID字段名
+				const commentId = comment.id || comment.commentId || comment.comment_id
+				
+				if (!commentId) {
+					console.error('回复失败：评论ID不存在', comment)
+					console.error('尝试的字段名: id, commentId, comment_id')
+					console.error('评论对象的所有字段:', Object.keys(comment))
+					uni.showToast({
+						title: '回复失败：缺少评论ID',
+						icon: 'none'
+					})
+					return
 				}
+				
+				// 设置回复目标（parentId 就是被回复的评论ID）
+				this.replyingTo = {
+					id: commentId, // 被回复的评论ID
+					userName: comment.userName || comment.user_name || '匿名用户',
+					parentId: commentId // 父评论ID（被回复的评论ID）
+				}
+				
+				console.log('开始回复，replyingTo:', this.replyingTo)
 				this.replyText = ''
 				
 				// 确保评论弹窗打开
@@ -1039,8 +1192,6 @@ export default {
 				
 				// 聚焦到输入框
 				this.$nextTick(() => {
-					// 在小程序中，可能需要手动触发聚焦
-					// 这里通过设置 textareaFocused 来触发
 					this.textareaFocused = true
 				})
 			},
@@ -1059,66 +1210,116 @@ export default {
 					this.commentLoading = true
 
 					// 保存回复目标信息，用于后续定位
-					// 抖音风格：parentId 应该是主评论的 ID（如果是回复回复，则使用 parentId；否则使用 id）
-					const targetCommentId = this.replyingTo.parentId || this.replyingTo.id
-					const targetParentId = this.replyingTo.parentId
+					// parentId 必须是父评论的ID（回复主评论时是主评论ID，回复回复时是被回复的回复ID）
+					const targetParentId = this.replyingTo.parentId || this.replyingTo.id // 父评论ID，如果parentId不存在则使用id
+					const mainCommentId = this.replyingTo.mainCommentId || this.replyingTo.id // 主评论ID（用于定位）
 
+					// 验证 parentId 是否存在
+					if (!targetParentId) {
+						console.error('提交回复失败：parentId 不存在', this.replyingTo)
+						uni.showToast({
+							title: '回复失败：缺少父评论ID',
+							icon: 'none'
+						})
+						this.commentLoading = false
+						return
+					}
+
+					console.log('提交回复，parentId:', targetParentId, 'parentId类型:', typeof targetParentId, 'content:', this.replyText.trim())
+
+					// 确保 parentId 是数字类型
+					const parentIdNum = Number(targetParentId)
+					if (isNaN(parentIdNum) || parentIdNum <= 0) {
+						console.error('parentId 格式错误:', targetParentId)
+						uni.showToast({
+							title: '回复失败：父评论ID格式错误',
+							icon: 'none'
+						})
+						this.commentLoading = false
+						return
+					}
+
+					// 提交回复时，parentId 必须是父评论的ID
 					const response = await submitComment(this.postId, {
 						content: this.replyText.trim(),
-						parentId: targetCommentId
+						parentId: parentIdNum // 父评论ID（确保是数字类型）
 					})
+
+					console.log('回复API响应:', response)
 
 					if (response && response.code === 200) {
 						const replyContent = this.replyText.trim()
 						this.replyText = ''
+						
+						// 从响应中获取新回复数据，如果没有则构建一个
+						const newReplyData = response.data || {}
+						const replyId = newReplyData.id || newReplyData.commentId || newReplyData.comment_id || Date.now()
+						
+						// 获取当前用户信息
+						let currentUser = null
+						try {
+							const userInfo = uni.getStorageSync('userInfo')
+							if (userInfo) {
+								currentUser = typeof userInfo === 'string' ? JSON.parse(userInfo) : userInfo
+							}
+						} catch (e) {
+							console.warn('获取用户信息失败:', e)
+						}
+
+						// 查找父评论，确定level和replyToUserName
+						const parentComment = this.comments.find(c => c.id === targetParentId)
+						const replyLevel = parentComment ? (parentComment.level || 0) + 1 : 1
+						const replyToUserName = parentComment ? (parentComment.userName || '匿名用户') : this.replyingTo.userName
+
+						// 构建新回复对象
+						const newReply = {
+							id: replyId,
+							content: replyContent,
+							userName: newReplyData.userName || newReplyData.user_name || currentUser?.nickName || currentUser?.userName || '我',
+							userAvatar: newReplyData.userAvatar || newReplyData.user_avatar || currentUser?.avatar || '',
+							likeCount: newReplyData.likeCount || newReplyData.like_count || 0,
+							createTime: newReplyData.createTime || newReplyData.create_time || new Date(),
+							canDelete: true, // 自己发的回复可以删除
+							parentId: targetParentId,
+							replyToUserName: replyToUserName,
+							level: replyLevel,
+							isMainComment: false
+						}
+
+						// 找到父评论的位置，将新回复插入到父评论之后
+						const parentIndex = this.comments.findIndex(c => c.id === targetParentId)
+						if (parentIndex !== -1) {
+							// 找到父评论后面最后一个同级或子级评论的位置
+							let insertIndex = parentIndex + 1
+							while (insertIndex < this.comments.length && 
+								   this.comments[insertIndex].level > replyLevel) {
+								insertIndex++
+							}
+							this.comments.splice(insertIndex, 0, newReply)
+						} else {
+							// 如果找不到父评论，直接添加到末尾
+							this.comments.push(newReply)
+						}
+						
+						// 更新显示的评论列表
+						this.updateDisplayedComments()
+						
+						// 更新帖子评论数
+						this.post.commentCount = (this.post.commentCount || 0) + 1
+						
+						// 清空回复目标
 						this.replyingTo = null
 
-						// 先显示成功提示
+						// 显示成功提示
 						uni.showToast({
 							title: '回复成功',
 							icon: 'success',
 							duration: 1000
 						})
 
-						// 重新获取帖子详情，确保评论数正确（不自动加载评论，由后续逻辑处理）
-						await this.fetchPostDetail(false)
-
-						// 清空评论列表，强制刷新
-						this.comments = []
-						this.commentPageNum = 1
-						
-						// 使用重试机制加载评论，确保新回复显示
-						let retryCount = 0
-						const maxRetries = 5
-						let success = false
-						
-						while (retryCount < maxRetries && !success) {
-							// 等待一段时间，确保后端数据已保存
-							await new Promise(resolve => setTimeout(resolve, 500 + retryCount * 200))
-							
-							// 重新加载评论列表
-							await this.loadComments()
-							
-							// 检查是否加载到了新回复（抖音风格：评论和回复都是平铺的）
-							if (this.comments.length > 0) {
-								// 查找是否有匹配的回复内容
-								const hasNewReply = this.comments.some(item => 
-									item.content === replyContent && item.isReply
-								)
-								if (hasNewReply) {
-									success = true
-									break
-								}
-							}
-							
-							retryCount++
-						}
-
-						// 滚动到对应的评论位置
+						// 滚动到新回复位置
 						this.$nextTick(() => {
-							this.scrollToComment(targetCommentId)
-							// 强制更新视图
-							this.$forceUpdate()
+							this.scrollToComment(replyId)
 						})
 					} else {
 						throw new Error(response ? response.msg || response.message : '回复失败')
@@ -1126,10 +1327,36 @@ export default {
 
 				} catch (error) {
 					console.error('回复提交失败:', error)
-					const errorMsg = error.msg || error.message || '回复失败'
+					console.error('错误详情:', {
+						message: error.message,
+						msg: error.msg,
+						response: error.response,
+						data: error.data,
+						status: error.status,
+						statusCode: error.statusCode
+					})
+					
+					// 提取更详细的错误信息
+					let errorMsg = '回复失败'
+					if (error.response && error.response.data) {
+						errorMsg = error.response.data.msg || error.response.data.message || errorMsg
+					} else if (error.data) {
+						errorMsg = error.data.msg || error.data.message || errorMsg
+					} else if (error.msg) {
+						errorMsg = error.msg
+					} else if (error.message) {
+						errorMsg = error.message
+					}
+					
+					// 如果是500错误，显示更友好的提示
+					if (error.status === 500 || error.statusCode === 500 || errorMsg.includes('500')) {
+						errorMsg = '服务器错误，请稍后重试'
+					}
+					
 					uni.showToast({
 						title: errorMsg,
-						icon: 'none'
+						icon: 'none',
+						duration: 2000
 					})
 				} finally {
 					this.commentLoading = false
@@ -1169,9 +1396,9 @@ export default {
 				}
 			},
 
-			// 删除评论（抖音风格：评论和回复都是平铺的）
-			async handleDeleteComment(item) {
-				if (!this.postId || !item.id) return
+			// 删除评论（嵌套结构）
+			async handleDeleteComment(comment) {
+				if (!this.postId || !comment.id) return
 
 				uni.showModal({
 					title: '确认删除',
@@ -1179,17 +1406,20 @@ export default {
 					success: async (res) => {
 						if (res.confirm) {
 							try {
-								const response = await deleteComment(this.postId, item.id)
+								const response = await deleteComment(this.postId, comment.id)
 
 								if (response && response.code === 200) {
 									// 更新评论数
 									this.post.commentCount = Math.max(0, (this.post.commentCount || 0) - 1)
 
-									// 从列表中移除（抖音风格：直接删除，因为都是平铺的）
-									const index = this.comments.findIndex(c => c.id === item.id)
-									if (index !== -1) {
-										this.comments.splice(index, 1)
+									// 从扁平化列表中移除（包括所有评论和显示的评论）
+									const commentIndex = this.comments.findIndex(c => c.id === comment.id)
+									if (commentIndex !== -1) {
+										this.comments.splice(commentIndex, 1)
 									}
+									
+									// 更新显示的评论列表
+									this.updateDisplayedComments()
 
 									uni.showToast({
 										title: '删除成功',
@@ -1450,14 +1680,6 @@ export default {
 				})
 			},
 		
-		// 评论输入框聚焦
-		onCommentFocus() {
-			this.showCommentModal = true
-				// 如果评论列表为空，加载评论
-				if (this.comments.length === 0 && !this.commentLoading) {
-					this.loadComments()
-				}
-		},
 		
 		// 关闭评论弹窗
 		closeCommentModal() {
@@ -1481,7 +1703,7 @@ export default {
 				this.textareaFocused = false
 			},
 
-			// textarea 输入事件
+			// textarea 输入事件（评论弹窗中的）
 			onTextareaInput(e) {
 				// 确保数据同步（小程序中使用 @input 事件）
 				const value = e.detail.value
@@ -1490,7 +1712,12 @@ export default {
 				} else {
 					this.commentText = value
 				}
-		},
+			},
+
+			// 评论输入弹窗中的输入事件
+			onCommentInput(e) {
+				this.commentText = e.detail.value
+			},
 		
 		// 显示操作菜单
 		showActionSheet() {
@@ -2174,11 +2401,13 @@ export default {
 	padding: 40px 0;
 }
 
-	/* 评论项 - 抖音风格 */
+	/* 评论项 - 扁平化结构 */
 	.comment-item {
 		display: flex;
 		margin-bottom: 16px;
 		padding-bottom: 12px;
+		position: relative;
+		box-sizing: border-box;
 	}
 
 	.comment-item:last-child {
@@ -2204,54 +2433,45 @@ export default {
 		min-width: 0;
 	}
 
-	.comment-main {
+	/* 评论头部：用户名和时间 */
+	.comment-header {
 		display: flex;
-		flex-direction: column;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8px;
 	}
 
-	/* 评论文本区域 - 抖音风格：用户名和内容在同一行 */
-	.comment-text-wrapper {
+	.comment-author-wrapper {
 		display: flex;
+		align-items: center;
+		gap: 6px;
 		flex-wrap: wrap;
-		align-items: baseline;
-		margin-bottom: 6px;
-		line-height: 1.5;
 	}
 
 	.comment-author {
 		font-size: 14px;
 		font-weight: 500;
 		color: #333;
-		margin-right: 4px;
 	}
 
 	.reply-mention {
-		font-size: 14px;
+		font-size: 13px;
 		color: #ff2e63;
-		margin-right: 4px;
 		font-weight: 500;
 	}
 
+	.comment-time {
+		font-size: 12px;
+		color: #999;
+	}
+
+	/* 评论内容 */
 	.comment-text {
 		font-size: 14px;
-		line-height: 1.5;
+		line-height: 1.6;
 		color: #333;
+		margin-bottom: 8px;
 		word-break: break-word;
-		flex: 1;
-	}
-
-	/* 评论底部：时间和操作 */
-	.comment-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-top: 4px;
-	}
-
-	.comment-time {
-		font-size: 11px;
-		color: #999;
-		margin-right: 12px;
 	}
 
 	.comment-actions {
@@ -2291,13 +2511,167 @@ export default {
 		color: #ff4d4f;
 	}
 
-	.load-more-replies {
-		margin-top: 8px;
-		padding: 8px;
+	/* 回复容器 */
+	.replies-container {
+		margin-top: 12px;
+		padding-left: 0;
+	}
+
+	.reply-item {
+		display: flex;
+		margin-bottom: 12px;
+		position: relative;
+		box-sizing: border-box;
+	}
+
+	.reply-item:last-child {
+		margin-bottom: 0;
+	}
+	
+	/* 为回复项添加左侧视觉指示线 */
+	.reply-item::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		width: 2px;
+		background-color: #e0e0e0;
+		border-radius: 1px;
+	}
+
+	.reply-avatar {
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		margin-right: 8px;
+		flex-shrink: 0;
+	}
+
+	.reply-content {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.reply-header {
+		display: flex;
+		align-items: center;
+		margin-bottom: 4px;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+
+	.reply-author {
+		font-size: 13px;
+		font-weight: 500;
+		color: #333;
+	}
+
+	.reply-to {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 12px;
+		color: #666;
+	}
+
+	.reply-to-icon {
+		font-size: 12px;
+		color: #ff2e63;
+	}
+
+	.reply-to-name {
+		color: #333;
+		font-weight: 500;
+	}
+
+	.reply-to-arrow {
+		color: #999;
+		margin: 0 2px;
+	}
+
+	.reply-to-target {
+		color: #ff2e63;
+		font-weight: 500;
+	}
+
+	.reply-time {
+		font-size: 11px;
+		color: #999;
+	}
+
+	.reply-text {
+		font-size: 13px;
+		line-height: 1.5;
+		color: #333;
+		margin-bottom: 6px;
+		word-break: break-word;
+	}
+
+	.reply-actions {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.reply-action-btn {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		cursor: pointer;
+		font-size: 11px;
+		color: #666;
+		padding: 2px 4px;
+	}
+
+	.reply-action-btn.liked {
+		color: #ff2e63;
+	}
+
+	/* 展开更多评论 */
+	.expand-more-comments {
+		margin: 16px 0;
+		padding: 12px;
 		text-align: center;
 		color: #ff2e63;
+		font-size: 14px;
+		cursor: pointer;
+		border-top: 1px solid #f0f0f0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+	}
+
+	.expand-more-comments:active {
+		opacity: 0.7;
+	}
+
+	.expand-more-comments .expand-icon {
+		font-size: 12px;
+		margin-left: 4px;
+	}
+
+	/* 展开/收起回复（保留样式，但不再使用） */
+	.expand-replies {
+		margin-top: 8px;
+		padding: 8px 0;
+		text-align: left;
+		color: #999;
 		font-size: 12px;
 		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.expand-replies:active {
+		opacity: 0.7;
+	}
+
+	.expand-icon {
+		font-size: 10px;
+		margin-left: 4px;
 	}
 
 	.comment-loading,
@@ -2377,6 +2751,98 @@ export default {
 	.button-hover {
 		opacity: 0.8;
 		transform: scale(0.98);
+	}
+
+/* 评论输入弹窗（绿色按钮点击后弹出） */
+.comment-input-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1001;
+}
+
+.input-modal-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.input-modal-content {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background: #fff;
+	border-radius: 16px 16px 0 0;
+	max-height: 50vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.input-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.input-modal-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #333;
+}
+
+.input-modal-close {
+	font-size: 24px;
+	color: #999;
+	cursor: pointer;
+}
+
+.input-modal-body {
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.comment-input-textarea {
+	flex: 1;
+	min-height: 100px;
+	max-height: 200px;
+	padding: 12px;
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	font-size: 14px;
+	box-sizing: border-box;
+	line-height: 1.5;
+}
+
+.input-submit-btn {
+	padding: 8px 16px;
+	background-color: #ff2e63;
+	color: white;
+	border: none;
+	border-radius: 6px;
+	font-size: 14px;
+	cursor: pointer;
+	line-height: 1.5;
+	white-space: nowrap;
+}
+
+.input-submit-btn:disabled {
+	background-color: #ccc;
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+.input-submit-btn::after {
+	border: none;
 }
 
 /* 操作菜单 */

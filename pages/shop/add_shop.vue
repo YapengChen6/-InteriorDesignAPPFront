@@ -262,7 +262,7 @@
                 @change="onProductStatusChange"
                 class="status-picker"
               >
-                <view class="picker-text status-picker-text" :class="getStatusClass(productData.productStatus)">
+                <view class="picker-text status-picker-text" :class="productStatusClass">
                   <text class="status-icon">{{ getStatusIcon(productData.productStatus) }}</text>
                   <text class="status-name">{{ productStatusOptions[productStatusIndex].name }}</text>
                   <text class="picker-arrow">▼</text>
@@ -595,6 +595,13 @@ export default {
         color: '#333',
         backgroundColor: '#fff'
       }
+    }
+  },
+  
+  computed: {
+    // 商品状态样式类
+    productStatusClass() {
+      return this.getStatusClass(this.productData?.productStatus);
     }
   },
   
