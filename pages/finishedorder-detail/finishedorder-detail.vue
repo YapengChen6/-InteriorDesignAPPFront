@@ -65,24 +65,27 @@
 				</view>
 			</view>
 
-			<!-- 设计师/监理信息 -->
-			<view class="info-card" v-if="orderInfo.contractorInfo && orderInfo.contractorInfo.name">
+			<!-- 动态显示对方信息：普通用户显示设计师/监理，设计师/监理显示用户 -->
+			<view class="info-card" v-if="showOppositeInfo">
 				<view class="card-title">
-					{{ isSupervisionOrder ? '监理信息' : '设计师信息' }}
+					{{ oppositeCardTitle }}
 				</view>
 				<view class="designer-content">
 					<view class="designer-avatar">
-						<image :src="orderInfo.contractorInfo.avatar || '/static/images/default-avatar.png'" mode="aspectFill" class="avatar-img" />
+						<image :src="currentOppositeInfo.avatar || '/static/images/default-avatar.png'" 
+							   mode="aspectFill" class="avatar-img" />
 					</view>
 					<view class="designer-info">
-						<text class="designer-name">{{ orderInfo.contractorInfo.name }}</text>
-						<text class="designer-role">{{ orderInfo.contractorInfo.role || (isSupervisionOrder ? '监理' : '设计师') }}</text>
-						<text class="designer-phone" v-if="orderInfo.contractorInfo.phone">电话: {{ orderInfo.contractorInfo.phone }}</text>
+						<text class="designer-name">{{ currentOppositeInfo.name }}</text>
+						<text class="designer-role">{{ currentOppositeInfo.role }}</text>
+						<text class="designer-phone" v-if="currentOppositeInfo.phone">
+							电话: {{ currentOppositeInfo.phone }}
+						</text>
 						<text class="no-phone-tip" v-else>暂无联系方式</text>
 					</view>
-					<!-- 新增在线咨询按钮 -->
-					<button class="contact-btn" @click="contactDesigner">
-						在线咨询
+					<!-- 在线咨询按钮 -->
+					<button class="contact-btn" @click="contactOpposite">
+						{{ oppositeButtonText }}
 					</button>
 				</view>
 			</view>
@@ -368,7 +371,7 @@ export default {
 			
 			// 用户身份信息
 			userRole: 'user', // 默认设为用户
-			userInfo: {}, // 用户信息
+			userInfo: {}, // 当前用户信息
 			
 			// 加载状态
 			loading: false,
@@ -393,6 +396,9 @@ export default {
 				projectInfo: {},
 				contractorInfo: {}
 			},
+			
+			// 对方信息缓存（根据角色不同）
+			oppositeInfoCache: {}, // 当用户是设计师/监理时，缓存用户信息
 			
 			// 设计方案列表
 			designSchemes: [],
@@ -444,6 +450,58 @@ export default {
 		// 是否为监理订单
 		isSupervisionOrder() {
 			return this.orderInfo.type === OrderType.SUPERVISION;
+		},
+		
+		// 根据用户角色获取要显示的对方信息
+		currentOppositeInfo() {
+			if (this.userRole === 'user') {
+				// 普通用户查看设计师/监理信息
+				return {
+					id: this.orderInfo.contractorId,
+					name: this.orderInfo.contractorInfo?.name || 
+						  (this.isSupervisionOrder ? '监理' : '设计师'),
+					phone: this.orderInfo.contractorInfo?.phone || '暂无联系方式',
+					avatar: this.orderInfo.contractorInfo?.avatar || '/static/images/default-avatar.png',
+					role: this.isSupervisionOrder ? '监理' : '设计师'
+				};
+			} else {
+				// 设计师/监理查看用户信息
+				return {
+					id: this.orderInfo.userId,
+					name: this.oppositeInfoCache?.nickName || this.oppositeInfoCache?.name || '客户',
+					phone: this.oppositeInfoCache?.phone || this.oppositeInfoCache?.userName || '暂无联系方式',
+					avatar: this.oppositeInfoCache?.avatar || '/static/images/default-avatar.png',
+					role: '客户'
+				};
+			}
+		},
+		
+		// 是否显示对方信息卡片
+		showOppositeInfo() {
+			// 只有当有对方信息时才显示
+			if (this.userRole === 'user') {
+				return this.orderInfo.contractorInfo && this.orderInfo.contractorInfo.name;
+			} else {
+				return this.oppositeInfoCache && (this.oppositeInfoCache.nickName || this.oppositeInfoCache.name);
+			}
+		},
+		
+		// 卡片标题
+		oppositeCardTitle() {
+			if (this.userRole === 'user') {
+				return this.isSupervisionOrder ? '监理信息' : '设计师信息';
+			} else {
+				return '客户信息';
+			}
+		},
+		
+		// 按钮文本
+		oppositeButtonText() {
+			if (this.userRole === 'user') {
+				return '咨询' + (this.isSupervisionOrder ? '监理' : '设计师');
+			} else {
+				return '联系客户';
+			}
 		},
 		
 		// 设计订单：是否显示评价按钮
@@ -602,7 +660,7 @@ export default {
 				const roleRes = await getCurrentRole();
 				if (roleRes.code === 200 && roleRes.data) {
 					this.userRole = roleRes.data.roleType;
-					// 保存用户信息
+					// 保存当前用户信息
 					this.userInfo = {
 						userId: roleRes.data.userId,
 						...roleRes.data
@@ -628,18 +686,20 @@ export default {
 				// 1. 加载订单基本信息
 				await this.loadOrderInfo();
 				
-				// 2. 加载设计方案（仅设计订单需要）
+				// 2. 根据用户角色加载对方信息
+				await this.loadOppositeInfo();
+				
+				// 3. 加载设计方案（仅设计订单需要）
 				if (!this.isSupervisionOrder) {
 					await this.loadDesignSchemes();
 				}
 				
-			// 3. 加载关联的材料订单（对于设计订单，查询关联的材料订单）
-			// 通过 purchase_order_id 关联表查询材料订单
-			if (!this.isSupervisionOrder) { // 设计订单（type=1）才显示关联材料
-				await this.loadMaterialOrders();
-			}
+				// 4. 加载关联的材料订单（对于设计订单，查询关联的材料订单）
+				if (!this.isSupervisionOrder) { // 设计订单（type=1）才显示关联材料
+					await this.loadMaterialOrders();
+				}
 				
-				// 4. 检查评价状态
+				// 5. 检查评价状态
 				await this.checkReviewStatus();
 				
 				console.log('✅ 订单详情加载完成:', this.orderInfo);
@@ -690,11 +750,6 @@ export default {
 						...currentOrder
 					};
 					
-					// 加载设计师/监理信息
-					if (currentOrder.contractorId) {
-						await this.loadContractorInfo(currentOrder.contractorId);
-					}
-					
 					console.log('✅ 订单信息加载成功:', this.orderInfo);
 				} else {
 					throw new Error('未找到订单信息');
@@ -706,7 +761,22 @@ export default {
 			}
 		},
 		
-		// 加载设计师/监理信息 - 修复：正确调用 getUserById 接口
+		// 根据用户角色加载对方信息
+		async loadOppositeInfo() {
+			if (this.userRole === 'user') {
+				// 普通用户：加载设计师/监理信息
+				if (this.orderInfo.contractorId) {
+					await this.loadContractorInfo(this.orderInfo.contractorId);
+				}
+			} else {
+				// 设计师/监理：加载用户信息
+				if (this.orderInfo.userId) {
+					await this.loadUserInfo(this.orderInfo.userId);
+				}
+			}
+		},
+		
+		// 加载设计师/监理信息
 		async loadContractorInfo(contractorId) {
 			try {
 				console.log('👨‍🎨 加载设计师/监理信息，ID:', contractorId);
@@ -716,13 +786,12 @@ export default {
 					this.orderInfo.contractorInfo = {
 						name: this.isSupervisionOrder ? '监理' : '设计师',
 						avatar: '/static/images/default-avatar.png',
-						role: this.isSupervisionOrder ? '监理' : '设计师',
 						phone: '暂无联系方式'
 					};
 					return;
 				}
 				
-				// 使用统一的 getUserById 接口 - 直接传递 userId 参数
+				// 使用统一的 getUserById 接口
 				const userResponse = await getUserById(contractorId);
 				
 				console.log('👨‍🎨 getUserById 原始响应:', userResponse);
@@ -758,8 +827,7 @@ export default {
 					name: userData.nickName || userData.name || userData.nickname || userData.username || 
 						  (this.isSupervisionOrder ? '监理' : '设计师'),
 					phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '暂无联系方式',
-					avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png',
-					role: this.isSupervisionOrder ? '监理' : '设计师'
+					avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png'
 				};
 				
 				console.log('✅ 加载设计师/监理信息成功:', this.orderInfo.contractorInfo);
@@ -770,15 +838,77 @@ export default {
 				this.orderInfo.contractorInfo = {
 					name: this.isSupervisionOrder ? '监理' : '设计师',
 					avatar: '/static/images/default-avatar.png',
-					role: this.isSupervisionOrder ? '监理' : '设计师',
 					phone: '暂无联系方式'
 				};
 			}
 		},
 		
-		// 在线咨询方法 - 用户联系设计师/监理（参考效果图页面实现）
-		async contactDesigner() {
-			console.log('💬 开始在线咨询，订单ID:', this.orderId);
+		// 加载用户信息（当当前用户是设计师/监理时）
+		async loadUserInfo(userId) {
+			try {
+				console.log('👤 加载用户信息，ID:', userId);
+				
+				if (!userId) {
+					console.warn('用户ID为空');
+					this.oppositeInfoCache = {
+						nickName: '客户',
+						phone: '暂无联系方式',
+						avatar: '/static/images/default-avatar.png'
+					};
+					return;
+				}
+				
+				const userResponse = await getUserById(userId);
+				
+				console.log('👤 getUserById 原始响应:', userResponse);
+				
+				// 解析API响应
+				let userData = null;
+				
+				// 处理不同的响应格式
+				if (userResponse && typeof userResponse === 'object') {
+					// 标准格式：{code: 200, data: {...}}
+					if (userResponse.code === 200) {
+						userData = userResponse.data || {};
+					}
+					// 非标准格式：直接是用户数据
+					else if (!userResponse.code && (userResponse.name || userResponse.phone || userResponse.avatar)) {
+						userData = userResponse;
+					}
+					// 其他格式：尝试从可能的位置获取数据
+					else if (userResponse.data) {
+						userData = userResponse.data;
+					}
+				}
+				
+				if (!userData) {
+					console.warn('⚠️ 无法从响应中解析用户数据，使用默认值');
+					throw new Error('未获取到用户信息');
+				}
+				
+				console.log('✅ 解析后的用户数据:', userData);
+				
+				this.oppositeInfoCache = {
+					nickName: userData.nickName || userData.name || userData.nickname || userData.username || '客户',
+					phone: userData.phone || userData.userName || userData.mobile || userData.telephone || '暂无联系方式',
+					avatar: userData.avatar || userData.profilePicture || '/static/images/default-avatar.png'
+				};
+				
+				console.log('✅ 加载用户信息成功:', this.oppositeInfoCache);
+				
+			} catch (error) {
+				console.error('❌ 加载用户信息失败:', error);
+				this.oppositeInfoCache = {
+					nickName: '客户',
+					phone: '暂无联系方式',
+					avatar: '/static/images/default-avatar.png'
+				};
+			}
+		},
+		
+		// 在线咨询方法 - 动态联系对方
+		async contactOpposite() {
+			console.log('💬 开始在线咨询，当前身份:', this.userRole);
 			
 			// 1. 检查登录状态
 			if (!isUserLoggedIn()) {
@@ -786,33 +916,23 @@ export default {
 				return;
 			}
 			
-			// 2. 检查设计师/监理信息完整性
-			if (!this.orderInfo.contractorId) {
-				console.error('❌ 设计师/监理信息不完整:', this.orderInfo);
-				uni.showToast({
-					title: '设计师信息无效',
-					icon: 'error',
-					duration: 2000
-				});
-				return;
-			}
+			// 2. 获取对方信息
+			const otherUserId = this.currentOppositeInfo.id;
+			const otherUserName = this.currentOppositeInfo.name;
+			const otherUserAvatar = this.currentOppositeInfo.avatar;
+			const roleName = this.userRole === 'user' 
+				? (this.isSupervisionOrder ? '监理' : '设计师') 
+				: '客户';
 			
-			// 3. 获取设计师/监理ID（承接方）
-			const otherUserId = this.orderInfo.contractorId;
 			if (!otherUserId) {
 				uni.showToast({
-					title: '设计师信息不存在',
+					title: `${roleName}信息不存在`,
 					icon: 'none'
 				});
 				return;
 			}
 			
-			// 4. 获取设计师/监理详细信息
-			const otherUserName = this.orderInfo.contractorInfo?.name || (this.isSupervisionOrder ? '监理' : '设计师');
-			const otherUserAvatar = this.orderInfo.contractorInfo?.avatar || '/static/images/default-avatar.png';
-			const roleName = this.isSupervisionOrder ? '监理' : '设计师';
-			
-			// 5. 显示加载中
+			// 3. 显示加载中
 			uni.showLoading({
 				title: '创建对话中...',
 				mask: true
@@ -820,14 +940,14 @@ export default {
 			
 			try {
 				console.log('💬 准备创建对话:', {
-					当前身份: this.userRole === 'user' ? '用户' : '其他',
+					当前身份: this.userRole === 'user' ? '用户' : this.userRole,
 					对方身份: roleName,
 					对方ID: otherUserId,
 					对方姓名: otherUserName,
 					订单ID: this.orderId
 				});
 				
-				// 6. 使用工具函数创建对话并跳转
+				// 4. 使用工具函数创建对话并跳转
 				await createConversationAndNavigate(
 					otherUserId,
 					otherUserName,
@@ -871,7 +991,7 @@ export default {
 					}, 1000);
 				}
 			} finally {
-				// 7. 隐藏加载状态
+				// 5. 隐藏加载状态
 				uni.hideLoading();
 			}
 		},
@@ -1035,7 +1155,7 @@ export default {
 			}
 		},
 		
-		// 预览文件（支持PDF和图片）- 修改为使用专门的PDF预览方法
+		// 预览文件（支持PDF和图片）
 		previewFile(fileUrl, fileName) {
 			if (!fileUrl) {
 				uni.showToast({
@@ -1076,7 +1196,7 @@ export default {
 			}
 		},
 		
-		// 预览PDF文件（专门处理PDF预览）- 修复语法错误
+		// 预览PDF文件
 		previewPDF(pdfUrl) {
 			try {
 				console.log('📄 预览PDF文件:', pdfUrl);
@@ -1144,7 +1264,7 @@ export default {
 			}
 		},
 		
-		// 获取文件扩展名（辅助方法）
+		// 获取文件扩展名
 		getFileExtension(filePath) {
 			if (!filePath) return '';
 			const parts = filePath.split('.');
