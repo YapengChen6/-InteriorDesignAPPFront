@@ -289,7 +289,7 @@
 										<text class="material-item-name">{{ item.productName || '商品' }}</text>
 										<text class="material-item-sku" v-if="item.skuDetail">{{ formatSkuDetail(item.skuDetail) }}</text>
 										<view class="material-item-bottom">
-											<text class="material-item-price">￥{{ formatPrice(item.salePrice || item.price || 0) }}</text>
+											<text class="material-item-price">￥{{ formatPrice(getMaterialItemPrice(item)) }}</text>
 											<text class="material-item-qty">x{{ item.quantity }}</text>
 										</view>
 									</view>
@@ -1332,6 +1332,43 @@ export default {
 			const num = Number(value);
 			if (Number.isNaN(num)) return '0.00';
 			return num.toFixed(2);
+		},
+		
+		// 获取材料订单项价格（优先使用订单项的价格，否则从商品信息中获取）
+		getMaterialItemPrice(item) {
+			// 优先使用订单项的价格字段
+			if (item.unitPrice && Number(item.unitPrice) > 0) {
+				return item.unitPrice;
+			}
+			if (item.salePrice && Number(item.salePrice) > 0) {
+				return item.salePrice;
+			}
+			if (item.price && Number(item.price) > 0) {
+				return item.price;
+			}
+			
+			// 如果订单项没有价格，尝试从商品SKU获取
+			if (item.productSku) {
+				if (item.productSku.salePrice && Number(item.productSku.salePrice) > 0) {
+					return item.productSku.salePrice;
+				}
+				if (item.productSku.price && Number(item.productSku.price) > 0) {
+					return item.productSku.price;
+				}
+			}
+			
+			// 如果SKU也没有价格，尝试从商品SPU获取
+			if (item.productSpu) {
+				if (item.productSpu.salePrice && Number(item.productSpu.salePrice) > 0) {
+					return item.productSpu.salePrice;
+				}
+				if (item.productSpu.price && Number(item.productSpu.price) > 0) {
+					return item.productSpu.price;
+				}
+			}
+			
+			// 默认返回0
+			return 0;
 		},
 		
 		// 获取材料订单状态文本
