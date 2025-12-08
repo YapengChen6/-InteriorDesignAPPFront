@@ -175,6 +175,611 @@ export default {
       // 当前用户角色
       currentRole: null,
       isUserRole: false,
+      isViewOnly: false,
+      
+      // 筛选条件
+      selectedLocation: '',
+      selectedDate: '',
+      selectedBudget: '',
+      budgetMin: '',
+      budgetMax: '',
+      
+      // 选择器显示状态
+      showBudgetPicker: false,
+      
+      // 分页参数 - 修改为一次查100条
+      loading: false,
+      pageNum: 1,
+      pageSize: 100,
+      hasMore: true,
+      total: 0,
+      
+      // 项目列表
+      projectList: [],
+      
+      // 用户信息缓存
+      userInfoCache: new Map(),
+      
+      // 状态类名映射
+      statusClassMap: {
+        '0': 'draft',
+        '1': 'bidding',
+        '2': 'designer-taken',
+        '3': 'supervisor-taken',
+        '4': 'completed',
+        '5': 'cancelled'
+      },
+      
+      // 预算选项
+      budgetOptions: [
+        { label: '1万以下', value: '0-1', range: '1万元以下', min: 0, max: 10000 },
+        { label: '1-3万', value: '1-3', range: '1万-3万元', min: 10000, max: 30000 },
+        { label: '3-5万', value: '3-5', range: '3万-5万元', min: 30000, max: 50000 },
+        { label: '5-10万', value: '5-10', range: '5万-10万元', min: 50000, max: 100000 },
+        { label: '10-20万', value: '10-20', range: '10万-20万元', min: 100000, max: 200000 },
+        { label: '20万以上', value: '20-100', range: '20万元以上', min: 200000, max: null }
+      ]
+    }
+  },
+  computed: {
+    // 根据角色和状态过滤项目列表
+    filteredProjectList() {
+      // 首先过滤状态：不显示草稿(0)、已取消(5)和已完成(4)的项目
+      const availableProjects = this.projectList.filter(project => {
+        const status = parseInt(project.status)
+        return status !== 0 && status !== 5 && status !== 4
+      })
+      
+      // 如果是材料商，直接返回空数组（不能接项目）
+      if (this.currentRole === 'material_supplier') {
+        return []
+      }
+      
+      if (this.isViewOnly) {
+        // 仅查看模式（用户和材料商）：显示所有可用项目
+        return availableProjects
+      }
+      
+      // 设计师和监理：根据角色映射和状态过滤项目
+      return availableProjects.filter(project => this.canTakeOrder(project))
+    }
+  },
+  async onLoad() {
+    console.log('🚀 页面加载，开始获取用户角色和项目列表...')
+    
+    await this.getUserRole()
+    this.loadProjectList()
+  },
+  onPullDownRefresh() {
+    // 下拉刷新时重置分页
+    this.pageNum = 1
+    this.hasMore = true
+    this.userInfoCache.clear()
+    this.loadProjectList().finally(() => {
+      uni.stopPullDownRefresh()
+    })
+  },
+  onReachBottom() {
+    // 上拉加载更多
+    if (this.hasMore && !this.loading) {
+      this.pageNum++
+      this.loadProjectList()
+    }
+  },
+  watch: {
+    showBudgetPicker(val) {
+      if (val) {
+        this.$refs.budgetPopup.open();
+      } else {
+        this.$refs.budgetPopup.close();
+      }
+    }
+  },
+  methods: {
+    // 检查是否可以接单
+    canTakeOrder(project) {
+      if (!this.currentRole || this.isViewOnly || this.currentRole === 'material_supplier') {
+        return false
+      }
+      
+      const status = parseInt(project.status)
+      const requiredRole = parseInt(project.requiredRoles)
+      const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
+      
+      // 检查项目类型是否匹配
+      if (!requiredRole || !allowedTypes.includes(requiredRole)) {
+        return false
+      }
+      
+      // 根据角色和项目类型检查状态
+      if (this.currentRole === 'designer') {
+        if (requiredRole === 1) {
+          // 设计师项目：只有状态为1（发布中）时可以接单
+          return status === 1
+        } else if (requiredRole === 3) {
+          // 设计师+监理项目：状态为1（发布中）或3（监理接单）时可以接设计师部分
+          return status === 1 || status === 3
+        }
+      } else if (this.currentRole === 'supervisor') {
+        if (requiredRole === 2) {
+          // 监理项目：只有状态为1（发布中）时可以接单
+          return status === 1
+        } else if (requiredRole === 3) {
+          // 设计师+监理项目：状态为1（发布中）或2（设计师接单）时可以接监理部分
+          return status === 1 || status === 2
+        }
+      }
+      
+      return false
+    },
+    
+    // 检查角色是否匹配（显示标签用）
+    isRoleMatch(project) {
+      if (!this.currentRole || this.isViewOnly || this.currentRole === 'material_supplier') return false
+      
+      const requiredRole = parseInt(project.requiredRoles)
+      const allowedTypes = ROLE_PROJECT_MAPPING[this.currentRole] || []
+      return requiredRole && allowedTypes.includes(requiredRole)
+    },
+
+    // 获取用户角色并设置权限
+    async getUserRole() {
+      try {
+        // 从全局获取用户信息
+        const app = getApp()
+        let userInfo = null
+        
+        if (app && app.globalData && app.globalData.userInfo) {
+          userInfo = app.globalData.userInfo
+        } else {
+          userInfo = uni.getStorageSync('userInfo')
+        }
+        
+        if (userInfo) {
+          // 优先使用 currentRoleType
+          if (userInfo.currentRoleType) {
+            this.currentRole = userInfo.currentRoleType
+          }
+          // 其次检查 roles 数组
+          else if (userInfo.roles && Array.isArray(userInfo.roles) && userInfo.roles.length > 0) {
+            this.currentRole = this.getHighestPriorityRole(userInfo.roles)
+          }
+        }
+        
+        // 如果没有找到角色，使用普通用户
+        if (!this.currentRole) {
+          this.currentRole = 'user'
+        }
+        
+        this.isUserRole = this.currentRole === 'user'
+        
+        // 设置查看权限：用户和材料商只能查看，不能点击详情
+        this.isViewOnly = this.currentRole === 'user' || this.currentRole === 'material_supplier'
+        
+        console.log('🎭 当前用户角色:', this.currentRole)
+        console.log('👀 查看权限模式:', this.isViewOnly)
+        
+      } catch (error) {
+        console.error('获取用户角色失败:', error)
+        this.currentRole = 'user'
+        this.isUserRole = true
+        this.isViewOnly = true
+      }
+    },
+    
+    // 处理项目项点击
+    handleItemClick(project) {
+      if (this.isViewOnly) {
+        // 仅查看模式：显示提示信息
+        this.showViewOnlyTip()
+      } else {
+        // 可操作模式：跳转到详情页
+        this.viewProjectDetail(project.projectId)
+      }
+    },
+    
+    // 显示仅查看提示
+    showViewOnlyTip() {
+      uni.showToast({
+        title: '当前身份仅可查看项目信息',
+        icon: 'none',
+        duration: 2000
+      })
+    },
+    
+    // 从角色数组中获取最高优先级的角色
+    getHighestPriorityRole(roles) {
+      const rolePriority = {
+        'designer': 1,
+        'supervisor': 2,
+        'material_supplier': 3,
+        'user': 4
+      }
+      
+      let highestPriorityRole = 'user'
+      let highestPriority = rolePriority.user
+      
+      roles.forEach(role => {
+        const roleKey = this.normalizeRoleKey(role)
+        if (rolePriority[roleKey] && rolePriority[roleKey] < highestPriority) {
+          highestPriority = rolePriority[roleKey]
+          highestPriorityRole = roleKey
+        }
+      })
+      
+      return highestPriorityRole
+    },
+    
+    // 标准化角色键
+    normalizeRoleKey(role) {
+      if (typeof role === 'string') {
+        const roleLower = role.toLowerCase()
+        if (roleLower.includes('design')) return 'designer'
+        if (roleLower.includes('supervisor') || roleLower.includes('监理')) return 'supervisor'
+        if (roleLower.includes('material') || roleLower.includes('supplier') || roleLower.includes('材料')) return 'material_supplier'
+        if (roleLower.includes('user')) return 'user'
+      }
+      return 'user'
+    },
+
+    // 地区输入
+    onLocationInput(e) {
+      this.selectedLocation = e.detail.value;
+    },
+    
+    // 清空地区输入
+    clearLocation() {
+      this.selectedLocation = '';
+    },
+    
+    // 日期选择变化
+    onDateChange(e) {
+      this.selectedDate = e.detail.value;
+    },
+    
+    // 加载项目列表
+    async loadProjectList() {
+      // 如果是加载更多且没有更多数据，直接返回
+      if (this.loading || !this.hasMore) return
+      
+      this.loading = true
+      try {
+        // 构建查询参数 - 添加分页参数
+        const params = {
+          pageNum: this.pageNum,
+          pageSize: this.pageSize,
+        }
+        
+        // 添加筛选条件
+        if (this.selectedLocation && this.selectedLocation.trim()) {
+          params.address = this.selectedLocation.trim()
+        }
+        if (this.selectedDate) {
+          params.deadline = this.selectedDate
+        }
+        if (this.budgetMin !== '' && this.budgetMin != null) {
+          params.budgetMin = parseInt(this.budgetMin)
+        }
+        if (this.budgetMax !== '' && this.budgetMax != null) {
+          params.budgetMax = parseInt(this.budgetMax)
+        }
+        
+        console.log('📡 请求项目列表参数:', params)
+        const result = await projectService.getProjectList(params)
+        console.log('📡 项目列表响应:', result)
+        
+        // 处理响应数据
+        let dataList = this.extractDataList(result)
+        console.log('📊 本次获取的项目数量:', dataList.length)
+        
+        // 检查是否还有更多数据
+        if (dataList.length < this.pageSize) {
+          this.hasMore = false
+        }
+        
+        // 在前端过滤状态：不显示草稿(0)、已取消(5)和已完成(4)的项目
+        dataList = dataList.filter(project => {
+          const status = parseInt(project.status)
+          return status !== 0 && status !== 5 && status !== 4
+        })
+        
+        console.log('✅ 过滤后的项目数量:', dataList.length)
+        
+        // 更新项目列表
+        if (this.pageNum === 1) {
+          this.projectList = dataList
+        } else {
+          this.projectList = [...this.projectList, ...dataList]
+        }
+        
+        // 为本次加载的项目加载用户信息
+        await this.loadUserInfoForProjects(dataList)
+        
+      } catch (error) {
+        console.error('❌ 加载项目列表失败:', error)
+        uni.showToast({
+          title: error.message || '加载失败',
+          icon: 'none'
+        })
+        
+        // 加载失败时恢复页码
+        if (this.pageNum > 1) {
+          this.pageNum--
+        }
+      } finally {
+        this.loading = false
+      }
+    },
+    
+    // 提取数据列表
+    extractDataList(result) {
+      if (result && Array.isArray(result)) {
+        return result
+      } else if (result && result.records) {
+        return result.records
+      } else if (result && result.list) {
+        return result.list
+      } else if (result && result.data) {
+        return result.data
+      } else {
+        return result || []
+      }
+    },
+    
+    // 为项目列表加载用户信息
+    async loadUserInfoForProjects(projects) {
+      if (!projects || !projects.length) return
+      
+      console.log('👥 开始加载用户信息，项目数量:', projects.length)
+      
+      const promises = projects.map(async (project) => {
+        console.log(`🔄 处理项目 ${project.projectId}, userId: ${project.userId}`)
+        
+        if (!project.userId) {
+          console.log(`❌ 项目 ${project.projectId} 没有userId，使用默认信息`)
+          this.$set(project, 'userInfo', this.getDefaultUserInfo())
+          return
+        }
+        
+        try {
+          let userInfo = this.userInfoCache.get(project.userId)
+          
+          if (!userInfo) {
+            console.log(`🔍 正在获取用户 ${project.userId} 的信息...`)
+            userInfo = await getUserById(project.userId)
+            console.log(`✅ 用户 ${project.userId} 的信息获取成功:`, userInfo)
+            
+            // 缓存用户信息
+            this.userInfoCache.set(project.userId, userInfo)
+          }
+          
+          // 格式化并设置用户信息
+          const formattedUserInfo = this.formatUserInfo(userInfo)
+          console.log(`🔄 格式化后的用户信息:`, formattedUserInfo)
+          
+          this.$set(project, 'userInfo', formattedUserInfo)
+          console.log(`✅ 项目 ${project.projectId} 的用户信息设置完成`)
+          
+        } catch (error) {
+          console.error(`❌ 获取用户 ${project.userId} 信息失败:`, error)
+          // 出错时设置默认信息
+          this.$set(project, 'userInfo', this.getDefaultUserInfo())
+        }
+      })
+      
+      await Promise.all(promises)
+      console.log('🎉 所有用户信息加载完成')
+    },
+    
+    // 格式化用户信息
+    formatUserInfo(userInfo) {
+      if (!userInfo) {
+        return this.getDefaultUserInfo()
+      }
+      
+      // 处理接口返回的数据结构
+      let userData = userInfo
+      
+      // 如果接口返回的是 {code: 200, data: {...}} 结构
+      if (userInfo.code === 200 && userInfo.data) {
+        userData = userInfo.data
+      }
+      
+      // 检查name字段是否存在
+      const name = userData.name
+      
+      const formattedInfo = {
+        // 姓名字段
+        name: name,
+        // 其他字段
+        phone: userData.phone,
+        avatar: userData.avatar,
+        userId: userData.userId,
+        currentRoleType: userData.currentRoleType
+      }
+      
+      return formattedInfo
+    },
+    
+    // 获取默认用户信息
+    getDefaultUserInfo() {
+      return {
+        name: '匿名用户',
+        phone: '',
+        avatar: '',
+        userId: ''
+      }
+    },
+    
+    // 获取发布者姓名
+    getPublisherName(userInfo) {
+      if (!userInfo) {
+        return '加载中...'
+      }
+      
+      const name = userInfo.name
+      
+      if (name) {
+        return name
+      } else {
+        return '匿名用户'
+      }
+    },
+    
+    // 选择预算
+    selectBudget(budget) {
+      this.selectedBudget = budget.label;
+      this.budgetMin = budget.min;
+      this.budgetMax = budget.max;
+      this.showBudgetPicker = false;
+    },
+    
+    // 搜索项目
+    searchOrders() {
+      if (!this.validateFilters()) return
+      // 搜索时重置分页
+      this.pageNum = 1
+      this.hasMore = true
+      this.userInfoCache.clear()
+      this.loadProjectList()
+    },
+    
+    // 验证筛选条件
+    validateFilters() {
+      if (this.budgetMin && this.budgetMax && this.budgetMin > this.budgetMax) {
+        uni.showToast({ title: '最小预算不能大于最大预算', icon: 'none' })
+        return false
+      }
+      
+      if (this.selectedDate) {
+        const selected = new Date(this.selectedDate)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        if (selected < today) {
+          uni.showToast({ title: '截止时间不能早于今天', icon: 'none' })
+          return false
+        }
+      }
+      
+      return true
+    },
+    
+    // 重置筛选条件
+    resetFilters() {
+      this.selectedLocation = '';
+      this.selectedDate = '';
+      this.selectedBudget = '';
+      this.budgetMin = '';
+      this.budgetMax = '';
+      // 重置时重置分页
+      this.pageNum = 1
+      this.hasMore = true
+      this.userInfoCache.clear()
+      this.loadProjectList();
+    },
+    
+    // 查看项目详情
+    viewProjectDetail(projectId) {
+      uni.navigateTo({
+        url: `/pages/order-hall/order-detail?id=${projectId}`
+      });
+    },
+    
+    // 获取状态文本
+    getStatusText(status) {
+      const statusNum = parseInt(status)
+      const statusTextMap = {
+        0: '草稿',
+        1: '发布中',
+        2: '设计师接单',
+        3: '监理接单',
+        4: '全部接单',
+        5: '已取消'
+      }
+      return statusTextMap[statusNum] || '未知状态'
+    },
+    
+    // 获取角色文本
+    getRoleText(role) {
+      const roleNum = parseInt(role)
+      const roleMap = {
+        1: '设计师',
+        2: '监理',
+        3: '设计+监理'
+      }
+      return roleMap[roleNum] || '未知角色'
+    },
+    
+    // 格式化日期
+    formatDate(date) {
+      if (!date) return '未设置'
+      if (date.includes(' ')) {
+        return date.split(' ')[0]
+      }
+      return date
+    },
+    
+    // 格式化预算
+    formatBudget(budget) {
+      if (!budget) return '面议'
+      if (typeof budget === 'number') {
+        if (budget >= 10000) {
+          return `¥${(budget / 10000).toFixed(1)}万`
+        }
+        return `¥${budget}元`
+      }
+      return `¥${budget}`
+    },
+    
+    // 格式化手机号
+    formatPhone(phone) {
+      if (!phone) return ''
+      return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
+    },
+    
+    // 格式化时间
+    formatTime(time) {
+      if (!time) return ''
+      try {
+        const now = new Date()
+        const createTime = new Date(time)
+        if (isNaN(createTime.getTime())) return '时间未知'
+        
+        const diff = now - createTime
+        const minutes = Math.floor(diff / (1000 * 60))
+        const hours = Math.floor(diff / (1000 * 60 * 60))
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+        
+        if (minutes < 1) return '刚刚'
+        if (minutes < 60) return `${minutes}分钟前`
+        if (hours < 24) return `${hours}小时前`
+        if (days < 7) return `${days}天前`
+        
+        return `${createTime.getMonth() + 1}-${createTime.getDate()}`
+      } catch (error) {
+        return '时间未知'
+      }
+    }
+  }
+}
+</script>
+import { projectService } from '@/api/project.js'
+import { getUserById } from '@/api/users.js'
+
+// 角色与项目类型的映射
+const ROLE_PROJECT_MAPPING = {
+  'designer': [1, 3],     // 设计师可以接：设计师项目(1) 和 设计师+监理项目(3)
+  'supervisor': [2, 3],   // 监理可以接：监理项目(2) 和 设计师+监理项目(3)
+  'material_supplier': [], // 材料商不能接任何项目
+  'user': [1, 2, 3]       // 普通用户可以查看所有项目
+}
+
+export default {
+  data() {
+    return {
+      // 当前用户角色
+      currentRole: null,
+      isUserRole: false,
       isViewOnly: false, // 是否为仅查看模式
       
       // 筛选条件
