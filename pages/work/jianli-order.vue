@@ -1435,7 +1435,6 @@ export default {
 }
 </script>
 <style scoped>
-  /* 样式保持不变 */
   .back-btn {
     display: flex;
     align-items: center;
@@ -1771,11 +1770,13 @@ export default {
     gap: 15rpx;
   }
   
+  /* 修改：按钮字体从26rpx改为24rpx */
   .btn {
     padding: 12rpx 24rpx;
-    font-size: 26rpx;
+    font-size: 24rpx; /* 修改这里：从26rpx改为24rpx */
     border-radius: 20rpx;
     border: none;
+    line-height: 1.2; /* 调整行高，使文字更紧凑 */
   }
   
   .btn.primary {

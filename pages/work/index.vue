@@ -11,10 +11,6 @@
 				<view class="action-item" @click="goToMessage">
 					<text class="action-icon">💬</text>
 				</view>
-				<!-- 调试按钮 -->
-				<view class="action-item" @click="testUploadFunctionality" style="margin-left: 20rpx;">
-					<text class="action-icon">🧪</text>
-				</view>
 			</view>
 		</view>
 		
@@ -1201,43 +1197,6 @@ export default {
 				throw new Error(errorMessage);
 			}
 		},
-
-		// 测试上传功能
-		async testUploadFunctionality() {
-			try {
-				console.log('🧪 测试PDF上传功能...');
-				
-				const fileInfo = await this.chooseContractFile();
-				if (!fileInfo) {
-					console.log('❌ 测试：用户取消选择文件');
-					return;
-				}
-				
-				console.log('📄 测试文件信息:', fileInfo);
-				
-				let testOrderId = 1;
-				if (this.orderList.length > 0) {
-					testOrderId = this.orderList[0].orderId;
-				}
-				
-				console.log('🚀 开始测试上传，订单ID:', testOrderId);
-				uni.showLoading({ title: '测试上传中...' });
-				
-				const result = await this.uploadContractFileDirect(testOrderId, fileInfo.path, fileInfo.name);
-				console.log('✅ 测试上传成功:', result);
-				
-				uni.hideLoading();
-				uni.showToast({
-					title: 'PDF上传测试成功',
-					icon: 'success'
-				});
-				
-			} catch (error) {
-				uni.hideLoading();
-				console.error('❌ 测试上传失败:', error);
-				this.handleApiError(error, 'PDF上传测试失败');
-			}
-		},
 		
 		// 切换订单状态
 		changeStatus(status) {
@@ -1935,11 +1894,13 @@ export default {
 		gap: 15rpx;
 	}
 	
+	/* 修改：按钮字体从26rpx改为24rpx */
 	.btn {
 		padding: 12rpx 24rpx;
-		font-size: 26rpx;
+		font-size: 24rpx; /* 修改这里：从26rpx改为24rpx */
 		border-radius: 20rpx;
 		border: none;
+		line-height: 1.2; /* 调整行高，使文字更紧凑 */
 	}
 	
 	.btn.primary {

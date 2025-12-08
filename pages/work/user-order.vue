@@ -51,11 +51,6 @@
 		
 		<!-- 订单列表 -->
 		<scroll-view class="order-list" scroll-y="true" @scrolltolower="loadMore" refresher-enabled @refresherrefresh="onRefresh">
-			<!-- 调试信息 -->
-			<view class="debug-info" v-if="orderList.length > 0">
-				<text>调试信息: 订单类型={{ orderList[0].type }}, 状态={{ orderList[0].status }}, 合同状态={{ orderList[0].contractStatus }}</text>
-			</view>
-			
 			<!-- 下拉刷新 -->
 			<view class="refresh-container" v-if="refreshing">
 				<text class="refresh-text">刷新中...</text>
@@ -1710,16 +1705,7 @@
 </script>
 
 <style scoped>
-	/* 样式保持不变 */
-	.debug-info {
-		background: #fff3cd;
-		padding: 20rpx;
-		margin: 20rpx;
-		border-radius: 10rpx;
-		border: 1px solid #ffeaa7;
-		font-size: 24rpx;
-		color: #856404;
-	}
+	/* 移除调试信息样式 */
 	
 	.back-btn {
 		display: flex;
@@ -2081,9 +2067,10 @@
 	
 	.btn {
 		padding: 12rpx 24rpx;
-		font-size: 26rpx;
+		font-size: 24rpx; /* 修改：按钮字体从26rpx改为24rpx */
 		border-radius: 20rpx;
 		border: none;
+		line-height: 1.2; /* 调整行高，使文字更紧凑 */
 	}
 	
 	.btn.primary {
