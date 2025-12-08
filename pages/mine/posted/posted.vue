@@ -82,6 +82,14 @@
           
           <view class="order-footer">
             <text class="order-time">{{ formatTime(order.createTime) }}</text>
+            <button 
+              v-if="Number(order.status) === 1" 
+              class="order-delete-btn" 
+              :disabled="deletingOrderId === (order.projectId || order.id)"
+              @tap.stop="deleteOrder(order)"
+            >
+              删除
+            </button>
           </view>
           </view>
           
@@ -346,6 +354,7 @@ export default {
       posts: [],
       orderList: [],
       orderLoading: false,
+      deletingOrderId: null,
       userRole: null,
       // 修复：预定义所有样式类映射
       postTypeClasses: {
@@ -534,6 +543,48 @@ export default {
       uni.navigateTo({
         url: `/pages/order-hall/order-detail?projectId=${projectId}`
       })
+    },
+    
+    async deleteOrder(order) {
+      const projectId = order?.projectId || order?.id
+      if (!projectId) {
+        uni.showToast({
+          title: '项目ID不存在',
+          icon: 'none'
+        })
+        return
+      }
+      const statusNum = Number(order.status)
+      if (statusNum !== 1) {
+        uni.showToast({
+          title: '只能删除发布中的订单',
+          icon: 'none'
+        })
+        return
+      }
+      if (this.deletingOrderId === projectId) return
+      
+      this.deletingOrderId = projectId
+      try {
+        await projectService.deleteProject(projectId)
+        uni.showToast({
+          title: '删除成功',
+          icon: 'success',
+          duration: 1500
+        })
+        // 从列表移除已删除的订单
+        this.orderList = this.orderList.filter(item => (item.projectId || item.id) !== projectId)
+      } catch (error) {
+        if (error && error.message === '用户取消') {
+          return
+        }
+        uni.showToast({
+          title: error?.message || '删除失败',
+          icon: 'none'
+        })
+      } finally {
+        this.deletingOrderId = null
+      }
     },
     
     async getUserInfo() {
@@ -1607,7 +1658,7 @@ export default {
 
 .order-footer {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   padding-top: 20rpx;
   font-size: 24rpx;
@@ -1617,6 +1668,24 @@ export default {
 .order-time {
   font-size: 24rpx;
   color: #999;
+  flex: 1;
+}
+
+.order-delete-btn {
+  margin-left: auto;
+  padding: 10rpx 22rpx;
+  background: #f56c6c;
+  color: #fff;
+  border: none;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.2;
+}
+
+.order-delete-btn[disabled] {
+  background: #f2a3a3;
+  color: #fff;
+  opacity: 0.8;
 }
 
 .loading-state {

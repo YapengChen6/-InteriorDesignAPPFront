@@ -44,7 +44,8 @@ export const projectApi = {
     return request({
       url: baseURL, // DELETE /project?projectId=xxx
       method: 'delete',
-      data: { projectId },
+      // 使用 params 传递，避免后端 MissingServletRequestParameterException
+      params: { projectId },
       loading: true
     })
   },
