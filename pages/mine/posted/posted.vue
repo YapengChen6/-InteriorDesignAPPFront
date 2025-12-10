@@ -186,9 +186,16 @@
                 <text class="excerpt">{{ post.excerpt || post.content }}</text>
               </view>
               
-              <!-- 帖子信息 - 只保留发布时间 -->
+              <!-- 帖子信息 - 只保留发布时间和删除按钮 -->
               <view class="post-footer">
                 <text class="post-time">{{ formatTime(post.createTime) }}</text>
+                <button 
+                  class="post-delete-btn" 
+                  :disabled="deletingPostId === post.id"
+                  @tap.stop="deletePost(post)"
+                >
+                  {{ deletingPostId === post.id ? '删除中...' : '删除' }}
+                </button>
               </view>
             </view>
           </view>
@@ -323,7 +330,7 @@
 </template>
 
 <script>
-import { getPostList, getPostDetail } from '@/api/community'
+import { getPostList, getPostDetail, deletePost } from '@/api/community'
 import { getUserProfile } from '@/api/users.js'
 import { projectService } from '@/api/project.js'
 
@@ -355,6 +362,7 @@ export default {
       orderList: [],
       orderLoading: false,
       deletingOrderId: null,
+      deletingPostId: null,
       userRole: null,
       // 修复：预定义所有样式类映射
       postTypeClasses: {
@@ -584,6 +592,123 @@ export default {
         })
       } finally {
         this.deletingOrderId = null
+      }
+    },
+    
+    async deletePost(post) {
+      const postId = post?.id || post?.threadId || post?.thread_id
+      if (!postId) {
+        console.error('❌ 帖子ID不存在，post对象:', post)
+        uni.showToast({
+          title: '帖子ID不存在',
+          icon: 'none'
+        })
+        return
+      }
+      
+      // 确保 postId 是数字类型
+      const numericPostId = Number(postId)
+      if (isNaN(numericPostId)) {
+        console.error('❌ 帖子ID格式错误:', postId)
+        uni.showToast({
+          title: '帖子ID格式错误',
+          icon: 'none'
+        })
+        return
+      }
+      
+      if (this.deletingPostId === numericPostId) return
+      
+      console.log('🗑️ 准备删除帖子，原始ID:', postId, '转换后ID:', numericPostId)
+      
+      // 确认删除
+      console.log('📋 显示删除确认对话框')
+      const modalRes = await uni.showModal({
+        title: '确认删除',
+        content: '确定要删除这条帖子吗？删除后无法恢复。',
+        confirmText: '删除',
+        confirmColor: '#f56c6c',
+        cancelText: '取消'
+      })
+      
+      console.log('📋 删除确认对话框结果:', modalRes)
+      
+      // 处理 uni.showModal 的返回值格式（可能是对象或数组）
+      let res = modalRes
+      if (Array.isArray(modalRes)) {
+        // 如果是数组格式 [error, result]，取第二个元素
+        res = modalRes[1] || modalRes[0]
+      }
+      
+      // 检查确认结果
+      if (!res || !res.confirm) {
+        console.log('❌ 用户取消了删除操作, res:', res)
+        return
+      }
+      
+      console.log('✅ 用户确认删除，开始执行删除操作')
+      this.deletingPostId = numericPostId
+      try {
+        console.log('🗑️ 开始删除帖子，ID:', numericPostId)
+        console.log('📡 发送删除请求到:', `/api/community/posts/${numericPostId}`)
+        const response = await deletePost(numericPostId)
+        console.log('📨 删除帖子响应:', JSON.stringify(response))
+        
+        // 检查响应格式：可能是 { code: 200 } 或直接是数据
+        const code = response?.code
+        const msg = response?.msg || response?.message
+        
+        // 如果响应中没有 code，可能是直接返回了数据或 null
+        if (code === undefined && response !== null && response !== undefined) {
+          console.warn('⚠️ 响应格式异常，未找到 code 字段:', response)
+        }
+        
+        // 判断是否成功：code === 200 或 code 为 undefined/null（某些情况下可能直接返回成功）
+        if (code === 200 || (code === undefined && !msg)) {
+          uni.showToast({
+            title: '删除成功',
+            icon: 'success',
+            duration: 1500
+          })
+          // 从列表移除已删除的帖子（支持多种ID字段名）
+          this.posts = this.posts.filter(item => {
+            const itemId = item.id || item.threadId || item.thread_id
+            return Number(itemId) !== numericPostId
+          })
+          // 重新加载列表以验证删除是否真的成功
+          setTimeout(() => {
+            this.loadPosts()
+          }, 500)
+        } else {
+          const errorMsg = msg || '删除失败，可能是权限不足'
+          console.error('❌ 删除失败，响应码:', code, '错误信息:', errorMsg)
+          throw new Error(errorMsg)
+        }
+      } catch (error) {
+        console.error('❌ 删除帖子异常:', error)
+        console.error('❌ 错误详情:', {
+          message: error?.message,
+          response: error?.response,
+          stack: error?.stack
+        })
+        
+        // 显示详细的错误信息
+        let errorMessage = '删除失败，请重试'
+        if (error?.message) {
+          errorMessage = error.message
+        } else if (error?.response?.data?.msg) {
+          errorMessage = error.response.data.msg
+        } else if (typeof error === 'string') {
+          errorMessage = error
+        }
+        
+        uni.showToast({
+          title: errorMessage,
+          icon: 'none',
+          duration: 2000
+        })
+      } finally {
+        this.deletingPostId = null
       }
     },
     
@@ -1683,6 +1808,38 @@ export default {
 }
 
 .order-delete-btn[disabled] {
+  background: #f2a3a3;
+  color: #fff;
+  opacity: 0.8;
+}
+
+.post-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20rpx;
+  margin-top: 20rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.post-time {
+  font-size: 24rpx;
+  color: #999;
+  flex: 1;
+}
+
+.post-delete-btn {
+  margin-left: auto;
+  padding: 10rpx 22rpx;
+  background: #f56c6c;
+  color: #fff;
+  border: none;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.2;
+}
+
+.post-delete-btn[disabled] {
   background: #f2a3a3;
   color: #fff;
   opacity: 0.8;
