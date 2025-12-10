@@ -35,10 +35,10 @@
 							@error="handleAvatarError"></image>
 						<view class="author-details">
 							<text class="author-name">{{ post.author || '匿名用户' }}</text>
-							<view class="post-meta">
+							<!-- <view class="post-meta">
 								<text class="post-date">{{ formatDate(post.createTime) }}</text>
 								<text class="post-views">浏览 {{ post.viewCount || 0 }}</text>
-							</view>
+							</view> -->
 						</view>
 						<button :class="['follow-btn', { followed: isFollowed }]" @click="handleFollow"
 							:disabled="followLoading">
