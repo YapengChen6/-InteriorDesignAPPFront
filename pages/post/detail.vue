@@ -19,7 +19,15 @@
 			<scroll-view class="scroll-content" scroll-y="true" @scrolltolower="onScrollToLower">
 				<!-- 帖子头部 -->
 				<view class="post-header">
-					<h1 class="post-title">{{ post.title || '无标题' }}</h1>
+					<view class="post-title-row">
+						<h1 class="post-title">{{ post.title || '无标题' }}</h1>
+						<!-- 删除按钮（仅作者可见） -->
+						<view v-if="isPostAuthor" class="post-actions">
+							<button class="delete-post-btn" @click="handleDeletePost" :disabled="deletingPost">
+								{{ deletingPost ? '删除中...' : '删除' }}
+							</button>
+						</view>
+					</view>
 					
 					<!-- 作者信息 -->
 					<view class="author-info">
@@ -27,10 +35,10 @@
 							@error="handleAvatarError"></image>
 						<view class="author-details">
 							<text class="author-name">{{ post.author || '匿名用户' }}</text>
-							<view class="post-meta">
+							<!-- <view class="post-meta">
 								<text class="post-date">{{ formatDate(post.createTime) }}</text>
 								<text class="post-views">浏览 {{ post.viewCount || 0 }}</text>
-							</view>
+							</view> -->
 						</view>
 						<button :class="['follow-btn', { followed: isFollowed }]" @click="handleFollow"
 							:disabled="followLoading">
@@ -324,7 +332,8 @@
 		submitComment,
 		deleteComment,
 		likeComment,
-		unlikeComment
+		unlikeComment,
+		deletePost
 	} from '@/api/community.js'
 	import {
 		addFavorite,
@@ -334,6 +343,7 @@
 		unfollowUser,
 		checkFollow
 	} from '@/api/social.js'
+	import { getUserProfile } from '@/api/users.js'
 
 export default {
 	data() {
@@ -354,6 +364,8 @@ export default {
 			collectLoading: false,
 			followLoading: false,
 			commentLoading: false,
+			deletingPost: false,
+			currentUserId: null,
 			
 			// UI状态
 			showCommentModal: false,
@@ -414,11 +426,21 @@ export default {
 			}
 			// 如果评论列表为空，使用帖子数据中的评论数（可能是后端返回的主评论数）
 			return this.post ? (this.post.commentCount || 0) : 0
+		},
+		
+		// 判断当前用户是否是帖子作者
+		isPostAuthor() {
+			if (!this.post || !this.currentUserId) return false
+			const postUserId = this.post.userId || this.post.user_id
+			return postUserId && String(postUserId) === String(this.currentUserId)
 		}
 	},
 	
-	onLoad(options) {
+	async onLoad(options) {
 		console.log('📖 进入帖子详情页，参数:', options)
+		
+		// 获取当前用户ID
+		await this.getCurrentUserInfo()
 		
 		if (options && options.id) {
 			this.postId = options.id
@@ -441,6 +463,111 @@ export default {
 	},
 	
 	methods: {
+		// 获取当前用户信息
+		async getCurrentUserInfo() {
+			try {
+				const res = await getUserProfile()
+				if (res.code === 200) {
+					this.currentUserId = res.data.userId
+				}
+			} catch (error) {
+				console.error('获取用户信息失败:', error)
+				// 失败不影响页面显示，只是无法判断是否是作者
+			}
+		},
+		
+		// 删除帖子
+		async handleDeletePost() {
+			if (!this.post || !this.postId) {
+				uni.showToast({
+					title: '帖子信息不存在',
+					icon: 'none'
+				})
+				return
+			}
+			
+			if (this.deletingPost) return
+			
+			// 确认删除
+			const modalRes = await uni.showModal({
+				title: '确认删除',
+				content: '确定要删除这条帖子吗？删除后无法恢复。',
+				confirmText: '删除',
+				confirmColor: '#f56c6c',
+				cancelText: '取消'
+			})
+			
+			// 处理 uni.showModal 的返回值格式（可能是对象或数组）
+			let res = modalRes
+			if (Array.isArray(modalRes)) {
+				// 如果是数组格式 [error, result]，取第二个元素
+				res = modalRes[1] || modalRes[0]
+			}
+			
+			// 检查确认结果
+			if (!res || !res.confirm) {
+				return
+			}
+			
+			this.deletingPost = true
+			try {
+				console.log('🗑️ 开始删除帖子，ID:', this.postId)
+				const response = await deletePost(this.postId)
+				console.log('📨 删除帖子响应:', JSON.stringify(response))
+				
+				// 检查响应格式：可能是 { code: 200 } 或直接是数据
+				const code = response?.code
+				const msg = response?.msg || response?.message
+				
+				// 如果响应中没有 code，可能是直接返回了数据或 null
+				if (code === undefined && response !== null && response !== undefined) {
+					console.warn('⚠️ 响应格式异常，未找到 code 字段:', response)
+				}
+				
+				// 判断是否成功：code === 200 或 code 为 undefined/null（某些情况下可能直接返回成功）
+				if (code === 200 || (code === undefined && !msg)) {
+					uni.showToast({
+						title: '删除成功',
+						icon: 'success',
+						duration: 1500
+					})
+					// 延迟返回上一页，让用户看到成功提示
+					setTimeout(() => {
+						uni.navigateBack()
+					}, 1500)
+				} else {
+					const errorMsg = msg || '删除失败，可能是权限不足'
+					console.error('❌ 删除失败，响应码:', code, '错误信息:', errorMsg)
+					throw new Error(errorMsg)
+				}
+			} catch (error) {
+				console.error('❌ 删除帖子异常:', error)
+				console.error('❌ 错误详情:', {
+					message: error?.message,
+					response: error?.response,
+					stack: error?.stack
+				})
+				
+				// 显示详细的错误信息
+				let errorMessage = '删除失败，请重试'
+				if (error?.message) {
+					errorMessage = error.message
+				} else if (error?.response?.data?.msg) {
+					errorMessage = error.response.data.msg
+				} else if (typeof error === 'string') {
+					errorMessage = error
+				}
+				
+				uni.showToast({
+					title: errorMessage,
+					icon: 'none',
+					duration: 2000
+				})
+			} finally {
+				this.deletingPost = false
+			}
+		},
+		
 		// 获取帖子详情
 		async fetchPostDetail(loadCommentsFlag = true) {
 			try {
@@ -1964,12 +2091,42 @@ export default {
 	padding: 20px 15px 0;
 }
 
+.post-title-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	margin-bottom: 16px;
+}
+
 .post-title {
 	font-size: 22px;
 	font-weight: 600;
 	line-height: 1.4;
 	color: #1a1a1a;
-	margin-bottom: 16px;
+	flex: 1;
+	margin-right: 12px;
+}
+
+.post-actions {
+	display: flex;
+	align-items: center;
+}
+
+.delete-post-btn {
+	padding: 6px 16px;
+	background-color: #f56c6c;
+	color: white;
+	border: none;
+	border-radius: 16px;
+	font-size: 13px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.delete-post-btn[disabled] {
+	background-color: #f2a3a3;
+	opacity: 0.8;
+	cursor: not-allowed;
 }
 
 .author-info {
