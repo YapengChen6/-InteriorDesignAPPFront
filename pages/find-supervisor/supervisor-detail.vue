@@ -188,7 +188,7 @@
           <view class="case-info">
             <view class="case-title">{{ caseItem.title || '无标题' }}</view>
             <view class="case-content" v-if="caseItem.content">
-              {{ caseItem.content.length > 60 ? caseItem.content.substring(0, 60) + '...' : caseItem.content }}
+              {{ stripHtmlTags(caseItem.content).length > 60 ? stripHtmlTags(caseItem.content).substring(0, 60) + '...' : stripHtmlTags(caseItem.content) }}
             </view>
             <view class="case-meta">
               <view class="case-time">{{ formatTime(caseItem.createTime) }}</view>
@@ -685,6 +685,23 @@ export default {
         console.error('时间格式化错误:', error)
         return timeString
       }
+    },
+    
+    // 去除HTML标签，只保留纯文本
+    stripHtmlTags(html) {
+      if (!html) return ''
+      // 使用正则表达式去除所有HTML标签
+      let text = html.replace(/<[^>]+>/g, '')
+      // 将HTML实体转换为普通字符
+      text = text.replace(/&nbsp;/g, ' ')
+      text = text.replace(/&amp;/g, '&')
+      text = text.replace(/&lt;/g, '<')
+      text = text.replace(/&gt;/g, '>')
+      text = text.replace(/&quot;/g, '"')
+      text = text.replace(/&#39;/g, "'")
+      // 去除多余的空格和换行
+      text = text.replace(/\s+/g, ' ').trim()
+      return text
     },
     
     // 切换收藏状态
