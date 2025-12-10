@@ -145,10 +145,10 @@
               
               <!-- 其他信息 -->
               <view class="designer-stats">
-                <view class="stat-item">
+<!--                <view class="stat-item">
                   <image :src="'/static/images/案例-2.svg'" mode="aspectFit" class="stat-icon-image"></image>
                   <view class="stat-value">{{ designer.caseCount || 0 }}套案例</view>
-                </view>
+                </view> -->
                 <view class="stat-item">
                   <image :src="'/static/images/地址.svg'" mode="aspectFit" class="stat-icon-image"></image>
                   <view class="stat-value">{{ designer.address || '全国' }}</view>

@@ -81,10 +81,10 @@
             </view>
           </view>
           <view class="supervisor-details">
-            <view class="detail-item">
+<!--            <view class="detail-item">
               <image :src="'/static/images/案例-2.svg'" mode="aspectFit" class="detail-icon-image"></image>
               <view>案例: {{ supervisor.caseCount || 0 }}个</view>
-            </view>
+            </view> -->
             <view class="detail-item">
               <image :src="'/static/images/完成.svg'" mode="aspectFit" class="detail-icon-image"></image>
               <view>完成: {{ supervisor.completedOrders || 0 }}单</view>
