@@ -8,11 +8,6 @@
         <text class="back-text">返回</text>
       </view>
       <view class="header-title">我的订单</view>
-      <view class="header-actions">
-        <view class="action-item" @click="goToMessage">
-          <text class="action-icon">💬</text>
-        </view>
-      </view>
     </view>
     
     <!-- 订单状态筛选 -->
