@@ -96,6 +96,7 @@
 <script>
 import { getUserLikedPosts as getCommunityLikedPosts } from '@/api/community.js'
 import { getUserProfile } from '@/api/users.js'
+import { getUserInfoBatch } from '@/api/conversation.js'
  
 export default {
   name: 'LikesPage',
@@ -112,6 +113,7 @@ export default {
       total: 0,
       userId: null,
       apiAvailable: true, // 标记API是否可用
+      profileMap: {}, // userId -> profile
       postTypeClassMap: {
         1: 'portfolio-tag',
         2: 'case-tag',
@@ -191,6 +193,8 @@ export default {
             }
           }
           
+          // 先批量补充用户资料
+          await this.fetchProfiles(likedPosts)
           const processedPosts = this.processPostData(likedPosts)
           
           if (this.pageParams.pageNum === 1) {
@@ -220,6 +224,25 @@ export default {
       }
     },
     
+    // 批量获取用户资料
+    async fetchProfiles(posts) {
+      if (!posts || !posts.length) return
+      const ids = [...new Set(posts.map(p => p.userId || p.user_id).filter(Boolean))]
+      if (!ids.length) return
+      try {
+        const res = await getUserInfoBatch(ids)
+        if (res && res.code === 200 && Array.isArray(res.data)) {
+          this.profileMap = res.data.reduce((acc, user) => {
+            const key = user.userId || user.user_id
+            if (key) acc[key] = user
+            return acc
+          }, this.profileMap || {})
+        }
+      } catch (e) {
+        console.warn('获取用户资料失败', e)
+      }
+    },
+    
     // 处理帖子数据
     processPostData(posts) {
       if (!posts || !Array.isArray(posts)) {
@@ -231,7 +254,7 @@ export default {
         title: post.title || '无标题',
         content: post.content || '',
         author: this.getAuthorName(post),
-        authorAvatar: post.avatar || post.authorAvatar,
+        authorAvatar: post.avatar || post.authorAvatar || (this.profileMap[post.userId || post.user_id]?.avatar),
         userId: post.userId || post.user_id,
         likeCount: post.likeCount || post.like_count || 0,
         commentCount: post.commentCount || post.comment_count || 0,
@@ -245,10 +268,14 @@ export default {
     
     // 获取作者名称
     getAuthorName(data) {
+      const userId = data.userId || data.user_id
+      const profile = userId ? this.profileMap[userId] : null
+      if (profile) {
+        return profile.nickName || profile.userName || `用户${userId}`
+      }
       if (data.nickname || data.userName || data.author) {
         return data.nickname || data.userName || data.author
       }
-      
       const roleType = data.roleType || data.role_type
       const roleNames = {
         1: '普通用户',
@@ -256,8 +283,7 @@ export default {
         3: '监理',
         4: '材料商'
       }
-      
-      return roleNames[roleType] || '匿名用户'
+      return roleNames[roleType] || (userId ? `用户${userId}` : '匿名用户')
     },
     
     // 获取帖子图片URL

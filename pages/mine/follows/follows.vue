@@ -146,15 +146,25 @@ export default {
       let profileMap = {}
       if (userIds.length) {
         try {
+          console.log('📋 批量获取用户信息，用户ID列表:', userIds)
           const res = await getUserInfoBatch(userIds)
+          console.log('📋 批量获取用户信息响应:', res)
           if (res && res.code === 200 && Array.isArray(res.data)) {
             profileMap = res.data.reduce((acc, user) => {
-              acc[user.userId] = user
+              // 确保使用正确的 key，支持 userId 和 user_id
+              const key = user.userId || user.user_id
+              if (key) {
+                acc[key] = user
+                console.log(`✅ 映射用户信息: userId=${key}, nickName=${user.nickName || user.userName || '无'}`)
+              }
               return acc
             }, {})
+            console.log('📋 用户信息映射表:', profileMap)
+          } else {
+            console.warn('⚠️ 批量获取用户信息响应格式异常:', res)
           }
         } catch (error) {
-          console.warn('获取用户资料失败', error)
+          console.error('❌ 获取用户资料失败', error)
         }
       }
       return rows.map(row => this.normalizeFollowRow(row, profileMap))
@@ -164,10 +174,16 @@ export default {
       const followId = row.followId || row.follow_id
       const userId = row.followedId || row.followed_id
       const profile = profileMap[userId] || {}
+      
+      // 优先使用 nickName，其次 userName，最后使用 userId 作为后备
+      const displayName = profile.nickName || profile.userName || (userId ? `用户${userId}` : '未知用户')
+      
+      console.log(`🔍 规范化关注行数据: userId=${userId}, displayName=${displayName}, profile=`, profile)
+      
       return {
         followId,
         userId,
-        nickName: profile.nickName || profile.userName || `用户${userId || ''}`,
+        nickName: displayName,
         avatar: profile.avatar || row.avatar || '',
         role: profile.userRole,
         roleLabel: this.getRoleLabel(profile.userRole),
