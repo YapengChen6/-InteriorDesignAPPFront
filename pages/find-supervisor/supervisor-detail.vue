@@ -3,7 +3,11 @@
     <!-- 顶部导航 -->
     <view class="header">
       <view class="header-title">监理详情</view>
-      <view class="header-placeholder"></view>
+      <view class="header-actions">
+        <view class="like-header-btn" @click="toggleLike" :class="{ 'liked': isLiked, 'liking': isLiking }">
+          <text class="like-icon">{{ isLiked ? '❤️' : '🤍' }}</text>
+        </view>
+      </view>
     </view>
     
     <!-- 加载状态 -->
@@ -44,8 +48,7 @@
             <text class="stat-value">{{ totalViews || 0 }}</text>
             <text class="stat-label">浏览</text>
           </view>
-          <view class="stat-item like-btn" @click="toggleLike" :class="{ 'liked': isLiked, 'liking': isLiking }">
-            <text class="stat-icon">{{ isLiked ? '❤️' : '🤍' }}</text>
+          <view class="stat-item">
             <text class="stat-value">{{ totalLikes || 0 }}</text>
             <text class="stat-label">点赞</text>
           </view>
@@ -798,8 +801,8 @@ export default {
 .header {
   display: flex;
   align-items: center;
-  justify-content: center; /* 改为居中 */
-  padding: 30rpx;
+  justify-content: space-between; /* 改为两端对齐 */
+  padding: 40rpx 30rpx 20rpx; /* 调整内边距 */
   background: white;
   border-bottom: 1px solid #f0f0f0;
   position: sticky;
@@ -818,8 +821,42 @@ export default {
   color: #333;
 }
 
-.header-placeholder {
-  width: 60rpx;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.like-header-btn {
+  padding: 10rpx;
+  font-size: 32rpx;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.like-header-btn.liking {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.like-icon {
+  transition: all 0.3s ease;
+}
+
+.like-header-btn.liked .like-icon {
+  color: #ff4757;
+  animation: heartBeat 0.6s ease;
+}
+
+/* 心跳动画 */
+@keyframes heartBeat {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.2); }
+  30% { transform: scale(0.95); }
+  45% { transform: scale(1.1); }
+  60% { transform: scale(0.98); }
+  75% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
 .loading {
@@ -939,65 +976,23 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8rpx;
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.stat-item.like-btn {
-  position: relative;
-}
-
-.stat-item.liking {
-  pointer-events: none;
-  opacity: 0.7;
-}
-
-.stat-item.liked .stat-icon {
-  color: #ff4757;
-  animation: heartBeat 0.6s ease;
-}
-
-.stat-icon {
-  font-size: 32rpx;
-  transition: all 0.3s ease;
 }
 
 .stat-value {
   font-size: 32rpx;
   font-weight: 600;
   color: #333;
-  transition: all 0.3s ease;
-}
-
-.stat-item.liked .stat-value {
-  color: #ff4757;
 }
 
 .stat-label {
   font-size: 24rpx;
   color: #666;
-  transition: all 0.3s ease;
-}
-
-.stat-item.liked .stat-label {
-  color: #ff4757;
 }
 
 .stat-divider {
   width: 1px;
   height: 40rpx;
   background: #e0e0e0;
-}
-
-/* 心跳动画 */
-@keyframes heartBeat {
-  0% { transform: scale(1); }
-  15% { transform: scale(1.2); }
-  30% { transform: scale(0.95); }
-  45% { transform: scale(1.1); }
-  60% { transform: scale(0.98); }
-  75% { transform: scale(1.05); }
-  100% { transform: scale(1); }
 }
 
 .tabs {

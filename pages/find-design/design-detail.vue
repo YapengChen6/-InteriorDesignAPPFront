@@ -7,7 +7,6 @@
         <view class="like-header-btn" @click="toggleDesignerLike">
           <text class="like-icon" :class="{ liked: isDesignerLiked }">❤</text>
         </view>
-        <view class="share-btn" @click="shareDesigner">分享</view>
       </view>
     </view>
 
@@ -29,6 +28,7 @@
       <!-- 设计师头部信息 -->
       <view class="designer-profile">
         <view class="profile-main">
+          <!-- 头像居中显示 -->
           <view class="avatar-section">
             <image 
               :src="getAvatarUrl(designerDetail.userInfo.avatar)" 
@@ -38,44 +38,35 @@
             />
             <view v-if="designerDetail.userInfo.isOnline" class="online-badge"></view>
           </view>
-          <view class="basic-info">
-            <view class="name-section">
-              <view class="name-left">
-                <text class="designer-name">{{ designerDetail.userInfo.nickName || '设计师' }}</text>
-                <text v-if="designerDetail.userInfo.professionalTitle" class="cert-badge">
-                  {{ designerDetail.userInfo.professionalTitle }}
-                </text>
-              </view>
-              <view class="action-buttons">
-                <button class="like-btn" :class="{ liked: isDesignerLiked }" @click="toggleDesignerLike">
-                  <text class="like-btn-icon">❤</text>
-                  <text class="like-btn-text">{{ isDesignerLiked ? '已点赞' : '点赞' }}</text>
-                  <text class="like-btn-count" v-if="designerLikeCount > 0">{{ designerLikeCount }}</text>
-                </button>
-              </view>
+          
+          <!-- 设计师名字放在头像下面 -->
+          <view class="name-container">
+            <text class="designer-name">{{ designerDetail.userInfo.nickName || '设计师' }}</text>
+            <text v-if="designerDetail.userInfo.professionalTitle" class="cert-badge">
+              {{ designerDetail.userInfo.professionalTitle }}
+            </text>
+          </view>
+          
+          <!-- 设计师标签 -->
+          <view class="tags-row" v-if="designerDetail.userInfo.specialty">
+            <view 
+              v-for="(tag, index) in getSpecialtyTags(designerDetail.userInfo.specialty)" 
+              :key="index" 
+              class="tag-item"
+            >
+              {{ tag }}
             </view>
-            
-            <!-- 设计师标签 -->
-            <view class="tags-row" v-if="designerDetail.userInfo.specialty">
-              <view 
-                v-for="(tag, index) in getSpecialtyTags(designerDetail.userInfo.specialty)" 
-                :key="index" 
-                class="tag-item"
-              >
-                {{ tag }}
-              </view>
+          </view>
+          
+          <!-- 设计师统计数据 - 只保留作品和点赞数 -->
+          <view class="stats-row">
+            <view class="stat-item">
+              <text class="stat-number">{{ portfolioCount }}</text>
+              <text class="stat-label">作品</text>
             </view>
-            
-            <!-- 设计师统计数据 - 只保留作品和点赞数 -->
-            <view class="stats-row">
-              <view class="stat-item">
-                <text class="stat-number">{{ portfolioCount }}</text>
-                <text class="stat-label">作品</text>
-              </view>
-              <view class="stat-item">
-                <text class="stat-number">{{ designerLikeCount }}</text>
-                <text class="stat-label">点赞</text>
-              </view>
+            <view class="stat-item">
+              <text class="stat-number">{{ designerLikeCount }}</text>
+              <text class="stat-label">点赞</text>
             </view>
           </view>
         </view>
@@ -779,12 +770,6 @@ export default {
   color: #ff4757;
 }
 
-.header-actions .share-btn {
-  font-size: 28rpx;
-  color: #6a11cb;
-  padding: 10rpx;
-}
-
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -815,18 +800,20 @@ export default {
 
 .profile-main {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
   margin-bottom: 20rpx;
 }
 
 .avatar-section {
   position: relative;
-  margin-right: 30rpx;
+  margin-bottom: 30rpx;
 }
 
 .designer-avatar {
-  width: 120rpx;
-  height: 120rpx;
+  width: 160rpx;
+  height: 160rpx;
   border-radius: 50%;
   border: 4rpx solid #f0f0f0;
   background-color: #f8f8f8;
@@ -836,96 +823,41 @@ export default {
   position: absolute;
   bottom: 10rpx;
   right: 10rpx;
-  width: 20rpx;
-  height: 20rpx;
+  width: 24rpx;
+  height: 24rpx;
   background-color: #4CAF50;
-  border: 2rpx solid white;
+  border: 3rpx solid white;
   border-radius: 50%;
 }
 
-.basic-info {
-  flex: 1;
-}
-
-.name-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20rpx;
-  flex-wrap: wrap;
-}
-
-.name-left {
-  flex: 1;
-  min-width: 200rpx;
+.name-container {
+  margin-bottom: 30rpx;
 }
 
 .designer-name {
-  font-size: 36rpx;
+  font-size: 40rpx;
   font-weight: 600;
   color: #333;
   display: block;
-  margin-bottom: 10rpx;
+  margin-bottom: 16rpx;
 }
 
 .cert-badge {
   display: inline-block;
   background: linear-gradient(135deg, #ff7e5f, #feb47b);
   color: white;
-  font-size: 22rpx;
-  padding: 4rpx 12rpx;
+  font-size: 24rpx;
+  padding: 6rpx 16rpx;
   border-radius: 20rpx;
-  margin-left: 16rpx;
-  vertical-align: middle;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 15rpx;
   margin-top: 10rpx;
-  flex-wrap: wrap;
-}
-
-.like-btn {
-  background: #f8f9fa;
-  color: #666;
-  border: 1rpx solid #e0e0e0;
-  border-radius: 30rpx;
-  padding: 12rpx 24rpx;
-  font-size: 26rpx;
-  min-width: 100rpx;
-  height: 60rpx;
-  line-height: 36rpx;
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.like-btn.liked {
-  background: #fff5f5;
-  color: #ff4757;
-  border-color: #ffc8c8;
-}
-
-.like-btn-icon {
-  font-size: 28rpx;
-}
-
-.like-btn-text {
-  font-size: 26rpx;
-}
-
-.like-btn-count {
-  font-size: 22rpx;
-  color: #999;
-  margin-left: 4rpx;
 }
 
 .tags-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;
-  margin-bottom: 30rpx;
+  margin-bottom: 40rpx;
+  justify-content: center;
 }
 
 .tag-item {
@@ -938,8 +870,10 @@ export default {
 
 .stats-row {
   display: flex;
-  justify-content: space-around;
+  justify-content: center;
+  gap: 60rpx;
   margin-bottom: 10rpx;
+  width: 100%;
 }
 
 .stat-item {
@@ -949,14 +883,14 @@ export default {
 }
 
 .stat-number {
-  font-size: 32rpx;
+  font-size: 36rpx;
   font-weight: 600;
   color: #333;
   margin-bottom: 8rpx;
 }
 
 .stat-label {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #999;
 }
 
@@ -1357,6 +1291,15 @@ export default {
   
   .portfolios-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .designer-avatar {
+    width: 140rpx;
+    height: 140rpx;
+  }
+  
+  .designer-name {
+    font-size: 36rpx;
   }
 }
 </style>
