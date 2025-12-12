@@ -95,16 +95,12 @@
 						/>
 					</view>
 					<view class="checkbox-group">
-						<checkbox-group @change="onDefaultChange">
-						<label class="checkbox-label">
-							<checkbox 
-									value="1"
-									:checked="!!formData.isDefault"
-								style="transform:scale(0.7)"
-							/>
-							<text>设为默认地址</text>
-						</label>
-						</checkbox-group>
+						<view class="agreement-checkbox" @click="toggleDefaultAddress">
+							<view class="checkbox-icon" :class="{ 'checked': formData.isDefault }">
+								<text v-if="formData.isDefault" class="checkmark">✓</text>
+							</view>
+							<text class="agreement-text">设为默认地址</text>
+						</view>
 					</view>
 					<view class="modal-footer">
 						<button class="btn-cancel" @tap="closeModal">取消</button>
@@ -218,11 +214,9 @@
 				};
 			},
 			
-			// 勾选“设为默认地址”时触发
-			onDefaultChange(e) {
-				// checkbox-group 返回选中的 value 数组，非空表示选中
-				const values = e && e.detail && e.detail.value ? e.detail.value : [];
-				this.formData.isDefault = Array.isArray(values) && values.length > 0;
+			// 切换"设为默认地址"状态
+			toggleDefaultAddress() {
+				this.formData.isDefault = !this.formData.isDefault;
 			},
 			
 			// 设置默认地址
@@ -549,9 +543,38 @@
 		margin-top: 20rpx;
 	}
 	
-	.checkbox-label {
+	.agreement-checkbox {
 		display: flex;
 		align-items: center;
+		padding: 20rpx 0;
+		cursor: pointer;
+	}
+	
+	.checkbox-icon {
+		width: 36rpx;
+		height: 36rpx;
+		border: 2rpx solid #ccc;
+		border-radius: 6rpx;
+		margin-right: 16rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.3s ease;
+	}
+	
+	.checkbox-icon.checked {
+		background: #1890ff;
+		border-color: #1890ff;
+	}
+	
+	.checkmark {
+		color: white;
+		font-size: 24rpx;
+		font-weight: bold;
+	}
+	
+	.agreement-text {
+		color: #666;
 		font-size: 28rpx;
 	}
 	
