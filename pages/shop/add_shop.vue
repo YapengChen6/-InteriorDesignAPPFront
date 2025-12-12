@@ -231,10 +231,10 @@
           </view>
           
           <view class="form-group">
-            <text class="form-label">商品标题</text>
+            <text class="form-label">商品名称</text>
             <uni-easyinput
               v-model="productData.productName"
-              placeholder="请输入商品标题"
+              placeholder="请输入商品名称"
               :styles="inputStyles"
             />
           </view>
